@@ -1,4 +1,4 @@
-import type { Board, Shape } from "../ir/types.ts";
+import type { Board, Shape, Track } from "../ir/types.ts";
 import { ewLayerToKicad } from "../util/layer-map.ts";
 
 // KiCad 7 format version: stable, broadly compatible with 7 / 8 / 9.
@@ -147,6 +147,13 @@ function emitShape(shape: Shape): string[] {
   }
 }
 
+function emitTrack(t: Track): string | undefined {
+  const layer = ewLayerToKicad(t.layer);
+  // Only copper layers can carry tracks in KiCad
+  if (layer !== "F.Cu" && layer !== "B.Cu") return undefined;
+  return `\t(segment (start ${fx(t.start.x)} ${fy(t.start.y)}) (end ${fx(t.end.x)} ${fy(t.end.y)}) (width ${mm(t.thickness)}) (layer ${q(layer)}) (net 0) (uuid ${q(uuid())}))`;
+}
+
 export function emitKicadPcb(board: Board): string {
   const layerLines = STANDARD_LAYERS.map(([num, name, type, friendly]) => {
     return friendly
@@ -155,6 +162,10 @@ export function emitKicadPcb(board: Board): string {
   }).join("\n");
 
   const shapeLines = board.shapes.flatMap(emitShape).join("\n");
+  const trackLines = board.tracks
+    .map(emitTrack)
+    .filter((s): s is string => s !== undefined)
+    .join("\n");
 
   const importNote =
     `Imported from ${board.source.application} ` +
@@ -187,6 +198,8 @@ export function emitKicadPcb(board: Board): string {
     `\t(net 0 ${q("")})`,
     ``,
     shapeLines,
+    ``,
+    trackLines,
     ``,
     `)`,
     ``,

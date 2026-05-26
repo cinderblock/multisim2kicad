@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import type { Board, EwLayer, Point, Shape } from "../ir/types.ts";
+import type { Board, EwLayer, Point, Shape, Track } from "../ir/types.ts";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -67,10 +67,28 @@ function toShape(tag: string, item: any): Shape | undefined {
   return undefined;
 }
 
-function walkShapes(node: any, out: Shape[]): void {
+function toTrack(item: any): Track | undefined {
+  const layer = Number(item["@_Layer"] ?? -1);
+  const thickness = Number(item["@_LineThickness"] ?? 0);
+  const pts = arr(item?.Object?.Point);
+  if (pts.length < 2) return undefined;
+  return {
+    layer,
+    thickness,
+    start: { x: Number(pts[0]["@_X"]), y: Number(pts[0]["@_Y"]) },
+    end: { x: Number(pts[1]["@_X"]), y: Number(pts[1]["@_Y"]) },
+  };
+}
+
+interface Collected {
+  shapes: Shape[];
+  tracks: Track[];
+}
+
+function walkGeometry(node: any, out: Collected): void {
   if (node == null || typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const c of node) walkShapes(c, out);
+    for (const c of node) walkGeometry(c, out);
     return;
   }
   for (const [key, val] of Object.entries(node)) {
@@ -78,11 +96,16 @@ function walkShapes(node: any, out: Shape[]): void {
     if (SHAPE_TAGS.has(key)) {
       for (const item of arr(val as any)) {
         const s = toShape(key, item);
-        if (s) out.push(s);
-        walkShapes(item, out);
+        if (s) out.shapes.push(s);
+        walkGeometry(item, out);
+      }
+    } else if (key === "UBTrack") {
+      for (const item of arr(val as any)) {
+        const t = toTrack(item);
+        if (t) out.tracks.push(t);
       }
     } else {
-      walkShapes(val, out);
+      walkGeometry(val, out);
     }
   }
 }
@@ -125,8 +148,8 @@ export function parsePcbXml(xml: string): Board {
     rgb: Number(node["@_RGB"] ?? 0),
   }));
 
-  const shapes: Shape[] = [];
-  walkShapes(designSheet, shapes);
+  const collected: Collected = { shapes: [], tracks: [] };
+  walkGeometry(designSheet, collected);
 
   return {
     source: {
@@ -139,6 +162,7 @@ export function parsePcbXml(xml: string): Board {
     sheetTitle,
     workArea,
     layers,
-    shapes,
+    shapes: collected.shapes,
+    tracks: collected.tracks,
   };
 }

@@ -24,6 +24,13 @@ export type Shape =
   | { kind: "roundRect"; layer: number; thickness: number; points: Point[]; radius: number }
   | { kind: "ellipse"; layer: number; thickness: number; points: Point[] };
 
+export interface Track {
+  layer: number;
+  thickness: number;
+  start: Point;
+  end: Point;
+}
+
 export interface Board {
   source: Source;
   projectName: string;
@@ -31,4 +38,5 @@ export interface Board {
   workArea: { left: number; bottom: number; right: number; top: number };
   layers: EwLayer[];
   shapes: Shape[];
+  tracks: Track[];
 }

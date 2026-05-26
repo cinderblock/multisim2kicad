@@ -45,6 +45,7 @@ async function main() {
     console.log(`  sheet:      "${board.sheetTitle}"  workArea ${w.toFixed(1)} x ${h.toFixed(1)} mm`);
     console.log(`  EW layers:  ${board.layers.length} defined, ${enabled.length} enabled`);
     console.log(`  shapes:     ${shapeSummary}`);
+    console.log(`  tracks:     ${board.tracks.length}`);
     console.log(`  wrote:      ${outPath}`);
   }
 }
