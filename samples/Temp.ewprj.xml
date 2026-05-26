@@ -1,0 +1,1267 @@
+<?xml version="1.0" encoding="ASCII"?>
+<ElectronicsWorkbench Schema="67">
+<history>
+<creator application="ultiboard" date="2021-06-26T14:01:12.000Z" type="release" versionDate="apr  3 2019 - 19:56:37" versionMajor="14" versionMinor="2" versionPatch="0" website=""/>
+</history>
+<Project Class="CProject" ProgramVersion="14.0.0.0" CurrentVersion="" Name="&amp;ASCTemp" ProjectID="{F362252D-23DF-4E12-96E6-C15F15385F28}" AppName="&amp;ASCUltiboard" AppExeVer="&amp;ASC14.2.101.0" AppVersion="&amp;ASC14.20.49240" AppBuildDate="&amp;ASCApr  3 2019 - 19:56:37" User="&amp;ASCcamer" Dusted="0" IsElvisProject="0" ElvisProjectVersion="0" LockedByUser="">
+<UniqueSheets>
+<SheetInfos>
+<SheetContainer Class="CSheetContainer" ObjectID="1570348943">
+<Sheet>
+<Variable>
+<DesignSheet Class="CLayoutSubSheet" ObjectID="1570348941" Layer="511" LineColor="2" LineRGB="0" FillColor="2" FillRGB="0" ObjectInfo="16842756" LineThickness="0" CurveMode="1" EndCap="0" Rotation="0" MultiObjects="0" Mirrored="0" Name="" DocType="&amp;ASCLAYOUTDESIGN" Title="&amp;ASCTemp" PageName="&amp;ASC1" WorkAreaLeft="-80000000" WorkAreaBottom="-50000000" WorkAreaRight="80000000" WorkAreaTop="50000000" SheetID="{A19C4AB4-A646-4498-B76B-57A2E7EF41F2}">
+<Object>
+<Point Class="CDrawPoint" X="0" Y="0"/>
+<Point Class="CDrawPoint" X="30000000" Y="0"/>
+<Point Class="CDrawPoint" X="30000000" Y="30000000"/>
+<Point Class="CDrawPoint" X="0" Y="30000000"/>
+</Object>
+<Group>
+<Store Class="CDrawingStore">
+<DataTreeContainer Class="CTreeDataContainer">
+<Rectangle Class="CDrawRectangle" ObjectID="1570348942" Layer="511" LineColor="2" LineRGB="0" FillColor="2" FillRGB="0" ObjectInfo="38" LineThickness="0" CurveMode="1" EndCap="0">
+<Object>
+<Point Class="CDrawPoint" X="0" Y="0"/>
+<Point Class="CDrawPoint" X="0" Y="30000000"/>
+<Point Class="CDrawPoint" X="30000000" Y="30000000"/>
+<Point Class="CDrawPoint" X="30000000" Y="0"/>
+</Object>
+</Rectangle>
+</DataTreeContainer>
+</Store>
+<RefPoint Class="CRefPoint" X="0" Y="0"/>
+</Group>
+<Sheet>
+<Variable>
+<LayoutGrid Class="CLayoutGrid" GridStyle="1" VisibleStep="508000" GridStep="12700" SecondGridStep="12700" ViaGridStep="12700" SMDGridStep="12700"/>
+</Variable>
+<FavoriteLayers>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+</FavoriteLayers>
+<LayoutLayerDefinition Class="CLayoutLayerDefinition" Layer-Lamination="9223372038364722175">
+<LayerInfo Class="CLayerInfo" RGB="65280" DrawMode="15" Name="&amp;ASCTop" Number="0" State="1" Properties="6" Type="1" Mirror="&amp;ASCBottom" GroupNumber="458752" ForceLayerNum="0">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="13434828" DrawMode="15" Name="&amp;ASCInner1" Number="1" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner2" GroupNumber="458752" ForceLayerNum="1">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="65280" DrawMode="15" Name="&amp;ASCInner2" Number="2" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner1" UserDescription="&amp;ASCCopper Top" GroupNumber="458752" ForceLayerNum="2">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="3" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="13434828" DrawMode="15" Name="&amp;ASCInner3" Number="3" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner4" UserDescription="&amp;ASCCopper Inner 1" GroupNumber="458752" ForceLayerNum="3">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="65280" DrawMode="15" Name="&amp;ASCInner4" Number="4" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner3" UserDescription="&amp;ASCCopper Top" GroupNumber="458752" ForceLayerNum="4">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="13434828" DrawMode="15" Name="&amp;ASCInner5" Number="5" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner6" UserDescription="&amp;ASCCopper Inner 1" GroupNumber="458752" ForceLayerNum="5">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="13421772" DrawMode="15" Name="&amp;ASCInner6" Number="6" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner5" UserDescription="&amp;ASCCopper Inner 2" GroupNumber="458752" ForceLayerNum="6">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="10066329" DrawMode="15" Name="&amp;ASCInner7" Number="7" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner8" UserDescription="&amp;ASCCopper Inner 3" GroupNumber="458752" ForceLayerNum="7">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16737996" DrawMode="15" Name="&amp;ASCInner8" Number="8" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner7" UserDescription="&amp;ASCCopper Inner 4" GroupNumber="458752" ForceLayerNum="8">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="26367" DrawMode="15" Name="&amp;ASCInner9" Number="9" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner10" UserDescription="&amp;ASCCopper Inner 5" GroupNumber="458752" ForceLayerNum="9">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="26214" DrawMode="15" Name="&amp;ASCInner10" Number="10" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner9" UserDescription="&amp;ASCCopper Inner 6" GroupNumber="458752" ForceLayerNum="10">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="65484" DrawMode="15" Name="&amp;ASCInner11" Number="11" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner12" UserDescription="&amp;ASCCopper Inner 7" GroupNumber="458752" ForceLayerNum="11">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16776960" DrawMode="15" Name="&amp;ASCInner12" Number="12" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner11" UserDescription="&amp;ASCCopper Inner 8" GroupNumber="458752" ForceLayerNum="12">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16738047" DrawMode="15" Name="&amp;ASCInner13" Number="13" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner14" UserDescription="&amp;ASCCopper Inner 9" GroupNumber="458752" ForceLayerNum="13">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="3368499" DrawMode="15" Name="&amp;ASCInner14" Number="14" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner13" UserDescription="&amp;ASCCopper Inner 10" GroupNumber="458752" ForceLayerNum="14">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner15" Number="15" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner16" UserDescription="&amp;ASCCopper Inner 11" GroupNumber="458752" ForceLayerNum="15">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner16" Number="16" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner15" UserDescription="&amp;ASCCopper Inner 12" GroupNumber="458752" ForceLayerNum="16">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner17" Number="17" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner18" UserDescription="&amp;ASCCopper Inner 13" GroupNumber="458752" ForceLayerNum="17">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner18" Number="18" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner17" UserDescription="&amp;ASCCopper Inner 14" GroupNumber="458752" ForceLayerNum="18">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner19" Number="19" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner20" UserDescription="&amp;ASCCopper Inner 15" GroupNumber="458752" ForceLayerNum="19">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner20" Number="20" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner19" UserDescription="&amp;ASCCopper Inner 16" GroupNumber="458752" ForceLayerNum="20">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner21" Number="21" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner22" UserDescription="&amp;ASCCopper Inner 17" GroupNumber="458752" ForceLayerNum="21">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner22" Number="22" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner21" UserDescription="&amp;ASCCopper Inner 18" GroupNumber="458752" ForceLayerNum="22">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner23" Number="23" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner24" UserDescription="&amp;ASCCopper Inner 19" GroupNumber="458752" ForceLayerNum="23">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner24" Number="24" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner23" UserDescription="&amp;ASCCopper Inner 20" GroupNumber="458752" ForceLayerNum="24">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner25" Number="25" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner26" UserDescription="&amp;ASCCopper Inner 21" GroupNumber="458752" ForceLayerNum="25">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner26" Number="26" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner25" UserDescription="&amp;ASCCopper Inner 22" GroupNumber="458752" ForceLayerNum="26">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner27" Number="27" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner28" UserDescription="&amp;ASCCopper Inner 23" GroupNumber="458752" ForceLayerNum="27">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner28" Number="28" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner27" UserDescription="&amp;ASCCopper Inner 24" GroupNumber="458752" ForceLayerNum="28">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner29" Number="29" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner30" UserDescription="&amp;ASCCopper Inner 25" GroupNumber="458752" ForceLayerNum="29">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner30" Number="30" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner29" UserDescription="&amp;ASCCopper Inner 26" GroupNumber="458752" ForceLayerNum="30">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner31" Number="31" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner32" UserDescription="&amp;ASCCopper Inner 27" GroupNumber="458752" ForceLayerNum="31">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner32" Number="32" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner31" UserDescription="&amp;ASCCopper Inner 28" GroupNumber="458752" ForceLayerNum="32">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner33" Number="33" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner34" UserDescription="&amp;ASCCopper Inner 29" GroupNumber="458752" ForceLayerNum="33">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner34" Number="34" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner33" UserDescription="&amp;ASCCopper Inner 30" GroupNumber="458752" ForceLayerNum="34">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner35" Number="35" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner36" UserDescription="&amp;ASCCopper Inner 31" GroupNumber="458752" ForceLayerNum="35">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner36" Number="36" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner35" UserDescription="&amp;ASCCopper Inner 32" GroupNumber="458752" ForceLayerNum="36">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner37" Number="37" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner38" UserDescription="&amp;ASCCopper Inner 33" GroupNumber="458752" ForceLayerNum="37">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner38" Number="38" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner37" UserDescription="&amp;ASCCopper Inner 34" GroupNumber="458752" ForceLayerNum="38">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner39" Number="39" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner40" UserDescription="&amp;ASCCopper Inner 35" GroupNumber="458752" ForceLayerNum="39">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner40" Number="40" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner39" UserDescription="&amp;ASCCopper Inner 36" GroupNumber="458752" ForceLayerNum="40">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner41" Number="41" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner42" UserDescription="&amp;ASCCopper Inner 37" GroupNumber="458752" ForceLayerNum="41">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner42" Number="42" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner41" UserDescription="&amp;ASCCopper Inner 38" GroupNumber="458752" ForceLayerNum="42">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner43" Number="43" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner44" UserDescription="&amp;ASCCopper Inner 39" GroupNumber="458752" ForceLayerNum="43">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner44" Number="44" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner43" UserDescription="&amp;ASCCopper Inner 40" GroupNumber="458752" ForceLayerNum="44">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner45" Number="45" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner46" UserDescription="&amp;ASCCopper Inner 41" GroupNumber="458752" ForceLayerNum="45">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner46" Number="46" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner45" UserDescription="&amp;ASCCopper Inner 42" GroupNumber="458752" ForceLayerNum="46">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner47" Number="47" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner48" UserDescription="&amp;ASCCopper Inner 43" GroupNumber="458752" ForceLayerNum="47">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner48" Number="48" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner47" UserDescription="&amp;ASCCopper Inner 44" GroupNumber="458752" ForceLayerNum="48">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner49" Number="49" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner50" UserDescription="&amp;ASCCopper Inner 45" GroupNumber="458752" ForceLayerNum="49">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner50" Number="50" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner49" UserDescription="&amp;ASCCopper Inner 46" GroupNumber="458752" ForceLayerNum="50">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner51" Number="51" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner52" UserDescription="&amp;ASCCopper Inner 47" GroupNumber="458752" ForceLayerNum="51">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner52" Number="52" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner51" UserDescription="&amp;ASCCopper Inner 48" GroupNumber="458752" ForceLayerNum="52">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner53" Number="53" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner54" UserDescription="&amp;ASCCopper Inner 49" GroupNumber="458752" ForceLayerNum="53">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner54" Number="54" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner53" UserDescription="&amp;ASCCopper Inner 50" GroupNumber="458752" ForceLayerNum="54">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner55" Number="55" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner56" UserDescription="&amp;ASCCopper Inner 51" GroupNumber="458752" ForceLayerNum="55">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner56" Number="56" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner55" UserDescription="&amp;ASCCopper Inner 52" GroupNumber="458752" ForceLayerNum="56">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner57" Number="57" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner58" UserDescription="&amp;ASCCopper Inner 53" GroupNumber="458752" ForceLayerNum="57">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner58" Number="58" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner57" UserDescription="&amp;ASCCopper Inner 54" GroupNumber="458752" ForceLayerNum="58">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner59" Number="59" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner60" UserDescription="&amp;ASCCopper Inner 55" GroupNumber="458752" ForceLayerNum="59">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner60" Number="60" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner59" UserDescription="&amp;ASCCopper Inner 56" GroupNumber="458752" ForceLayerNum="60">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner61" Number="61" State="0" Properties="6" Type="1" Mirror="&amp;ASCInner62" UserDescription="&amp;ASCCopper Inner 55" GroupNumber="458752" ForceLayerNum="61">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39321" DrawMode="15" Name="&amp;ASCInner62" Number="62" State="0" Properties="14" Type="1" Mirror="&amp;ASCInner61" UserDescription="&amp;ASCCopper Inner 56" GroupNumber="458752" ForceLayerNum="62">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="255" DrawMode="15" Name="&amp;ASCBottom" Number="63" State="3" Properties="14" Type="1" Mirror="&amp;ASCTop" GroupNumber="458752" ForceLayerNum="63">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_CopperObj"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="13408716" DrawMode="15" Name="&amp;ASCRuleAreaLayer" Number="64" State="1" Properties="32" Type="1" Mirror="" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack/>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="65535" DrawMode="15" Name="&amp;ASCBoard Outline" Number="65" State="1" Properties="16" Type="536870913" Mirror="" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16776960" DrawMode="15" Name="&amp;ASCSilkscreen Top" Number="66" State="1" Properties="32" Type="1" Mirror="&amp;ASCSilkscreen Bot" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16717055" DrawMode="15" Name="&amp;ASCSilkscreen Bot" Number="67" State="2" Properties="8" Type="1" Mirror="&amp;ASCSilkscreen Top" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="255" DrawMode="15" Name="&amp;ASCTop3D" Number="68" State="2" Properties="32" Type="1" Mirror="&amp;ASCBot3D" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="65280" DrawMode="15" Name="&amp;ASCBot3D" Number="69" State="1" Properties="8" Type="1" Mirror="&amp;ASCTop3D" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="26214" DrawMode="15" Name="&amp;ASCSolder paste Top" Number="70" State="4" Properties="32" Type="1" Mirror="&amp;ASCSolder paste Bot" GroupNumber="458754" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="39270" DrawMode="15" Name="&amp;ASCSolder paste Bot" Number="71" State="4" Properties="8" Type="1" Mirror="&amp;ASCSolder paste Top" GroupNumber="458754" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16711884" DrawMode="15" Name="&amp;ASCSolder mask Top" Number="72" State="4" Properties="32" Type="1" Mirror="&amp;ASCSolder mask Bot" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="10027212" DrawMode="15" Name="&amp;ASCSolder mask Bot" Number="73" State="4" Properties="8" Type="1" Mirror="&amp;ASCSolder mask Top" GroupNumber="458752" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16711884" DrawMode="15" Name="&amp;ASCGlue mask Top" Number="74" State="4" Properties="32" Type="1" Mirror="&amp;ASCGlue mask Bot" GroupNumber="458754" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="10027212" DrawMode="15" Name="&amp;ASCGlue mask Bot" Number="75" State="4" Properties="8" Type="1" Mirror="&amp;ASCGlue mask Top" GroupNumber="458754" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="65535" DrawMode="15" Name="&amp;ASCAssembly Top" Number="76" State="0" Properties="32" Type="1" Mirror="&amp;ASCAssembly Bot" GroupNumber="458754" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="10092492" DrawMode="15" Name="&amp;ASCAssembly Bot" Number="77" State="0" Properties="8" Type="1" Mirror="&amp;ASCAssembly Top" GroupNumber="458754" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="65535" DrawMode="15" Name="&amp;ASCRatsnest" Number="78" State="1" Properties="36" Type="-1879048191" Mirror="" GroupNumber="458755" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="255" DrawMode="15" Name="&amp;ASCDesign Rule Check" Number="79" State="1" Properties="32" Type="-1879048191" Mirror="" GroupNumber="458755" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="3381708" DrawMode="15" Name="&amp;ASCForce Vectors" Number="80" State="0" Properties="32" Type="-1879048191" Mirror="" GroupNumber="458755" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="6750156" DrawMode="13" Name="&amp;ASCComment" Number="81" State="2" Properties="32" Type="1" Mirror="" GroupNumber="458755" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="13355979" DrawMode="15" Name="&amp;ASCMechanical Layer 1" Number="82" State="1" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 2" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="11711154" DrawMode="15" Name="&amp;ASCMechanical Layer 2" Number="83" State="2" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 1" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="10066329" DrawMode="15" Name="&amp;ASCMechanical Layer 3" Number="84" State="1" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 4" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="9868950" DrawMode="15" Name="&amp;ASCMechanical Layer 4" Number="85" State="1" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 3" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="8816262" DrawMode="15" Name="&amp;ASCMechanical Layer 5" Number="86" State="0" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 6" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="7829367" DrawMode="15" Name="&amp;ASCMechanical Layer 6" Number="87" State="0" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 5" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="6710886" DrawMode="15" Name="&amp;ASCMechanical Layer 7" Number="88" State="0" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 8" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="6250335" DrawMode="15" Name="&amp;ASCMechanical Layer 8" Number="89" State="0" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 7" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="5592405" DrawMode="15" Name="&amp;ASCMechanical Layer 9" Number="90" State="0" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 10" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="5066061" DrawMode="15" Name="&amp;ASCMechanical Layer 10" Number="91" State="0" Properties="32" Type="1" Mirror="&amp;ASCMechanical Layer 9" GroupNumber="458756" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="4934475" DrawMode="15" Name="&amp;ASCCourtyard Layer" Number="92" State="0" Properties="32" Type="1" Mirror="" GroupNumber="458755" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="0" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASC[EWB_LAYOUTSYMBOL]"/>
+</DllStack>
+</LayerInfo>
+<LayerInfo Class="CLayerInfo" RGB="16777215" DrawMode="15" Name="&amp;ASC01" Number="95" State="1" Properties="32" Type="1" Mirror="" UserDescription="&amp;ASC01" GroupNumber="0" GroupDescription="&amp;ASC   DXF" ForceLayerNum="512">
+<LayerInfoExtension>
+<UBLayerInfoExtension Class="CUBLayerInfoExtension" Routability="1" TraceBias="1" LayerType="0" CornerStyle="0" AngleConstraint="45000000" ClrtoTrace="254000" ClrtoPad="254000" ClrtoVia="254000" ClrtoCopper="254000" PadNeckLengthMax="0" PadNeckLengthMin="0" ThermalReliefStyle="2" NetTraceWidthMax="254000" NetTraceWidthMin="254000" NetTraceLengthMax="254000" NetTraceLengthMin="254000" PadTraceWidthMin="1" MinAnnularRingWidth="1"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenCadObj"/>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+<DllString Name="&amp;ASCEWLayoutDatabaseEdit"/>
+</DllStack>
+</LayerInfo>
+</LayoutLayerDefinition>
+<ColorDefinition Class="CColorDefinition" Name="&amp;ASCUser settings" Default="0">
+<ColorInfo Class="CColorInfo" ID="102" Type="1" Name="&amp;ASCSMD Pad Top" RGB="32768"/>
+<ColorInfo Class="CColorInfo" ID="11" Type="1" Name="&amp;ASCRuler snap line" RGB="16777215"/>
+<ColorInfo Class="CColorInfo" ID="8" Type="1" Name="&amp;ASCCrosshair" RGB="16711680"/>
+<ColorInfo Class="CColorInfo" ID="5" Type="1" Name="&amp;ASCSelection" RGB="65535"/>
+<ColorInfo Class="CColorInfo" ID="107" Type="1" Name="&amp;ASCMax Clearance Color" RGB="10040064"/>
+<ColorInfo Class="CColorInfo" ID="104" Type="1" Name="&amp;ASCSMD Pad Bottom" RGB="128"/>
+<ColorInfo Class="CColorInfo" ID="2" Type="-2147483647" Name="&amp;ASCLayerColor" RGB="8454016"/>
+<ColorInfo Class="CColorInfo" ID="101" Type="1" Name="&amp;ASCPad with net" RGB="16711680"/>
+<ColorInfo Class="CColorInfo" ID="10" Type="1" Name="&amp;ASCWork Area" RGB="5592405"/>
+<ColorInfo Class="CColorInfo" ID="7" Type="1" Name="&amp;ASCLock Color" RGB="26367"/>
+<ColorInfo Class="CColorInfo" ID="4" Type="1" Name="&amp;ASCHandle" RGB="16750848"/>
+<ColorInfo Class="CColorInfo" ID="106" Type="1" Name="&amp;ASCClearance Color" RGB="16764006"/>
+<ColorInfo Class="CColorInfo" ID="1" Type="1" Name="&amp;ASCBackground" RGB="0"/>
+<ColorInfo Class="CColorInfo" ID="103" Type="1" Name="&amp;ASCSMD Pad Top with net" RGB="8454016"/>
+<ColorInfo Class="CColorInfo" ID="100" Type="1" Name="&amp;ASCPad" RGB="8388608"/>
+<ColorInfo Class="CColorInfo" ID="9" Type="1" Name="&amp;ASCCrosshair Center" RGB="65535"/>
+<ColorInfo Class="CColorInfo" ID="6" Type="1" Name="&amp;ASCGrid" RGB="7829367"/>
+<ColorInfo Class="CColorInfo" ID="108" Type="1" Name="&amp;ASCWork Area" RGB="5592405"/>
+<ColorInfo Class="CColorInfo" ID="3" Type="1" Name="&amp;ASCHighlight" RGB="16777215"/>
+<ColorInfo Class="CColorInfo" ID="105" Type="1" Name="&amp;ASCSMD Pad Bottom with net" RGB="8421631"/>
+</ColorDefinition>
+<UnitInfo Class="CUnitInfo" Name="&amp;ASCmil" Factor="3.937007874015748e-05" DBFactor="1" Indicator="&amp;ASCmil"/>
+<PreSubSheet>
+<NetGroups/>
+<ComponentGroups/>
+<BusGroups/>
+<PairGroups/>
+</PreSubSheet>
+<Store Class="CDrawingStore">
+<DataTreeContainer Class="CTreeDataContainer"/>
+</Store>
+<SubSheet>
+<UbNetList Version="7" CircuitID="">
+<LastRenumInfo TopFlags="2147483653" TopStartNo="1" TopIncrement="1" BottomFlags="2147483665" BottomStartNo="1" BottomIncrement="1" Order="64" Mask="&amp;ASC*" SelOnly="0"/>
+</UbNetList>
+<BoardLayerSettings Class="CLayoutBoardSettings" UseTopSide="1" UseBottomSide="1" LayerLaminationPairQuantity="1" TopSingleLaminateQuantity="0" BottomSingleLaminateQuantity="0" ClearancetoTrace="101600" ClearancetoPad="101600" ClearancetoVia="101600" ClearancetoArea="101600" BoardOutlineElectricalClearance="203200" AllowBlindVias="0" AllowMicroVias="0" AllowBuriedVias="0" TechnologyClass="3" TopComponentSpacing="0" BotComponentSpacing="0" NetTraceWidth="101600" MaximumNetTraceWidth="127000000" MinimumNetTraceWidth="101600" MaximumNetTraceLength="914400000" MinimumNetTraceLength="25400" MaximumPadNeckLength="12700000" MinimumPadNeckLength="127000" MinimumPadTraceWidth="254000" ThermalReliefStyle="2" TraceBiasSetting="3" CornerStyle="0" AngleConstraint="45000000" MinimumAnnularRingWidth="411115650" TopSolderMaskExpDim="0" BotSolderMaskExpDim="0" BoardThickness="1574800" AllowPinSwapping="1" GateSwapping="1" RealtimeSwapMode="0" UseMultipleClearances="0" MinSlotToolSize="200000" ARRoutingMode="-1" ARGridType="-1" ARViaGrid="-1" ARPinContactMode="-1" ARAdjustWidth="-1" ARScreenRefresh="-1" ARRouteOnCopper="-1" ARViaUnderSMD="-1" ARViaCost="-1" ARViaCounter="-1" ARCounterDirection="-1" AROffGridRouting="-1" ARTraceCrossing="-1" ARAdjustedWidth="-1" ARPinChannelCost="-1" ARPackingCost="-1" ARDynamicDensity="-1" AROnCopperCost="-1" ARRipUpTrees="-1" ARRipUpDepth="-1" ARRipUpRetries="-1" ARRipUpDistanceOne="-1" ARRipUpDistanceTwo="-1" ARRipUpMemClearup="-1" ARFanoutBGA="-1" ARFanoutDRC="-1" AROptimizationPass="-1" ARPinGateSwap="-1" ARChangeDirection="-1" AREquiSpaceTrace="-1" AROptPasses="-1" AROptDirection="-1" AROptMemClearup="-1" ARAutoplaceRetries="-1" ARAutoplacePartPin="-1" ARAutoplaceSegment="-1" ARAutoplacePartRotationMode="-1" ARAutoplaceSMDMirroring="-1" ARAutoplacePartExpansion="-1" ARAutoplacePinGateSwap="-1" ARAutoplacePartSwap="-1" LegacyVoids="0">
+<Laminations From="0" To="63"/>
+</BoardLayerSettings>
+<Design-Rules Class="CLayoutDesignRules">
+<Design-Rule-SMD Class="CLayoutDesignRuleSMD" Top-Oversize="0" Bottom-Oversize="0"/>
+<Design-Rule-THT Class="CLayoutDesignRuleTHT" Is-Fixed="1" Fixed-Size="177800" Minimum-Size="25400" Maximum-Size="2540000" Relativity="1"/>
+<Design-Rule-Via Class="CLayoutDesignRuleVia" PadRadius="302399" DrillRadius="149999"/>
+<Design-Rule-THT Class="CLayoutDesignRuleTHT" Is-Fixed="1" Fixed-Size="177800" Minimum-Size="25400" Maximum-Size="2540000" Relativity="1"/>
+<Design-Rule-THT Class="CLayoutDesignRuleTHT" Is-Fixed="1" Fixed-Size="177800" Minimum-Size="25400" Maximum-Size="2540000" Relativity="1"/>
+<Design-Rule-Micro-Via Class="CLayoutDesignRuleViaMicro" LandingRadius="150000" StartingRadius="200000" DrillRadius="100000" MaximumLayerSpan="1"/>
+<Design-Rule-Via Class="CLayoutDesignRuleNet" MaxViaCountPerNet="4294967295"/>
+</Design-Rules>
+</SubSheet>
+<ExportInformation Class="CTotalExportInformation" Init="0" CurSel="" OutFolder="&amp;ASC.\Ultiboard Exports\" OutOptions="3">
+<CurrentContainer Type="4">
+<DataExportContainer Class="CExportContainer" Name="&amp;ASC[Defaults]" SortNum="0">
+<DrillExport Class="CDrillExport" ToExport="0" Decimals="4" Integers="2" Metric="0" Unit="&amp;ASCnm"/>
+<CentroidExport Class="CCentroidExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</CentroidExport>
+<BomExport Class="CBomExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</BomExport>
+<BoardDataExport Class="CBoardDataExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</BoardDataExport>
+<DXFExport Class="CDXFExport" ToExport="0" UnitName="&amp;ASCmm"/>
+<ThreeDDXFExport Class="C3DDXFExport" ToExport="0" UnitName="&amp;ASCmm" ExportComponents="1" ExportPins="1" ExportBoardOutline="1" ExportSilk="0" ExportCopper="0"/>
+<TestPointExport Class="CTestPointExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</TestPointExport>
+<CopperAmountExport Class="CCopperAmountExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</CopperAmountExport>
+<ThreeDIGESExport Class="C3DIGESExport" ToExport="0" Unit="&amp;ASCnm" ExportComponents="1" ExportPins="1" ExportBoardOutline="1" ExportSilk="0" ExportCopper="0"/>
+<ExportBase Class="CIPCD356AExport" ToExport="0"/>
+<LayerStackExport Class="CLayerStackExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</LayerStackExport>
+<GerberExport Class="CGerberExport" ToExport="0" Integer="2" Decimal="4" Metric="0" Reflection="0" BoardOutline="0" OversizeSoldermask="0" OversizeSoldermaskBot="0" OversizeSolderpaste="0" MinimumOversize="0" MinimumOversizeBot="0" MinimumOversizePaste="0" Tolerance="0" ShowDrillHoles="0" Negative="0">
+<GroupMap GroupCount="0"/>
+</GerberExport>
+<GerberExport Class="CGerberDExport" ToExport="0" Integer="2" Decimal="4" Metric="0" Reflection="0" BoardOutline="0" OversizeSoldermask="0" OversizeSoldermaskBot="0" OversizeSolderpaste="0" MinimumOversize="0" MinimumOversizeBot="0" MinimumOversizePaste="0" Tolerance="0" ShowDrillHoles="0" Negative="0">
+<GroupMap GroupCount="0"/>
+</GerberExport>
+<SVGExport Class="CSVGExport" ToExport="0" Compressed="0" MinStrokeWidth="100"/>
+</DataExportContainer>
+</CurrentContainer>
+</ExportInformation>
+<TTFont/>
+</Sheet>
+</DesignSheet>
+</Variable>
+</Sheet>
+</SheetContainer>
+</SheetInfos>
+</UniqueSheets>
+<DesignSheet Class="CDrwSubSheet" ObjectID="1570348939" Layer="511" LineColor="2" LineRGB="0" FillColor="2" FillRGB="0" ObjectInfo="16842788" LineThickness="0" CurveMode="1" EndCap="0" Rotation="0" MultiObjects="0" Mirrored="0" Name="" DocType="&amp;ASCPROJECT" Title="&amp;ASCTemp" PageName="&amp;ASC1" WorkAreaLeft="-3000000" WorkAreaBottom="-3000000" WorkAreaRight="33000000" WorkAreaTop="33000000" SheetID="{FCBB1FDF-6AB9-482D-BF02-50F8003C3FE2}">
+<Object>
+<Point Class="CDrawPoint" X="0" Y="0"/>
+<Point Class="CDrawPoint" X="30000000" Y="0"/>
+<Point Class="CDrawPoint" X="30000000" Y="30000000"/>
+<Point Class="CDrawPoint" X="0" Y="30000000"/>
+</Object>
+<Group>
+<Store Class="CDrawingStore">
+<DataTreeContainer Class="CTreeDataContainer">
+<Rectangle Class="CDrawRectangle" ObjectID="1570348940" Layer="511" LineColor="2" LineRGB="0" FillColor="2" FillRGB="0" ObjectInfo="38" LineThickness="0" CurveMode="1" EndCap="0">
+<Object>
+<Point Class="CDrawPoint" X="0" Y="0"/>
+<Point Class="CDrawPoint" X="0" Y="30000000"/>
+<Point Class="CDrawPoint" X="30000000" Y="30000000"/>
+<Point Class="CDrawPoint" X="30000000" Y="0"/>
+</Object>
+</Rectangle>
+</DataTreeContainer>
+</Store>
+<RefPoint Class="CRefPoint" X="0" Y="0"/>
+</Group>
+<Sheet>
+<Variable>
+<OrthogonalGrid Class="COrthogonalGrid" GridStyle="2" VisibleStep="1000000" GridStep="1" SecondGridStep="1"/>
+</Variable>
+<FavoriteLayers>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+<FavoriteLayer Layer="512"/>
+</FavoriteLayers>
+<LayerDefinition Class="CLayerDefinition">
+<LayerInfo Class="CLayerInfo" RGB="0" DrawMode="13" Name="&amp;ASCLayer1" Number="0" State="3" Properties="32" Type="1" Mirror="" UserDescription="&amp;ASCProject" GroupNumber="65536" GroupDescription="&amp;ASCProject Layers" ForceLayerNum="512">
+<LayerInfoExtension>
+<LayerInfoExtension Class="CLayerInfoExtension" Routability="1" TraceBias="3" LayerType="0"/>
+</LayerInfoExtension>
+<DllStack>
+<DllString Name="&amp;ASCUT_GenSettings"/>
+</DllStack>
+</LayerInfo>
+</LayerDefinition>
+<ColorDefinition Class="CColorDefinition" Name="&amp;ASCDefault project colors" Default="0">
+<ColorInfo Class="CColorInfo" ID="11" Type="1" UserDescription="&amp;ASCRuler snap line" Name="&amp;ASCRuler snap line" RGB="0"/>
+<ColorInfo Class="CColorInfo" ID="8" Type="1" UserDescription="&amp;ASCCrosshair Color" Name="&amp;ASCCrosshair" RGB="16711680"/>
+<ColorInfo Class="CColorInfo" ID="5" Type="1" UserDescription="&amp;ASCSelection Color" Name="&amp;ASCSelection" RGB="8388608"/>
+<ColorInfo Class="CColorInfo" ID="2" Type="-2147483647" UserDescription="&amp;ASCLayer Color" Name="&amp;ASCLayer" RGB="0"/>
+<ColorInfo Class="CColorInfo" ID="10" Type="1" UserDescription="&amp;ASCWork Area" Name="&amp;ASCWork Area" RGB="5592405"/>
+<ColorInfo Class="CColorInfo" ID="4" Type="1" UserDescription="&amp;ASCHandle Color" Name="&amp;ASCHandle" RGB="16750848"/>
+<ColorInfo Class="CColorInfo" ID="1" Type="1" UserDescription="&amp;ASCBackground" Name="&amp;ASCBackground" RGB="16777215"/>
+<ColorInfo Class="CColorInfo" ID="9" Type="1" UserDescription="&amp;ASCCrosshair center color" Name="&amp;ASCCrosshair Center" RGB="65535"/>
+<ColorInfo Class="CColorInfo" ID="6" Type="1" UserDescription="&amp;ASCGrid Color" Name="&amp;ASCGrid" RGB="7829367"/>
+<ColorInfo Class="CColorInfo" ID="3" Type="1" UserDescription="&amp;ASCHighlight Color" Name="&amp;ASCHighlight" RGB="32768"/>
+</ColorDefinition>
+<UnitInfo Class="CUnitInfo" Name="&amp;ASCmil" Factor="3.937007874015748e-05" DBFactor="1" Indicator="&amp;ASCmil"/>
+<PreSubSheet/>
+<Store Class="CDrawingStore">
+<DataTreeContainer Class="CTreeDataContainer">
+<Group Class="CSheetComponent" ObjectID="1570348945" Layer="511" LineColor="2" LineRGB="0" FillColor="2" FillRGB="0" ObjectInfo="16842758" LineThickness="0" CurveMode="1" EndCap="0" Rotation="0" MultiObjects="0" Mirrored="0" Name="" SheetName="&amp;ASCTemp" GUID="{B8C3342B-21F7-4E49-B9A3-54FE170CBC40}" Path="" PathAbs="">
+<Object>
+<Point Class="CDrawPoint" X="0" Y="0"/>
+<Point Class="CDrawPoint" X="30000000" Y="0"/>
+<Point Class="CDrawPoint" X="30000000" Y="30000000"/>
+<Point Class="CDrawPoint" X="0" Y="30000000"/>
+</Object>
+<Group>
+<Store Class="CDrawingStore">
+<DataTreeContainer Class="CTreeDataContainer">
+<Rectangle Class="CDrawRectangle" ObjectID="1570348942" Layer="511" LineColor="2" LineRGB="0" FillColor="2" FillRGB="0" ObjectInfo="38" LineThickness="0" CurveMode="1" EndCap="0">
+<Object>
+<Point Class="CDrawPoint" X="0" Y="0"/>
+<Point Class="CDrawPoint" X="0" Y="30000000"/>
+<Point Class="CDrawPoint" X="30000000" Y="30000000"/>
+<Point Class="CDrawPoint" X="30000000" Y="0"/>
+</Object>
+</Rectangle>
+</DataTreeContainer>
+</Store>
+<RefPoint Class="CRefPoint" X="0" Y="0"/>
+</Group>
+<Extensions/>
+</Group>
+</DataTreeContainer>
+</Store>
+<SubSheet/>
+<ExportInformation Class="CTotalExportInformation" Init="0" CurSel="" OutFolder="&amp;ASC.\Ultiboard Exports\" OutOptions="3">
+<CurrentContainer Type="4">
+<DataExportContainer Class="CExportContainer" Name="&amp;ASC[Defaults]" SortNum="0">
+<DrillExport Class="CDrillExport" ToExport="0" Decimals="4" Integers="2" Metric="0" Unit="&amp;ASCnm"/>
+<CentroidExport Class="CCentroidExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</CentroidExport>
+<BomExport Class="CBomExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</BomExport>
+<BoardDataExport Class="CBoardDataExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</BoardDataExport>
+<DXFExport Class="CDXFExport" ToExport="0" UnitName="&amp;ASCmm"/>
+<ThreeDDXFExport Class="C3DDXFExport" ToExport="0" UnitName="&amp;ASCmm" ExportComponents="1" ExportPins="1" ExportBoardOutline="1" ExportSilk="0" ExportCopper="0"/>
+<TestPointExport Class="CTestPointExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</TestPointExport>
+<CopperAmountExport Class="CCopperAmountExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</CopperAmountExport>
+<ThreeDIGESExport Class="C3DIGESExport" ToExport="0" Unit="&amp;ASCnm" ExportComponents="1" ExportPins="1" ExportBoardOutline="1" ExportSilk="0" ExportCopper="0"/>
+<ExportBase Class="CIPCD356AExport" ToExport="0"/>
+<LayerStackExport Class="CLayerStackExport" ToExport="0" Text="1" Comma="0" HTML="0" Unit="&amp;ASCnm">
+<VectorStringTable SortColumn="0"/>
+</LayerStackExport>
+<GerberExport Class="CGerberExport" ToExport="0" Integer="2" Decimal="4" Metric="0" Reflection="0" BoardOutline="0" OversizeSoldermask="0" OversizeSoldermaskBot="0" OversizeSolderpaste="0" MinimumOversize="0" MinimumOversizeBot="0" MinimumOversizePaste="0" Tolerance="0" ShowDrillHoles="0" Negative="0">
+<GroupMap GroupCount="0"/>
+</GerberExport>
+<GerberExport Class="CGerberDExport" ToExport="0" Integer="2" Decimal="4" Metric="0" Reflection="0" BoardOutline="0" OversizeSoldermask="0" OversizeSoldermaskBot="0" OversizeSolderpaste="0" MinimumOversize="0" MinimumOversizeBot="0" MinimumOversizePaste="0" Tolerance="0" ShowDrillHoles="0" Negative="0">
+<GroupMap GroupCount="0"/>
+</GerberExport>
+<SVGExport Class="CSVGExport" ToExport="0" Compressed="0" MinStrokeWidth="100"/>
+</DataExportContainer>
+</CurrentContainer>
+</ExportInformation>
+<TTFont/>
+</Sheet>
+</DesignSheet>
+<UniqueSheetGroups>
+<SheetGroupInfo FirstSheetComponentObjectID="1570348945">
+<Extensions/>
+</SheetGroupInfo>
+</UniqueSheetGroups>
+<ViewState Class="CViewState" WindowPlacement="&amp;ASC44,2,3,-1,-1,-8,-31,156,156,3328,1092" TabIndex="4">
+<Path>
+<PathElement PageName="&amp;ASC1" ID="1570348945"/>
+</Path>
+<ViewState OffsetX="133060921" OffsetY="-50000000" ZoomFactor="3561.291666666667">
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCTop" LayerNumber="0" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner1" LayerNumber="1" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner2" LayerNumber="2" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner3" LayerNumber="3" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner4" LayerNumber="4" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner5" LayerNumber="5" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner6" LayerNumber="6" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner7" LayerNumber="7" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner8" LayerNumber="8" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner9" LayerNumber="9" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner10" LayerNumber="10" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner11" LayerNumber="11" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner12" LayerNumber="12" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner13" LayerNumber="13" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner14" LayerNumber="14" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner15" LayerNumber="15" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner16" LayerNumber="16" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner17" LayerNumber="17" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner18" LayerNumber="18" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner19" LayerNumber="19" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner20" LayerNumber="20" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner21" LayerNumber="21" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner22" LayerNumber="22" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner23" LayerNumber="23" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner24" LayerNumber="24" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner25" LayerNumber="25" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner26" LayerNumber="26" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner27" LayerNumber="27" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner28" LayerNumber="28" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner29" LayerNumber="29" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner30" LayerNumber="30" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner31" LayerNumber="31" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner32" LayerNumber="32" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner33" LayerNumber="33" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner34" LayerNumber="34" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner35" LayerNumber="35" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner36" LayerNumber="36" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner37" LayerNumber="37" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner38" LayerNumber="38" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner39" LayerNumber="39" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner40" LayerNumber="40" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner41" LayerNumber="41" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner42" LayerNumber="42" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner43" LayerNumber="43" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner44" LayerNumber="44" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner45" LayerNumber="45" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner46" LayerNumber="46" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner47" LayerNumber="47" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner48" LayerNumber="48" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner49" LayerNumber="49" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner50" LayerNumber="50" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner51" LayerNumber="51" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner52" LayerNumber="52" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner53" LayerNumber="53" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner54" LayerNumber="54" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner55" LayerNumber="55" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner56" LayerNumber="56" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner57" LayerNumber="57" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner58" LayerNumber="58" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner59" LayerNumber="59" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner60" LayerNumber="60" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner61" LayerNumber="61" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCInner62" LayerNumber="62" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCBottom" LayerNumber="63" LayerState="3"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCRuleAreaLayer" LayerNumber="64" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCBoard Outline" LayerNumber="65" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCSilkscreen Top" LayerNumber="66" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCSilkscreen Bot" LayerNumber="67" LayerState="2"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCTop3D" LayerNumber="68" LayerState="2"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCBot3D" LayerNumber="69" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCSolder paste Top" LayerNumber="70" LayerState="4"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCSolder paste Bot" LayerNumber="71" LayerState="4"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCSolder mask Top" LayerNumber="72" LayerState="4"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCSolder mask Bot" LayerNumber="73" LayerState="4"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCGlue mask Top" LayerNumber="74" LayerState="4"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCGlue mask Bot" LayerNumber="75" LayerState="4"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCAssembly Top" LayerNumber="76" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCAssembly Bot" LayerNumber="77" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCRatsnest" LayerNumber="78" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCDesign Rule Check" LayerNumber="79" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCForce Vectors" LayerNumber="80" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCComment" LayerNumber="81" LayerState="2"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 1" LayerNumber="82" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 2" LayerNumber="83" LayerState="2"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 3" LayerNumber="84" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 4" LayerNumber="85" LayerState="1"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 5" LayerNumber="86" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 6" LayerNumber="87" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 7" LayerNumber="88" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 8" LayerNumber="89" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 9" LayerNumber="90" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCMechanical Layer 10" LayerNumber="91" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASCCourtyard Layer" LayerNumber="92" LayerState="0"/>
+<LayerViewState Class="CLayerViewState" LayerName="&amp;ASC01" LayerNumber="95" LayerState="1"/>
+</ViewState>
+</ViewState>
+<Extensions>
+<Extension Class="CPreviewExtensionImpl">
+<PrjPreview_326961B9_A251_4FAE_A3E0_956D43ECDB4A Format="PNG" Data="89504E470D0A1A0A0000000D49484452000001F00000013608060000009E1DC04F000000017352474200AECE1CE90000000467414D410000B18F0BFC6105000000097048597300000EC300000EC301C76FA8640000076449444154785EEDDD518EDC04144541769DE503FE48AB138EB0C540B86ED7482526E765C09748E94FFFF6E7D7EF00C0ED640400B6650400B6650400B6650400B6650400B6650400B6650400B6650400B6650400B6650400B6650400B6650400B6650400B6654CDFBE7DCB7ED59D7FDEF6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BEAAEDC5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BEAAEDC5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB32021FE0F8AA0E7C848CC007F0010E1F2D23F0017C80C347CB087C001FE0F0D1320237F6F357FD1EE0F6320237F5FE81FDFDFBEFFF043E4A46FE655F7D4B0D5CF1F307F5FBAFDFBF87FF8ABFEB7EA98CE986AF5AFBC1577EFE9FFEECF173EFEAF75CF1959F3DDCF5BF7DB0BD6F87AF7CD5BFEFDDFAF6BF73E7673FDC71FBF173EFEAF75CF17FFDECE1863F9F917FD957FF60E18A9F3F98DF7FFDFE3DFC57FC5DF74B65046EE8E70FE9F75FBF7F0F7C848CC04DBD7F507FFFFEFB3F818F9211B8B1F7AFBA031F2123F0017C80C347CB087C001FE0F0D132021FC007387CB48C00C0B68C00C0B68C00C0B68C00C0B68C00C0B68C00C0B68C00C0B68C00C0B68CE986EF4AFDC1577EDEF6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BEAAEDC5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BEAAEDC5F6BE5D617BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB32A607BE6BF5C5F6BFFE3FB9CA9F7BDFAEB0BD6F67EEFCEC07DBFB76E681DB330200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200DB320200B37EFBFD0FF2FD30110C48F4E50000000049454E44AE426082"/>
+</Extension>
+<Extension Class="CPrjTreeCtrlExtension">
+<SWsTreeItem Class="SWsTreeItem" Name="&amp;ASCTemp">
+<Children>
+<SWsTreeItem Class="SWsTreeItem" Name="&amp;ASCTemp">
+<Children/>
+</SWsTreeItem>
+</Children>
+</SWsTreeItem>
+</Extension>
+</Extensions>
+<TreeInstDataMap/>
+<TTFont/>
+</Project>
+</ElectronicsWorkbench>
