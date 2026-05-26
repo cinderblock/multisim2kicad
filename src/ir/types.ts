@@ -13,10 +13,22 @@ export interface EwLayer {
   rgb: number;
 }
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type Shape =
+  | { kind: "polyline"; layer: number; thickness: number; points: Point[] }
+  | { kind: "rectangle"; layer: number; thickness: number; points: Point[] }
+  | { kind: "roundRect"; layer: number; thickness: number; points: Point[]; radius: number }
+  | { kind: "ellipse"; layer: number; thickness: number; points: Point[] };
+
 export interface Board {
   source: Source;
   projectName: string;
   sheetTitle: string;
   workArea: { left: number; bottom: number; right: number; top: number };
   layers: EwLayer[];
+  shapes: Shape[];
 }

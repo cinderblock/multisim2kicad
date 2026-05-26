@@ -31,11 +31,20 @@ async function main() {
     const w = (board.workArea.right - board.workArea.left) / NM_PER_MM;
     const h = (board.workArea.top - board.workArea.bottom) / NM_PER_MM;
 
+    const shapeCounts: Record<string, number> = {};
+    for (const s of board.shapes) {
+      shapeCounts[s.kind] = (shapeCounts[s.kind] ?? 0) + 1;
+    }
+    const shapeSummary = Object.entries(shapeCounts)
+      .map(([k, v]) => `${v} ${k}`)
+      .join(", ") || "none";
+
     console.log(`${basename(input)}`);
     console.log(`  app:        ${board.source.application} v${board.source.versionMajor}.${board.source.versionMinor}  (schema ${board.source.schema})`);
     console.log(`  project:    ${board.projectName}`);
     console.log(`  sheet:      "${board.sheetTitle}"  workArea ${w.toFixed(1)} x ${h.toFixed(1)} mm`);
     console.log(`  EW layers:  ${board.layers.length} defined, ${enabled.length} enabled`);
+    console.log(`  shapes:     ${shapeSummary}`);
     console.log(`  wrote:      ${outPath}`);
   }
 }

@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import type { Board, EwLayer } from "../ir/types.ts";
+import type { Board, EwLayer, Point, Shape } from "../ir/types.ts";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -28,6 +28,63 @@ function findFirst(obj: any, key: string): any {
     }
   }
   return undefined;
+}
+
+const SHAPE_TAGS = new Set([
+  "Polyline",
+  "Rectangle",
+  "RoundedRectangle",
+  "Ellipse",
+]);
+
+function toPoints(item: any): Point[] {
+  return arr(item?.Object?.Point).map((p: any) => ({
+    x: Number(p["@_X"] ?? 0),
+    y: Number(p["@_Y"] ?? 0),
+  }));
+}
+
+function toShape(tag: string, item: any): Shape | undefined {
+  const layer = Number(item["@_Layer"] ?? -1);
+  const thickness = Number(item["@_LineThickness"] ?? 0);
+  const points = toPoints(item);
+  switch (tag) {
+    case "Polyline":
+      return { kind: "polyline", layer, thickness, points };
+    case "Rectangle":
+      return { kind: "rectangle", layer, thickness, points };
+    case "RoundedRectangle":
+      return {
+        kind: "roundRect",
+        layer,
+        thickness,
+        points,
+        radius: Number(item["@_Radius"] ?? 0),
+      };
+    case "Ellipse":
+      return { kind: "ellipse", layer, thickness, points };
+  }
+  return undefined;
+}
+
+function walkShapes(node: any, out: Shape[]): void {
+  if (node == null || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const c of node) walkShapes(c, out);
+    return;
+  }
+  for (const [key, val] of Object.entries(node)) {
+    if (key.startsWith("@_")) continue;
+    if (SHAPE_TAGS.has(key)) {
+      for (const item of arr(val as any)) {
+        const s = toShape(key, item);
+        if (s) out.push(s);
+        walkShapes(item, out);
+      }
+    } else {
+      walkShapes(val, out);
+    }
+  }
 }
 
 export function parsePcbXml(xml: string): Board {
@@ -68,6 +125,9 @@ export function parsePcbXml(xml: string): Board {
     rgb: Number(node["@_RGB"] ?? 0),
   }));
 
+  const shapes: Shape[] = [];
+  walkShapes(designSheet, shapes);
+
   return {
     source: {
       application: creator["@_application"] ?? "unknown",
@@ -79,5 +139,6 @@ export function parsePcbXml(xml: string): Board {
     sheetTitle,
     workArea,
     layers,
+    shapes,
   };
 }
