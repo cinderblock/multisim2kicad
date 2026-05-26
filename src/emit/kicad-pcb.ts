@@ -52,7 +52,8 @@ function uuid(): string {
 function strokeWidthFor(rawNm: number, layer: string): number {
   // EW Edge.Cuts thickness is often a meaningless 1 um value; clamp to 0.05 mm.
   if (layer === "Edge.Cuts") return EDGE_CUTS_WIDTH_NM;
-  return rawNm > 0 ? rawNm : EDGE_CUTS_WIDTH_NM;
+  if (rawNm > 0) return rawNm;
+  return 120_000; // 0.12 mm — KiCad's default silkscreen width
 }
 
 function emitLine(
@@ -137,13 +138,12 @@ function emitPolyline(s: Extract<Shape, { kind: "polyline" }>, layer: string): s
 
 function emitShape(shape: Shape): string[] {
   const layer = ewLayerToKicad(shape.layer);
-  // Chunk 1 scope: only emit Edge.Cuts shapes. Other layers come next.
-  if (layer !== "Edge.Cuts") return [];
+  if (!layer) return []; // unmapped EW layer (3D, ratsnest, DRC, page meta, etc.)
   switch (shape.kind) {
     case "roundRect":  return emitRoundRect(shape, layer);
     case "rectangle":  return emitRectangle(shape, layer);
     case "polyline":   return emitPolyline(shape, layer);
-    case "ellipse":    return [];
+    case "ellipse":    return []; // TODO: gr_circle / gr_arc
   }
 }
 
