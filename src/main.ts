@@ -46,6 +46,8 @@ async function main() {
     console.log(`  EW layers:  ${board.layers.length} defined, ${enabled.length} enabled`);
     console.log(`  shapes:     ${shapeSummary}`);
     console.log(`  tracks:     ${board.tracks.length}`);
+    const padCount = board.components.reduce((n, c) => n + c.pads.length, 0);
+    console.log(`  components: ${board.components.length} (${padCount} pads)`);
     console.log(`  wrote:      ${outPath}`);
   }
 }

@@ -1,8 +1,9 @@
-import type { Board, Shape, Track } from "../ir/types.ts";
+import type { Board, Component, Pad, Point, Shape, Track } from "../ir/types.ts";
 import { ewLayerToKicad } from "../util/layer-map.ts";
 
-// KiCad 7 format version: stable, broadly compatible with 7 / 8 / 9.
-const KICAD_VERSION = 20221018;
+// KiCad 8 board format. Matches the (uuid ...) keyword used throughout
+// (KiCad 7 used (tstamp ...)). KiCad 9 reads this without complaint.
+const KICAD_VERSION = 20240108;
 
 type LayerRow = readonly [number, string, "signal" | "user" | "power" | "mixed" | "jumper", string?];
 
@@ -154,6 +155,63 @@ function emitTrack(t: Track): string | undefined {
   return `\t(segment (start ${fx(t.start.x)} ${fy(t.start.y)}) (end ${fx(t.end.x)} ${fy(t.end.y)}) (width ${mm(t.thickness)}) (layer ${q(layer)}) (net 0) (uuid ${q(uuid())}))`;
 }
 
+function emitPad(pad: Pad, origin: Point): string {
+  // Position relative to footprint origin (footprint emitted at rotation 0),
+  // Y flipped to KiCad's screen convention.
+  const lx = mm(pad.at.x - origin.x);
+  const ly = mm(-(pad.at.y - origin.y));
+  const thru = pad.drillDiameter > 0;
+  const type = thru ? "thru_hole" : "smd";
+  const layers = thru ? `"*.Cu" "*.Mask"` : `"F.Cu" "F.Paste" "F.Mask"`;
+  const drill = thru ? ` (drill ${mm(pad.drillDiameter)})` : "";
+
+  let shapeTok: string;
+  let size: string;
+  let extra = "";
+  switch (pad.shape.kind) {
+    case "circle":
+      shapeTok = "circle";
+      size = `${mm(pad.shape.diameter)} ${mm(pad.shape.diameter)}`;
+      break;
+    case "rect":
+      shapeTok = "rect";
+      size = `${mm(pad.shape.width)} ${mm(pad.shape.height)}`;
+      break;
+    case "roundrect": {
+      shapeTok = "roundrect";
+      size = `${mm(pad.shape.width)} ${mm(pad.shape.height)}`;
+      const minDim = Math.min(pad.shape.width, pad.shape.height);
+      const ratio = minDim > 0 ? Math.min(0.5, pad.shape.cornerRadius / minDim) : 0;
+      extra = ` (roundrect_rratio ${ratio.toFixed(6)})`;
+      break;
+    }
+  }
+
+  // Circle pads are rotation-invariant; for others negate to match the Y flip.
+  // (Unverified for non-square rect pads — no sample yet.)
+  const rotDeg = pad.shape.kind === "circle" ? 0 : -(pad.rotation / 1_000_000);
+  const at = rotDeg !== 0 ? `(at ${lx} ${ly} ${rotDeg})` : `(at ${lx} ${ly})`;
+
+  return `\t\t(pad ${q(pad.number)} ${type} ${shapeTok} ${at} (size ${size})${drill} (layers ${layers})${extra} (uuid ${q(uuid())}))`;
+}
+
+function emitFootprint(c: Component): string {
+  const cu = c.bottom ? "B.Cu" : "F.Cu";
+  const silk = c.bottom ? "B.SilkS" : "F.SilkS";
+  const fab = c.bottom ? "B.Fab" : "F.Fab";
+  const lines: string[] = [
+    `\t(footprint ${q("ew:" + (c.name || c.value || "UNKNOWN"))}`,
+    `\t\t(layer ${q(cu)})`,
+    `\t\t(uuid ${q(uuid())})`,
+    `\t\t(at ${fx(c.origin.x)} ${fy(c.origin.y)})`,
+    `\t\t(property "Reference" ${q(c.reference)} (at 0 0 0) (layer ${q(silk)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
+    `\t\t(property "Value" ${q(c.value)} (at 0 0 0) (layer ${q(fab)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
+  ];
+  for (const pad of c.pads) lines.push(emitPad(pad, c.origin));
+  lines.push(`\t)`);
+  return lines.join("\n");
+}
+
 export function emitKicadPcb(board: Board): string {
   const layerLines = STANDARD_LAYERS.map(([num, name, type, friendly]) => {
     return friendly
@@ -162,6 +220,7 @@ export function emitKicadPcb(board: Board): string {
   }).join("\n");
 
   const shapeLines = board.shapes.flatMap(emitShape).join("\n");
+  const footprintLines = board.components.map(emitFootprint).join("\n");
   const trackLines = board.tracks
     .map(emitTrack)
     .filter((s): s is string => s !== undefined)
@@ -196,6 +255,8 @@ export function emitKicadPcb(board: Board): string {
     `\t)`,
     ``,
     `\t(net 0 ${q("")})`,
+    ``,
+    footprintLines,
     ``,
     shapeLines,
     ``,

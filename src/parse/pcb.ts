@@ -1,5 +1,14 @@
 import { XMLParser } from "fast-xml-parser";
-import type { Board, EwLayer, Point, Shape, Track } from "../ir/types.ts";
+import type {
+  Board,
+  Component,
+  EwLayer,
+  Pad,
+  PadShape,
+  Point,
+  Shape,
+  Track,
+} from "../ir/types.ts";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -80,9 +89,92 @@ function toTrack(item: any): Track | undefined {
   };
 }
 
+// Collect the (possibly multiple) Attribute children directly owned by a
+// component or pin: ...ExtentableObject > AttributeInterface > Containers >
+// AttributeContainer > Store > DataTreeContainer > Attribute. Scoped so a
+// component's own REFDES/VALUE don't get mixed with its pins' NUMBER.
+function ownAttributes(node: any): Map<string, string> {
+  const m = new Map<string, string>();
+  const container = node?.ExtentableObject?.AttributeInterface?.Containers?.AttributeContainer;
+  for (const a of arr(container?.Store?.DataTreeContainer?.Attribute)) {
+    const tag = stripAsc(a["@_Tag"]);
+    if (tag) m.set(tag, stripAsc(a["@_Value"]));
+  }
+  return m;
+}
+
+function collectByTag(node: any, tag: string, out: any[]): void {
+  if (node == null || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const c of node) collectByTag(c, tag, out);
+    return;
+  }
+  for (const [key, val] of Object.entries(node)) {
+    if (key.startsWith("@_")) continue;
+    if (key === tag) {
+      for (const item of arr(val as any)) out.push(item);
+    } else {
+      collectByTag(val, tag, out);
+    }
+  }
+}
+
+function parsePadShape(lamPad: any): PadShape | undefined {
+  if (!lamPad) return undefined;
+  if (lamPad.LayoutPadRound) {
+    return { kind: "circle", diameter: 2 * Number(lamPad.LayoutPadRound["@_Radius"] ?? 0) };
+  }
+  if (lamPad.LayoutPadRoundedSquare) {
+    const p = lamPad.LayoutPadRoundedSquare;
+    const w = 2 * Number(p["@_HalfWidth"] ?? 0);
+    return { kind: "roundrect", width: w, height: w, cornerRadius: Number(p["@_Radius"] ?? 0) };
+  }
+  if (lamPad.LayoutPadSquare) {
+    const w = 2 * Number(lamPad.LayoutPadSquare["@_HalfWidth"] ?? 0);
+    return { kind: "rect", width: w, height: w };
+  }
+  return undefined;
+}
+
+function parsePin(pin: any): Pad | undefined {
+  const pt = arr(pin?.Object?.Point)[0];
+  const shape = parsePadShape(pin?.LamPad);
+  if (!pt || !shape) return undefined;
+  const drill = pin?.LayoutDrillObject;
+  return {
+    number: ownAttributes(pin).get("NUMBER") ?? "",
+    at: { x: Number(pt["@_X"]), y: Number(pt["@_Y"]) },
+    rotation: Number(pin["@_Rotation"] ?? 0),
+    shape,
+    drillDiameter: drill ? 2 * Number(drill["@_Drill-Radius"] ?? 0) : 0,
+  };
+}
+
+function parseComponent(comp: any): Component {
+  const attrs = ownAttributes(comp);
+  const name = stripAsc(comp["@_Name"]);
+  const pins: any[] = [];
+  collectByTag(comp.Group, "Through-Board-Pin", pins);
+  const pads = pins.map(parsePin).filter((p): p is Pad => p !== undefined);
+  const rp = arr(comp.Group?.RefPoint)[0];
+  const origin = rp
+    ? { x: Number(rp["@_X"]), y: Number(rp["@_Y"]) }
+    : (pads[0]?.at ?? { x: 0, y: 0 });
+  return {
+    reference: attrs.get("REFDES") || name || "REF**",
+    value: attrs.get("VALUE") || name || "",
+    name,
+    origin,
+    rotation: Number(comp["@_Rotation"] ?? 0),
+    bottom: Number(comp["@_Bottom"] ?? 0) !== 0,
+    pads,
+  };
+}
+
 interface Collected {
   shapes: Shape[];
   tracks: Track[];
+  components: Component[];
 }
 
 function walkGeometry(node: any, out: Collected): void {
@@ -103,6 +195,11 @@ function walkGeometry(node: any, out: Collected): void {
       for (const item of arr(val as any)) {
         const t = toTrack(item);
         if (t) out.tracks.push(t);
+      }
+    } else if (key === "UBComponent") {
+      for (const item of arr(val as any)) {
+        out.components.push(parseComponent(item));
+        walkGeometry(item, out); // still collect silk shapes inside the component
       }
     } else {
       walkGeometry(val, out);
@@ -148,7 +245,7 @@ export function parsePcbXml(xml: string): Board {
     rgb: Number(node["@_RGB"] ?? 0),
   }));
 
-  const collected: Collected = { shapes: [], tracks: [] };
+  const collected: Collected = { shapes: [], tracks: [], components: [] };
   walkGeometry(designSheet, collected);
 
   return {
@@ -164,5 +261,6 @@ export function parsePcbXml(xml: string): Board {
     layers,
     shapes: collected.shapes,
     tracks: collected.tracks,
+    components: collected.components,
   };
 }

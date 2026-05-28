@@ -31,6 +31,29 @@ export interface Track {
   end: Point;
 }
 
+export type PadShape =
+  | { kind: "circle"; diameter: number }
+  | { kind: "rect"; width: number; height: number }
+  | { kind: "roundrect"; width: number; height: number; cornerRadius: number };
+
+export interface Pad {
+  number: string;
+  at: Point; // absolute, nm
+  rotation: number; // millionths of a degree
+  shape: PadShape;
+  drillDiameter: number; // nm; 0 = no hole (SMD)
+}
+
+export interface Component {
+  reference: string;
+  value: string;
+  name: string;
+  origin: Point; // RefPoint, absolute nm — becomes the footprint anchor
+  rotation: number; // millionths of a degree (metadata; pads are stored pre-placed)
+  bottom: boolean;
+  pads: Pad[];
+}
+
 export interface Board {
   source: Source;
   projectName: string;
@@ -39,4 +62,5 @@ export interface Board {
   layers: EwLayer[];
   shapes: Shape[];
   tracks: Track[];
+  components: Component[];
 }

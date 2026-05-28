@@ -1,5 +1,6 @@
 // Sanity check: read a file, verify parenthesis balance ignoring string contents.
 // Usage: bun run src/util/check-sexp.ts <file>
+export {};
 
 const paths = Bun.argv.slice(2);
 if (paths.length === 0) {
