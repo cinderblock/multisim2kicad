@@ -3,6 +3,7 @@ import type {
   Board,
   Component,
   EwLayer,
+  Net,
   Pad,
   PadShape,
   Point,
@@ -171,6 +172,18 @@ function parseComponent(comp: any): Component {
   };
 }
 
+function parseNets(node: any): Net[] {
+  const netList = findFirst(node, "UbNetList");
+  if (!netList) return [];
+  return arr(netList.UBNet).map((n: any) => ({
+    name: stripAsc(n["@_Name"]),
+    pins: arr(n.UBNetPin).map((p: any) => ({
+      refdes: stripAsc(p["@_Refdes"]),
+      pin: stripAsc(p["@_Pin"]),
+    })),
+  }));
+}
+
 interface Collected {
   shapes: Shape[];
   tracks: Track[];
@@ -262,5 +275,6 @@ export function parsePcbXml(xml: string): Board {
     shapes: collected.shapes,
     tracks: collected.tracks,
     components: collected.components,
+    nets: parseNets(root),
   };
 }

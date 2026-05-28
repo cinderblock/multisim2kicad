@@ -54,6 +54,16 @@ export interface Component {
   pads: Pad[];
 }
 
+export interface NetPinRef {
+  refdes: string;
+  pin: string;
+}
+
+export interface Net {
+  name: string;
+  pins: NetPinRef[];
+}
+
 export interface Board {
   source: Source;
   projectName: string;
@@ -63,4 +73,5 @@ export interface Board {
   shapes: Shape[];
   tracks: Track[];
   components: Component[];
+  nets: Net[];
 }
