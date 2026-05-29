@@ -294,7 +294,16 @@ Feasibility, NOT yet verified - do a spike before promising:
       endpoints (BFS) so mid-chain segments inherit. Design1's 6 tracks
       now correctly carry net 3 (the only routed net in the source).
 - [ ] Phase 2 later: copper pours (no sample in Design1 yet).
-- [ ] Phase 3: Multisim schematic.
+- [x] Phase 3 chunk 1 (2026-05-29): scaffold — `Schematic` IR, `parse/sch.ts`,
+      `emit/kicad-sch.ts`, main.ts dispatch by `.ms14.xml` extension. Emits a
+      minimal `(kicad_sch ... (lib_symbols) (sheet_instances ...))` from the
+      Design1 schematic metadata. KiCad 10 `sch erc` exits 0 / 0 violations.
+- [ ] Phase 3 chunk 2: walk `CIITSymbolComp` + `CIITSymbolBorderRect` +
+      `CIITPinSymbolComp` -> placeholder `lib_symbol` + `(symbol ...)`
+      instance with bounding-box outline and pin stubs.
+- [ ] Phase 3 chunk 3: `CODLineComp` / `CODMultiLineComp` -> `(wire ...)`.
+- [ ] Phase 3 chunk 4: `CSchDesignNetLabel` -> `(label ...)`.
+- [ ] Phase 3 chunk 5: cross-check inferred nets vs `Ci*` netlist view.
 
 ## Open questions for the user
 

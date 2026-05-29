@@ -83,3 +83,13 @@ export interface Board {
   holes: Hole[];
   nets: Net[];
 }
+
+// Multisim schematic IR. Items (symbols, wires, labels, ...) will be added in
+// successive Phase-3 chunks; chunk 1 carries just the sheet metadata so we
+// can emit a minimal valid .kicad_sch.
+export interface Schematic {
+  source: Source;
+  projectName: string;
+  sheetTitle: string;
+  workArea: { left: number; bottom: number; right: number; top: number };
+}
