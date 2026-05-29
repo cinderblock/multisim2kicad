@@ -242,13 +242,11 @@ Feasibility, NOT yet verified - do a spike before promising:
 - **Ellipse geometry**: `CDrawEllipse` first two `Point`s are opposite ends
   of a diameter. center = midpoint, radius = |p0-p1|/2. The 8 in Design1
   are on layers 72/73 (F/B.Mask) — mask rings around the mounting holes.
-- **No `kicad-cli` on this machine.** Only KiCad **6.0** is installed
-  (`C:\Program Files\KiCad\6.0`, no `kicad-cli.exe`; the CLI shipped in
-  KiCad 7). Output validation is therefore limited to paren-balance
-  (`src/util/check-sexp.ts`) + `tsc --noEmit` + manual format review.
-  We currently emit `(version 20240108)` (KiCad 8). KiCad 6 will NOT open
-  that. Resolve the target-version question (open #1) before claiming the
-  output is verified.
+- **KiCad 10 is installed** (2026-05-29) at `C:\Program Files\KiCad\10.0\bin\kicad-cli.exe`.
+  Validation pipeline: `kicad-cli pcb export svg --layers <set> --output X.svg X.kicad_pcb`
+  proves a full parse + render; `kicad-cli pcb drc --output X.drc.json --format json X.kicad_pcb`
+  surfaces connectivity / clearance issues. KiCad 10 reads our `(version 20240108)`
+  output without complaint.
 
 ## Progress log
 
@@ -265,10 +263,13 @@ Feasibility, NOT yet verified - do a spike before promising:
       forward-compatible). Contains: header, paper, title_block (project
       name + import-source note), standard 2-copper-layer stack with full
       tech/user layer set, empty net 0. S-exp paren balance verified.
-- [ ] **OPEN ITEM (still unverified):** confirm the `.kicad_pcb` opens in
-      KiCad without errors. Needs a human — `kicad-cli` is NOT available on
-      this machine (only KiCad **6.0** is installed, which predates the CLI
-      *and* cannot open the KiCad-8 format we emit). See open question #1.
+- [x] **VERIFIED (2026-05-29):** both `out/Temp.kicad_pcb` and
+      `out/Design1.kicad_pcb` parse and render cleanly in **KiCad 10.0.3**
+      (`kicad-cli pcb export svg` exit 0). DRC also runs clean (exit 0).
+      DRC reports 14 unconnected items (nets 1 & 2 are intentionally
+      unrouted in the EW source — net 3 with 6 traces is the only routed
+      net) + 10 mostly-informational violations (placeholder library, silk
+      clip, source-design clearance). Source-faithful — not converter bugs.
 - [x] Phase 2 chunk 1: EW layer -> KiCad layer mapping table
       (`src/util/layer-map.ts`).
 - [x] Phase 2 chunk 1: Board outline (EW layer 65 -> Edge.Cuts).
@@ -288,21 +289,19 @@ Feasibility, NOT yet verified - do a spike before promising:
       mounting holes (Raspberry-Pi pattern).
 - [x] Phase 2 (2026-05-29): ellipses -> `(gr_circle)` (was a TODO; 8 in
       Design1, mask-layer rings around the mounting holes).
-- [ ] Phase 2 deferred: track-net assignment (tracks carry no net ref in EW;
-      would require geometric matching of endpoints to pads). Low risk —
-      KiCad recomputes connectivity, tracks just load as `net 0`.
+- [x] Phase 2 (2026-05-29): track-net assignment. Build a pad-position ->
+      net index from per-pad nets, then propagate through shared track
+      endpoints (BFS) so mid-chain segments inherit. Design1's 6 tracks
+      now correctly carry net 3 (the only routed net in the source).
 - [ ] Phase 2 later: copper pours (no sample in Design1 yet).
 - [ ] Phase 3: Multisim schematic.
 
 ## Open questions for the user
 
-1. **KiCad target version (now blocking verification).** Emitter currently
-   writes `(version 20240108)` (KiCad 8). The only KiCad installed here is
-   6.0, which cannot open that. Which KiCad does the user actually run? If
-   6.x, target `20211014` and switch `(uuid)` -> `(tstamp)`. If 7+, the
-   safest broad target is `20221018` (KiCad 7; `(uuid)` already valid,
-   opens in 7/8/9). Recommendation: emit `20221018` unless the user wants
-   8/9-specific features. Pick this before declaring the output verified.
+1. **KiCad target version (RESOLVED 2026-05-29).** User installed KiCad 10.
+   Emitter continues to write `(version 20240108)` (KiCad 8) — KiCad 10
+   reads it without complaint (offers to upgrade on save, harmless). No
+   change needed unless we want KiCad-9/10-specific features.
 2. Should the CLI accept binary `.ewprj` / `.ms14` directly (calling into
    `ewd`), or stay XML-only and let users two-step?
 3. Where should real symbol/footprint mapping data live - checked in here,
