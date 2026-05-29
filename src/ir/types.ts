@@ -54,6 +54,13 @@ export interface Component {
   pads: Pad[];
 }
 
+// A standalone drill (Stand-Alone="1"): plated -> via, non-plated -> mounting hole.
+export interface Hole {
+  at: Point; // absolute, nm
+  drillDiameter: number; // nm
+  plated: boolean;
+}
+
 export interface NetPinRef {
   refdes: string;
   pin: string;
@@ -73,5 +80,6 @@ export interface Board {
   shapes: Shape[];
   tracks: Track[];
   components: Component[];
+  holes: Hole[];
   nets: Net[];
 }

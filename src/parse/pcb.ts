@@ -3,6 +3,7 @@ import type {
   Board,
   Component,
   EwLayer,
+  Hole,
   Net,
   Pad,
   PadShape,
@@ -177,7 +178,7 @@ function parseNets(node: any): Net[] {
   if (!netList) return [];
   return arr(netList.UBNet).map((n: any) => ({
     name: stripAsc(n["@_Name"]),
-    pins: arr(n.UBNetPin).map((p: any) => ({
+    pins: arr(n.Pins?.UBNetPin).map((p: any) => ({
       refdes: stripAsc(p["@_Refdes"]),
       pin: stripAsc(p["@_Pin"]),
     })),
@@ -188,6 +189,7 @@ interface Collected {
   shapes: Shape[];
   tracks: Track[];
   components: Component[];
+  holes: Hole[];
 }
 
 function walkGeometry(node: any, out: Collected): void {
@@ -213,6 +215,19 @@ function walkGeometry(node: any, out: Collected): void {
       for (const item of arr(val as any)) {
         out.components.push(parseComponent(item));
         walkGeometry(item, out); // still collect silk shapes inside the component
+      }
+    } else if (key === "LayoutDrillObject") {
+      // Only free-standing drills become board-level holes; drills with
+      // Stand-Alone="0" belong to a THT pin and are parsed via parsePin.
+      for (const item of arr(val as any)) {
+        if (String(item["@_Stand-Alone"]) !== "1") continue;
+        const pt = arr(item?.Object?.Point)[0];
+        if (!pt) continue;
+        out.holes.push({
+          at: { x: Number(pt["@_X"]), y: Number(pt["@_Y"]) },
+          drillDiameter: 2 * Number(item["@_Drill-Radius"] ?? 0),
+          plated: Number(item["@_Plated"] ?? 0) !== 0,
+        });
       }
     } else {
       walkGeometry(val, out);
@@ -258,7 +273,7 @@ export function parsePcbXml(xml: string): Board {
     rgb: Number(node["@_RGB"] ?? 0),
   }));
 
-  const collected: Collected = { shapes: [], tracks: [], components: [] };
+  const collected: Collected = { shapes: [], tracks: [], components: [], holes: [] };
   walkGeometry(designSheet, collected);
 
   return {
@@ -275,6 +290,7 @@ export function parsePcbXml(xml: string): Board {
     shapes: collected.shapes,
     tracks: collected.tracks,
     components: collected.components,
+    holes: collected.holes,
     nets: parseNets(root),
   };
 }

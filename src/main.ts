@@ -48,6 +48,8 @@ async function main() {
     console.log(`  tracks:     ${board.tracks.length}`);
     const padCount = board.components.reduce((n, c) => n + c.pads.length, 0);
     console.log(`  components: ${board.components.length} (${padCount} pads)`);
+    const plated = board.holes.filter((h) => h.plated).length;
+    console.log(`  holes:      ${board.holes.length} (${plated} plated/via, ${board.holes.length - plated} mounting)`);
     const netPins = board.nets.reduce((n, net) => n + net.pins.length, 0);
     console.log(`  nets:       ${board.nets.length} (${netPins} pin refs)`);
     console.log(`  wrote:      ${outPath}`);

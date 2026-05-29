@@ -152,11 +152,45 @@ Order of attack:
 4. Cross-check inferred nets against `Ci*` netlist view; flag mismatches.
 5. Phase 3.5: real `lib_id` mapping for common parts.
 
-### Phase 4 - Polish
+### Phase 4 - Polish / library translation
 
 - Footprint library translation (EW footprint defs -> `.kicad_mod`).
-- Symbol library translation.
+- Symbol library translation (-> `.kicad_sym`).
 - Optional `ewd` integration so the CLI accepts binary input directly.
+
+**EW master library + ewd DB decode (2026-05):** the sibling `ewd` decoder now
+extracts the embedded SQLite database ("ewdb") from EW files (see `..\ewd\ewdb`,
+commits "Working database extraction!" / "decode embedded sqlite database
+blob"). The master parts/footprint/symbol library lives at
+`\\uberfall.tsl\Electronics Workbench Database\` (category folders + `.prt`
+part DBs: `package.prt`, `ulti.prt`, `multisim.prt`, ...).
+
+Impact:
+- Does NOT affect PCB geometry conversion (Phases 1-2). `.ewprj` embeds every
+  placed component's pads/drills/silk at absolute coords; Design1 fully
+  converts with no external library.
+- IS the enabler for high-fidelity library translation: translate EW's own
+  symbols/footprints into KiCad libs rather than inlining approximations
+  (current state) or fragile-mapping to KiCad's stock library. Also the basis
+  for proper schematic symbols in Phase 3.
+- Verify ewd's ewdb output format before building against it (was WIP at last
+  check).
+
+### Phase 5 - Altium export (future, possibly private/paid)
+
+User is interested in exporting to Altium too, potentially as a non-public /
+paid feature. Architecture implication: keep `src/ir/types.ts` format-neutral
+(no KiCad-isms) so an Altium emitter is just another `src/emit/` backend over
+the same `Board` IR. Natural split: EW decode + IR + KiCad emitter public;
+Altium emitter private.
+
+Feasibility, NOT yet verified - do a spike before promising:
+- Altium native `.PcbDoc` / `.SchDoc` are OLE2 Compound File Binary Format
+  (proprietary binary, unlike KiCad's text S-expressions). Reading is
+  reverse-engineered by third parties; writing is far less charted.
+- Cheaper fallbacks if native binary write is too costly: emit clean KiCad and
+  use Altium's built-in KiCad importer (Altium 24+), or an intermediate format
+  Altium ingests. Less "sellable" than native files that just open.
 
 ## Findings / gotchas
 
@@ -192,6 +226,29 @@ Order of attack:
 - `CLayoutNet @Routing` is `18446744073709551615` (uint64 max) - looks
   like a layer-bitmask meaning "all layers permitted." TBD if any sample
   ever restricts it.
+- **Net pins are nested.** `UbNetList > UBNet > Pins > UBNetPin`, NOT
+  `UBNet > UBNetPin`. `UBNet` also has a `List > NetAttribute` block
+  (LENGTH, BUSGROUP). `UBNetPin @Refdes`/`@Pin` reference the component
+  refdes + the pad's `NUMBER` attribute (pins can be named, e.g. `POEA+`,
+  not just numeric). Pad `NUMBER` and net `Pin` match exactly after `&ASC`
+  strip, so resolution is a direct string-key lookup.
+- **Standalone drills** are `LayoutDrillObject Stand-Alone="1"` (pin drills
+  are `Stand-Alone="0"`, nested in a `Through-Board-Pin`). Position in
+  `Object > Point`, size in `@Drill-Radius` (nm radius), `@Plated` 0/1.
+  Design1's 4 standalone drills are non-plated 2.75 mm = mounting holes;
+  emitted as a `MountingHole` footprint with one `np_thru_hole` pad
+  (size == drill, no copper). Plated standalone drills would emit as
+  `(via)` with a 0.25 mm default ring (no sample yet).
+- **Ellipse geometry**: `CDrawEllipse` first two `Point`s are opposite ends
+  of a diameter. center = midpoint, radius = |p0-p1|/2. The 8 in Design1
+  are on layers 72/73 (F/B.Mask) — mask rings around the mounting holes.
+- **No `kicad-cli` on this machine.** Only KiCad **6.0** is installed
+  (`C:\Program Files\KiCad\6.0`, no `kicad-cli.exe`; the CLI shipped in
+  KiCad 7). Output validation is therefore limited to paren-balance
+  (`src/util/check-sexp.ts`) + `tsc --noEmit` + manual format review.
+  We currently emit `(version 20240108)` (KiCad 8). KiCad 6 will NOT open
+  that. Resolve the target-version question (open #1) before claiming the
+  output is verified.
 
 ## Progress log
 
@@ -208,24 +265,44 @@ Order of attack:
       forward-compatible). Contains: header, paper, title_block (project
       name + import-source note), standard 2-copper-layer stack with full
       tech/user layer set, empty net 0. S-exp paren balance verified.
-- [ ] **OPEN ITEM:** verify Phase 1 output opens in KiCad without errors.
-      Needs a human (or scripted KiCad CLI) to confirm. KiCad will offer
-      to create the `.kicad_pro` on first open; that is expected.
-- [ ] Phase 2: EW layer -> KiCad layer mapping table.
-- [ ] Phase 2: Board outline (CDrawPolyline / CDrawRectangle on EW layer 65
-      -> Edge.Cuts).
-- [ ] Phase 2: Tracks -> `(segment)`.
-- [ ] Phase 2: Components + pads + THT pins -> `(footprint)`.
-- [ ] Phase 2: Drill holes -> `(via)` or pad drill.
-- [ ] Phase 2: Nets table + per-item net assignment.
-- [ ] Phase 2: Silkscreen / fab graphics.
+- [ ] **OPEN ITEM (still unverified):** confirm the `.kicad_pcb` opens in
+      KiCad without errors. Needs a human — `kicad-cli` is NOT available on
+      this machine (only KiCad **6.0** is installed, which predates the CLI
+      *and* cannot open the KiCad-8 format we emit). See open question #1.
+- [x] Phase 2 chunk 1: EW layer -> KiCad layer mapping table
+      (`src/util/layer-map.ts`).
+- [x] Phase 2 chunk 1: Board outline (EW layer 65 -> Edge.Cuts).
+- [x] Phase 2 chunk 2: Silkscreen / fab / mask graphics on all mapped layers
+      (polyline, rectangle, roundRect).
+- [x] Phase 2 chunk 3: Tracks -> `(segment)` (still emitted on `net 0` —
+      see below; track-net inference is deferred).
+- [x] Phase 2 chunk 4: Components + pads + THT pins -> `(footprint)` with
+      inline pads (placeholder `lib_id` `ew:<name>`).
+- [x] Phase 2 chunk 5: Net table + **per-pad** net assignment.
+- [x] Phase 2 (2026-05-29): **fixed net pin-ref parsing** — pins are nested
+      under `UBNet > Pins > UBNetPin`, not directly under `UBNet`. Before this
+      fix all nets had 0 pin refs and no pad resolved to a net. Design1 now
+      shows 3 nets / 21 pin refs.
+- [x] Phase 2 (2026-05-29): standalone drills (`Stand-Alone="1"`) -> mounting
+      holes (non-plated) / vias (plated). Design1 has 4 non-plated 2.75 mm
+      mounting holes (Raspberry-Pi pattern).
+- [x] Phase 2 (2026-05-29): ellipses -> `(gr_circle)` (was a TODO; 8 in
+      Design1, mask-layer rings around the mounting holes).
+- [ ] Phase 2 deferred: track-net assignment (tracks carry no net ref in EW;
+      would require geometric matching of endpoints to pads). Low risk —
+      KiCad recomputes connectivity, tracks just load as `net 0`.
+- [ ] Phase 2 later: copper pours (no sample in Design1 yet).
 - [ ] Phase 3: Multisim schematic.
 
 ## Open questions for the user
 
-1. KiCad target version - currently emitting format `20221018` (KiCad 7,
-   forward-compatible with 8/9). If the user is on a specific version we
-   can bump and use newer features.
+1. **KiCad target version (now blocking verification).** Emitter currently
+   writes `(version 20240108)` (KiCad 8). The only KiCad installed here is
+   6.0, which cannot open that. Which KiCad does the user actually run? If
+   6.x, target `20211014` and switch `(uuid)` -> `(tstamp)`. If 7+, the
+   safest broad target is `20221018` (KiCad 7; `(uuid)` already valid,
+   opens in 7/8/9). Recommendation: emit `20221018` unless the user wants
+   8/9-specific features. Pick this before declaring the output verified.
 2. Should the CLI accept binary `.ewprj` / `.ms14` directly (calling into
    `ewd`), or stay XML-only and let users two-step?
 3. Where should real symbol/footprint mapping data live - checked in here,
