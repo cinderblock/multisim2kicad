@@ -247,6 +247,20 @@ Feasibility, NOT yet verified - do a spike before promising:
   proves a full parse + render; `kicad-cli pcb drc --output X.drc.json --format json X.kicad_pcb`
   surfaces connectivity / clearance issues. KiCad 10 reads our `(version 20240108)`
   output without complaint.
+- **KiCad 10 schematic load gotchas** (cost us a chunk-2 bisect):
+  - `lib_symbol` requires `(duplicate_pin_numbers_are_jumpers no)` and
+    `(embedded_fonts no)` — the latter is KiCad-9/10 era and not optional.
+  - The nested `(symbol "<inner>_1_1" ...)` body must use the **local name
+    only** — no `library:` prefix. `"ew:U2_0_1"` fails to load; `"U2_1_1"` is
+    accepted.
+  - `(hide)` as a bareword inside `(effects ...)` is the KiCad-6/7 spelling
+    and is rejected in KiCad 10. Use property-level `(hide yes)` instead.
+  - Each instance needs an `(instances (project "..." (path "/" ...)))` block
+    or the schematic refuses to load.
+  - Multisim values may use the `&UNI<text + _uc<n><4hex>... escapes>` form
+    (e.g. `&UNI0.1_uc100b5F\n4V` -> `0.1µF\n4V`). The literal newline must
+    be escaped (`\n`) in the emitted S-expr or KiCad parses the value as
+    truncated and rejects the file. See `decodeStr` in `parse/sch.ts`.
 
 ## Progress log
 
@@ -298,9 +312,16 @@ Feasibility, NOT yet verified - do a spike before promising:
       `emit/kicad-sch.ts`, main.ts dispatch by `.ms14.xml` extension. Emits a
       minimal `(kicad_sch ... (lib_symbols) (sheet_instances ...))` from the
       Design1 schematic metadata. KiCad 10 `sch erc` exits 0 / 0 violations.
-- [ ] Phase 3 chunk 2: walk `CIITSymbolComp` + `CIITSymbolBorderRect` +
-      `CIITPinSymbolComp` -> placeholder `lib_symbol` + `(symbol ...)`
-      instance with bounding-box outline and pin stubs.
+- [x] Phase 3 chunk 2 (2026-05-29): symbol placeholders. Walks
+      `CIITSymbolComp` -> emits one `lib_symbol` per instance (bbox rectangle
+      from `CIITSymbolBorderRect`, reference + value text from
+      `CIITSymTextCompName` / `CIITSymTextCompValue`) plus the placed
+      `(symbol ...)` instance. Design1: 52 symbols, KiCad 10 `sch erc` exits 0
+      with 52 violations (one per symbol — expected, no wires yet). Pins,
+      rotation handling, and `OrientationFlip` come in a sub-chunk; ~26 of 52
+      symbols come through with refdes `"?"` because their refdes text lives
+      under a different wrapper that the current `ownChild` walker doesn't
+      reach.
 - [ ] Phase 3 chunk 3: `CODLineComp` / `CODMultiLineComp` -> `(wire ...)`.
 - [ ] Phase 3 chunk 4: `CSchDesignNetLabel` -> `(label ...)`.
 - [ ] Phase 3 chunk 5: cross-check inferred nets vs `Ci*` netlist view.

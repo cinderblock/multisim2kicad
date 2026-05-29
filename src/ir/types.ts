@@ -84,12 +84,22 @@ export interface Board {
   nets: Net[];
 }
 
-// Multisim schematic IR. Items (symbols, wires, labels, ...) will be added in
-// successive Phase-3 chunks; chunk 1 carries just the sheet metadata so we
-// can emit a minimal valid .kicad_sch.
+// A schematic symbol placeholder: bounding box and identity. Pins, internal
+// graphics, and rotation come in later Phase-3 chunks.
+export interface SchematicSymbol {
+  reference: string;       // e.g. "U2"
+  value: string;           // e.g. "RP2040"
+  at: Point;               // sheet position (nm)
+  // Symbol-local bbox (nm), relative to `at`. The local frame matches what
+  // KiCad's lib_symbol uses for rectangles/pins inside the symbol body.
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+}
+
+// Multisim schematic IR. Wires + labels come in successive Phase-3 chunks.
 export interface Schematic {
   source: Source;
   projectName: string;
   sheetTitle: string;
   workArea: { left: number; bottom: number; right: number; top: number };
+  symbols: SchematicSymbol[];
 }

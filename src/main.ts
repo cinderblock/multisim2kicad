@@ -67,7 +67,8 @@ async function convertSch(input: string): Promise<void> {
   console.log(`  app:        ${sch.source.application} v${sch.source.versionMajor}.${sch.source.versionMinor}  (schema ${sch.source.schema})`);
   console.log(`  project:    ${sch.projectName}`);
   console.log(`  sheet:      "${sch.sheetTitle}"  workArea ${w.toFixed(1)} x ${h.toFixed(1)} mm`);
-  console.log(`  wrote:      ${outPath}  (Phase 3 chunk 1 — metadata only, no symbols yet)`);
+  console.log(`  symbols:    ${sch.symbols.length}`);
+  console.log(`  wrote:      ${outPath}`);
 }
 
 async function main() {
