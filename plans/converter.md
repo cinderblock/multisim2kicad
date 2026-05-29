@@ -322,7 +322,14 @@ Feasibility, NOT yet verified - do a spike before promising:
       symbols come through with refdes `"?"` because their refdes text lives
       under a different wrapper that the current `ownChild` walker doesn't
       reach.
-- [ ] Phase 3 chunk 3: `CODLineComp` / `CODMultiLineComp` -> `(wire ...)`.
+- [x] Phase 3 chunk 3 (2026-05-29): wires. `collectByTag` gained a
+      `skipUnder` filter so `CODLineComp` inside `CIITSymbolComp.Objects`
+      (pin-stub graphics) isn't picked up as page wiring. Sheet-level
+      `CODLineComp` and `CODMultiLineComp` (exploded into per-segment
+      `Wire`s) are emitted as `(wire (pts ...))`. Design1: 127 wires.
+      KiCad 10 `sch erc` still exits 0; violation count rises to 288
+      (unconnected pins — symbols carry no `(pin ...)` entries yet, so
+      wires touch the symbol bbox but don't electrically connect).
 - [ ] Phase 3 chunk 4: `CSchDesignNetLabel` -> `(label ...)`.
 - [ ] Phase 3 chunk 5: cross-check inferred nets vs `Ci*` netlist view.
 

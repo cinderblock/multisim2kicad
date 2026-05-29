@@ -1,4 +1,4 @@
-import type { Schematic, SchematicSymbol } from "../ir/types.ts";
+import type { Schematic, SchematicSymbol, SchematicWire } from "../ir/types.ts";
 
 // KiCad schematic format. KiCad 10 accepts older versions on load (offers to
 // upgrade on save). We target the KiCad-8 version, which loads cleanly in
@@ -101,6 +101,12 @@ function emitSymbolInstance(
   ].join("\n");
 }
 
+function emitWire(w: SchematicWire, t: Translator): string {
+  const a = t(w.from.x, w.from.y);
+  const b = t(w.to.x, w.to.y);
+  return `\t(wire (pts (xy ${mm(a.x)} ${mm(a.y)}) (xy ${mm(b.x)} ${mm(b.y)})) (stroke (width 0) (type default)) (uuid ${q(uuid())}))`;
+}
+
 export function emitKicadSch(sch: Schematic): string {
   const importNote =
     `Imported from ${sch.source.application} ` +
@@ -111,6 +117,7 @@ export function emitKicadSch(sch: Schematic): string {
   const instances = sch.symbols
     .map((s, i) => emitSymbolInstance(s, i, t, sch.projectName))
     .join("\n");
+  const wireLines = sch.wires.map((w) => emitWire(w, t)).join("\n");
 
   return [
     `(kicad_sch`,
@@ -130,6 +137,8 @@ export function emitKicadSch(sch: Schematic): string {
     `\t)`,
     ``,
     instances,
+    ``,
+    wireLines,
     ``,
     `\t(sheet_instances`,
     `\t\t(path "/" (page "1"))`,

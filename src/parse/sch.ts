@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import type { SchematicSymbol, Schematic } from "../ir/types.ts";
+import type { SchematicSymbol, SchematicWire, Schematic } from "../ir/types.ts";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -44,23 +44,29 @@ const NM_PER_SCH_UNIT = 250_000;
 const u = (v: string | number | undefined): number =>
   Number(v ?? 0) * NM_PER_SCH_UNIT;
 
-// Walks the tree looking for elements whose key matches `tag`. Used to find
-// CIITSymbolComp and similar wherever they appear under DesignSheet.
-function collectByTag(node: any, tag: string, out: any[]): void {
+// Walks the tree looking for elements whose key matches `tag`. Subtrees
+// whose key is in `skipUnder` are NOT descended into — used to keep wire
+// scanning from picking up pin-stub line segments inside CIITSymbolComp.
+function collectByTag(
+  node: any, tag: string, out: any[], skipUnder?: ReadonlySet<string>,
+): void {
   if (node == null || typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const c of node) collectByTag(c, tag, out);
+    for (const c of node) collectByTag(c, tag, out, skipUnder);
     return;
   }
   for (const [key, val] of Object.entries(node)) {
     if (key.startsWith("@_")) continue;
+    if (skipUnder?.has(key)) continue;
     if (key === tag) {
       for (const item of arr(val as any)) out.push(item);
     } else {
-      collectByTag(val, tag, out);
+      collectByTag(val, tag, out, skipUnder);
     }
   }
 }
+
+const INSIDE_SYMBOL = new Set(["CIITSymbolComp"]);
 
 // CIITSymbolComp wraps its inner items (text, border rect, pins, ...) under
 // `Objects > Item > <ClassName>`. Find the first direct-child item whose
@@ -118,6 +124,29 @@ export function parseSchematicXml(xml: string): Schematic {
   const symbolComps: any[] = [];
   collectByTag(designSheet, "CIITSymbolComp", symbolComps);
 
+  // Sheet-level wires only — pin-stub CODLineComp inside CIITSymbolComp's
+  // Objects are the symbol's own graphics, not page wiring.
+  const lineComps: any[] = [];
+  collectByTag(designSheet, "CODLineComp", lineComps, INSIDE_SYMBOL);
+  const multiLineComps: any[] = [];
+  collectByTag(designSheet, "CODMultiLineComp", multiLineComps, INSIDE_SYMBOL);
+
+  const wires: SchematicWire[] = [];
+  for (const ln of lineComps) {
+    wires.push({
+      from: { x: u(ln["@_pt0X"]), y: u(ln["@_pt0Y"]) },
+      to:   { x: u(ln["@_pt1X"]), y: u(ln["@_pt1Y"]) },
+    });
+  }
+  for (const ml of multiLineComps) {
+    const pts = arr(ml?.Points?.Item).map((p: any) => ({
+      x: u(p["@_X"]), y: u(p["@_Y"]),
+    }));
+    for (let i = 0; i + 1 < pts.length; i++) {
+      wires.push({ from: pts[i], to: pts[i + 1] });
+    }
+  }
+
   return {
     source: {
       application: creator["@_application"] ?? "unknown",
@@ -134,5 +163,6 @@ export function parseSchematicXml(xml: string): Schematic {
       top: Number(designSheet["@_WorkAreaTop"] ?? 0),
     },
     symbols: symbolComps.map(parseSymbol),
+    wires,
   };
 }

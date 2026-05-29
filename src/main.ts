@@ -68,6 +68,7 @@ async function convertSch(input: string): Promise<void> {
   console.log(`  project:    ${sch.projectName}`);
   console.log(`  sheet:      "${sch.sheetTitle}"  workArea ${w.toFixed(1)} x ${h.toFixed(1)} mm`);
   console.log(`  symbols:    ${sch.symbols.length}`);
+  console.log(`  wires:      ${sch.wires.length}`);
   console.log(`  wrote:      ${outPath}`);
 }
 

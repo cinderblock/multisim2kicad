@@ -95,11 +95,20 @@ export interface SchematicSymbol {
   bbox: { x0: number; y0: number; x1: number; y1: number };
 }
 
-// Multisim schematic IR. Wires + labels come in successive Phase-3 chunks.
+// A schematic wire segment in sheet coords (nm). Multi-point lines from
+// CODMultiLineComp are exploded into per-segment Wire entries on parse.
+export interface SchematicWire {
+  from: Point;
+  to: Point;
+}
+
+// Multisim schematic IR. Labels + Ci* netlist cross-check come in later
+// Phase-3 chunks.
 export interface Schematic {
   source: Source;
   projectName: string;
   sheetTitle: string;
   workArea: { left: number; bottom: number; right: number; top: number };
   symbols: SchematicSymbol[];
+  wires: SchematicWire[];
 }
