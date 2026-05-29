@@ -84,8 +84,15 @@ export interface Board {
   nets: Net[];
 }
 
-// A schematic symbol placeholder: bounding box and identity. Pins, internal
-// graphics, and rotation come in later Phase-3 chunks.
+export interface SymbolPin {
+  name: string;            // e.g. "IOVDD"; empty string -> "~" in KiCad
+  number: string;          // e.g. "1"; Multisim's CSV ("1,10,22,33,42,49") is
+                           // split — see parser.
+  at: Point;               // connection point in symbol-local coords (nm)
+}
+
+// A schematic symbol placeholder: bounding box, identity, and pins.
+// Rotation and OrientationFlip come in a later Phase-3 sub-chunk.
 export interface SchematicSymbol {
   reference: string;       // e.g. "U2"
   value: string;           // e.g. "RP2040"
@@ -93,6 +100,7 @@ export interface SchematicSymbol {
   // Symbol-local bbox (nm), relative to `at`. The local frame matches what
   // KiCad's lib_symbol uses for rectangles/pins inside the symbol body.
   bbox: { x0: number; y0: number; x1: number; y1: number };
+  pins: SymbolPin[];
 }
 
 // A schematic wire segment in sheet coords (nm). Multi-point lines from

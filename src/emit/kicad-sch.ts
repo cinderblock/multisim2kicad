@@ -1,4 +1,9 @@
-import type { Schematic, SchematicSymbol, SchematicWire } from "../ir/types.ts";
+import type {
+  Schematic,
+  SchematicSymbol,
+  SchematicWire,
+  SymbolPin,
+} from "../ir/types.ts";
 
 // KiCad schematic format. KiCad 10 accepts older versions on load (offers to
 // upgrade on save). We target the KiCad-8 version, which loads cleanly in
@@ -36,9 +41,31 @@ function libProperty(name: string, value: string, hide = false): string {
   return `\t\t\t(property ${q(name)} ${q(value)} (at 0 0 0)${hideTok} (effects (font (size 1.27 1.27))))`;
 }
 
+// Dedupe pins by number within one symbol — KiCad rejects duplicate numbers
+// when (duplicate_pin_numbers_are_jumpers no). Empty-number pins are dropped
+// since they can't be referenced from a wire.
+function uniquePins(pins: SymbolPin[]): SymbolPin[] {
+  const seen = new Set<string>();
+  const out: SymbolPin[] = [];
+  for (const p of pins) {
+    if (!p.number) continue;
+    if (seen.has(p.number)) continue;
+    seen.add(p.number);
+    out.push(p);
+  }
+  return out;
+}
+
+function emitLibPin(p: SymbolPin): string {
+  const name = p.name || "~";
+  return `\t\t\t\t(pin passive line (at ${mm(p.at.x)} ${mm(p.at.y)} 0) (length 0) (name ${q(name)} (effects (font (size 1.27 1.27)))) (number ${q(p.number)} (effects (font (size 1.27 1.27)))))`;
+}
+
 function emitLibSymbol(sym: SchematicSymbol, i: number): string {
   const lib = libIdFor(sym, i);
   const { x0, y0, x1, y1 } = sym.bbox;
+  const pins = uniquePins(sym.pins);
+  const pinLines = pins.map(emitLibPin).join("\n");
   return [
     `\t\t(symbol ${q(lib)}`,
     `\t\t\t(exclude_from_sim no)`,
@@ -53,6 +80,7 @@ function emitLibSymbol(sym: SchematicSymbol, i: number): string {
     // = (unit 1, body 1 / normal de-Morgan).
     `\t\t\t(symbol ${q(lib.split(":").pop()! + "_1_1")}`,
     `\t\t\t\t(rectangle (start ${mm(x0)} ${mm(y0)}) (end ${mm(x1)} ${mm(y1)}) (stroke (width 0.254) (type default)) (fill (type none)))`,
+    pinLines,
     `\t\t\t)`,
     `\t\t\t(embedded_fonts no)`,
     `\t\t)`,
@@ -92,6 +120,7 @@ function emitSymbolInstance(
     instanceProperty("Value",     sym.value,     valAt.x, valAt.y, false, true),
     instanceProperty("Footprint", "",            at.x,    at.y,    true),
     instanceProperty("Datasheet", "",            at.x,    at.y,    true),
+    ...uniquePins(sym.pins).map((p) => `\t\t(pin ${q(p.number)} (uuid ${q(uuid())}))`),
     `\t\t(instances`,
     `\t\t\t(project ${q(projectName)}`,
     `\t\t\t\t(path "/" (reference ${q(sym.reference || "?")}) (unit 1))`,

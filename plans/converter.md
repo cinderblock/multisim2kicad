@@ -330,6 +330,13 @@ Feasibility, NOT yet verified - do a spike before promising:
       KiCad 10 `sch erc` still exits 0; violation count rises to 288
       (unconnected pins — symbols carry no `(pin ...)` entries yet, so
       wires touch the symbol bbox but don't electrically connect).
+- [x] Phase 3 chunk 3.5 (2026-05-29): symbol pins. `CIITPinSymbolComp` ->
+      `(pin passive line ...)` inside lib_symbol with `(pin "N" (uuid ...))`
+      blocks in each instance. `PinNumber="1,10,22,33,42,49"` (Multisim's
+      power-pin aggregate form) splits into one pin per number, all sharing
+      the connector position. Design1: 195 pins. All pins emitted as
+      passive/line at rotation 0 — pin direction inference from bbox edge
+      is a future polish.
 - [ ] Phase 3 chunk 4: `CSchDesignNetLabel` -> `(label ...)`.
 - [ ] Phase 3 chunk 5: cross-check inferred nets vs `Ci*` netlist view.
 

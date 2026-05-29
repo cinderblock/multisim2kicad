@@ -1,5 +1,10 @@
 import { XMLParser } from "fast-xml-parser";
-import type { SchematicSymbol, SchematicWire, Schematic } from "../ir/types.ts";
+import type {
+  SchematicSymbol,
+  SchematicWire,
+  Schematic,
+  SymbolPin,
+} from "../ir/types.ts";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -78,6 +83,20 @@ function ownChild(symbolComp: any, tag: string): any {
   return undefined;
 }
 
+// A CIITPinSymbolComp may aggregate several physical pin numbers under one
+// graphical pin (e.g. PinNumber="1,10,22,33,42,49" for power rails). Split
+// the CSV; emit one Pin per number, all at the same connector position.
+function parsePin(pinComp: any): SymbolPin[] {
+  const name = decodeStr(pinComp["@_PinName"]);
+  const csv = decodeStr(pinComp["@_PinNumber"]);
+  const connector = ownChild(pinComp, "CIITPinConnectorComp");
+  if (!connector) return [];
+  const at = { x: u(connector["@_ptCenterX"]), y: u(connector["@_ptCenterY"]) };
+  const numbers = csv.split(",").map((n) => n.trim()).filter(Boolean);
+  if (numbers.length === 0) numbers.push(""); // unnumbered pin
+  return numbers.map((number) => ({ name, number, at }));
+}
+
 function parseSymbol(symbolComp: any): SchematicSymbol {
   const refdes = stripAsc(ownChild(symbolComp, "CIITSymTextCompName")?.["@_Output"]);
   const value = stripAsc(ownChild(symbolComp, "CIITSymTextCompValue")?.["@_Output"]);
@@ -93,11 +112,22 @@ function parseSymbol(symbolComp: any): SchematicSymbol {
   const x1 = u(border?.["@_pt1X"] ?? 40);
   const y1 = u(border?.["@_pt1Y"] ?? 40);
 
+  // Pins are direct children under Objects.Item; walk that level only so we
+  // don't descend into nested symbol sub-sections (none in current samples,
+  // but defensive).
+  const pins: SymbolPin[] = [];
+  for (const item of arr(symbolComp?.Objects?.Item)) {
+    if (item?.CIITPinSymbolComp) {
+      pins.push(...parsePin(item.CIITPinSymbolComp));
+    }
+  }
+
   return {
     reference: refdes || "?",
     value: value || "",
     at: { x, y },
     bbox: { x0, y0, x1, y1 },
+    pins,
   };
 }
 

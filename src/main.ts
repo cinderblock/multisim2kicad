@@ -67,7 +67,8 @@ async function convertSch(input: string): Promise<void> {
   console.log(`  app:        ${sch.source.application} v${sch.source.versionMajor}.${sch.source.versionMinor}  (schema ${sch.source.schema})`);
   console.log(`  project:    ${sch.projectName}`);
   console.log(`  sheet:      "${sch.sheetTitle}"  workArea ${w.toFixed(1)} x ${h.toFixed(1)} mm`);
-  console.log(`  symbols:    ${sch.symbols.length}`);
+  const pinCount = sch.symbols.reduce((n, s) => n + s.pins.length, 0);
+  console.log(`  symbols:    ${sch.symbols.length} (${pinCount} pins)`);
   console.log(`  wires:      ${sch.wires.length}`);
   console.log(`  wrote:      ${outPath}`);
 }
