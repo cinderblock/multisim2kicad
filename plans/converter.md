@@ -561,6 +561,13 @@ hierarchy, connectors), since those are what make an output useless today.
       versions incl. 50 `.ms13`, in `corpus/github/<repo>/<name>@<date>-<sha>`),
       S:/T: shares (4 new client files in `corpus/drives/`). C:/P: scans were
       still running at this point (results in scratchpad `find/`).
+- [x] (2026-11-11) Drive scan ended at the 2 h background limit (not
+      restarted). P: was partially indexed (730 hits); the C: scan produced
+      nothing. Imported 324 new unique files into `corpus/drives/`: 203
+      `.ms13`, 7 `.ms11`, 26 `.ewprj`, 86 `.ewnet`, mostly from P:\Backups.
+      248 of them are NI Circuit Design Suite 13 sample designs (a laptop
+      backup), which are a broad simulation-oriented test set. Not yet run
+      through the scorecard.
 - [x] (2026-11-11) B1 `.ewnet` reader -> ewd 0.3.0 published (provenance).
 - [x] (2026-11-11) A4 scorecard. Baseline (64 designs: 39 sch, 25 pcb):
       schematic nets exact 0/254; PCB net pins on a pad 473/6765.
