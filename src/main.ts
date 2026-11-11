@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { designBaseName, loadDesign } from "./load.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
 import { parseSchematicXml } from "./parse/sch.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
-import { emitKicadSch } from "./emit/kicad-sch.ts";
+import { emitKicadSch, kicadProSchematicSettings } from "./emit/kicad-sch.ts";
 
 const NM_PER_MM = 1_000_000;
 
@@ -49,22 +49,39 @@ export async function convertPcb(input: string, xml: string, outDir: string): Pr
 export async function convertSch(input: string, xml: string, outDir: string): Promise<string> {
   const sch = parseSchematicXml(xml);
 
-  const outPath = join(outDir, `${designBaseName(input)}.kicad_sch`);
+  const base = designBaseName(input);
+  const outPath = join(outDir, `${base}.kicad_sch`);
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, emitKicadSch(sch), "utf8");
-
-  const w = (sch.workArea.right - sch.workArea.left) / NM_PER_MM;
-  const h = (sch.workArea.top - sch.workArea.bottom) / NM_PER_MM;
+  await writeProjectFile(join(outDir, `${base}.kicad_pro`));
 
   console.log(`${basename(input)}`);
   console.log(`  app:        ${sch.source.application} v${sch.source.versionMajor}.${sch.source.versionMinor}  (schema ${sch.source.schema})`);
   console.log(`  project:    ${sch.projectName}`);
-  console.log(`  sheet:      "${sch.sheetTitle}"  workArea ${w.toFixed(1)} x ${h.toFixed(1)} mm`);
-  const pinCount = sch.symbols.reduce((n, s) => n + s.pins.length, 0);
-  console.log(`  symbols:    ${sch.symbols.length} (${pinCount} pins)`);
-  console.log(`  wires:      ${sch.wires.length}`);
+  for (const sheet of sch.sheets) {
+    const pinCount = sheet.symbols.reduce((n, s) => n + s.pins.length, 0);
+    const power = sheet.symbols.filter((s) => s.kind === "power").length;
+    console.log(`  sheet:      "${sheet.name}"  ${sheet.size.width} x ${sheet.size.height} units`);
+    console.log(`  symbols:    ${sheet.symbols.length - power} parts + ${power} power ports (${pinCount} pins)`);
+    console.log(`  wires:      ${sheet.wires.length}  labels: ${sheet.labels.length}  texts: ${sheet.texts.length}`);
+  }
   console.log(`  wrote:      ${outPath}`);
   return outPath;
+}
+
+/**
+ * Minimal .kicad_pro: KiCad fills in defaults for everything not given. The
+ * schematic needs a 10 mil connection grid to match ew-conv's unit scale.
+ * Existing files are merged, not replaced.
+ */
+async function writeProjectFile(path: string): Promise<void> {
+  let pro: any = {};
+  try {
+    pro = JSON.parse(await readFile(path, "utf8"));
+  } catch {}
+  pro.meta ??= { filename: basename(path), version: 3 };
+  pro.schematic = { ...(pro.schematic ?? {}), ...kicadProSchematicSettings() };
+  await writeFile(path, `${JSON.stringify(pro, null, 2)}\n`, "utf8");
 }
 
 export async function convertFile(input: string, outDir = "out"): Promise<string> {

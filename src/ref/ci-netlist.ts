@@ -41,6 +41,8 @@ export interface CiCircuitNetlist {
 export interface CiNetlist {
   circuits: CiCircuitNetlist[];
   hierarchical: boolean;
+  /** CiComponent id (as referenced by a drawing's `CiComponent=` attr) -> refdes + kind. */
+  componentsById: Map<string, { refdes: string; kind: CiComponentKind }>;
 }
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
@@ -146,5 +148,9 @@ export function parseCiNetlist(xml: string): CiNetlist {
     c.nets.set(name, list);
   }
 
-  return { circuits: [...circuits.values()], hierarchical: instances.length > 0 };
+  return {
+    circuits: [...circuits.values()],
+    hierarchical: instances.length > 0,
+    componentsById: new Map([...components].map(([id, c]) => [id, { refdes: c.refdes, kind: c.kind }])),
+  };
 }

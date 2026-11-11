@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
 import { emitKicadSch } from "./emit/kicad-sch.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
-import { parseSchematicXml } from "./parse/sch.ts";
+import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { parseCiNetlist } from "./ref/ci-netlist.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
@@ -116,5 +116,47 @@ describe("Design1 schematic (samples/Design1.ms14.xml)", () => {
   test("emits balanced S-expressions", () => {
     const out = emitKicadSch(parseSchematicXml(xml));
     expect(checkSexp(out).ok).toBe(true);
+  });
+
+  test("drawing: real wires, power ports, connectors", () => {
+    const sheet = parseSchematicXml(xml).sheets[0]!;
+    expect(sheet.wires.length).toBe(121); // CIITLinkComp, not border lines
+    expect(sheet.symbols.filter((s) => s.kind === "part").length).toBe(19);
+    expect(sheet.symbols.filter((s) => s.kind === "power").length).toBe(33);
+    expect(sheet.labels.filter((l) => l.kind === "global").length).toBe(91);
+    // Copy-pasted wiring only lines up once each link's own transform applies.
+    const has = (x0: number, y0: number, x1: number, y1: number) =>
+      sheet.wires.some((w) => w.points.length === 2 && w.points[0]!.x === x0 && w.points[0]!.y === y0 && w.points[1]!.x === x1 && w.points[1]!.y === y1);
+    expect(has(837, 81, 837, 72)).toBe(true);
+  });
+
+  test("pins land on their wiring attachment points", () => {
+    const before = { ...placementStats };
+    parseSchematicXml(xml);
+    const pins = placementStats.pins - before.pins;
+    const hits = placementStats.pinsOnTarget - before.pinsOnTarget;
+    expect(pins).toBeGreaterThan(150);
+    expect(hits / pins).toBeGreaterThan(0.98);
+  });
+});
+
+describe("orientation", () => {
+  test("OrientationFlip: mirror first, then rotate", () => {
+    const p = { x: 2, y: 1 };
+    expect(applyD(flipToDihedral(0), p)).toEqual({ x: 2, y: 1 });
+    expect(applyD(flipToDihedral(1), p)).toEqual({ x: -1, y: 2 }); // r270
+    expect(applyD(flipToDihedral(3), p)).toEqual({ x: 1, y: -2 }); // r90
+    expect(applyD(flipToDihedral(0x100), p)).toEqual({ x: 2, y: -1 }); // mirror y
+    expect(applyD(flipToDihedral(0x101), p)).toEqual({ x: 1, y: 2 }); // my then r270
+  });
+
+  test("every dihedral maps to a KiCad orientation", () => {
+    for (let f of [0, 1, 2, 3, 0x100, 0x101, 0x102, 0x103, 0x1000, 0x1001, 0x1100]) {
+      const sch = { source: { application: "t", versionMajor: 0, versionMinor: 0, schema: 0 }, projectName: "t", sheets: [{
+        name: "t", size: { width: 100, height: 100 }, wires: [], labels: [], texts: [],
+        symbols: [{ reference: "R1", value: "", kind: "part" as const, at: { x: 10, y: 10 }, transform: flipToDihedral(f), graphics: [], pins: [], showPinNames: false, showPinNumbers: false }],
+      }] };
+      expect(() => emitKicadSch(sch)).not.toThrow();
+    }
   });
 });

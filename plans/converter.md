@@ -379,6 +379,53 @@ hierarchy, connectors), since those are what make an output useless today.
     not in the footprint (3-Phase Driver U7.S4-S6), unplaced connectors
     (Pressure Servo J1, Althea-old Buttons J4), Design1's `POEA` vs pad
     `POEA+` naming.
+- **(2026-11-11) Multisim drawing model — the old Phase 3 "wires" were wrong.**
+  Sheet-level `CODLineComp`s are page-border / title-block lines and lines
+  inside connectors, not wiring. Real wires are **`CIITLinkComp`** polylines
+  (`Points > Item@X/Y`) under `CIITDiagram > Components > CODComposite >
+  Objects`, each with **its own `Transformer`** (copy/paste offsets: Design1's
+  decoupling caps' wires only line up after applying it). `CODComposite` is
+  the sheet's wiring container (2 in Design1), not a net.
+- **Pin attachment.** Each `CIITPinConnectorComp` has a `ConnectList`
+  naming a sheet-level `CODPinComp` (absolute `CenterX/Y`) = where wiring
+  attaches. 220/242 Design1 wire ends sit exactly on one.
+- **Symbol placement.** Every `CIITSymbolComp` matrix is identity; M20/M21
+  is not a reliable origin. Orientation lives either in the children's own
+  transforms (rotation + translation baked in, `OrientationFlip` just a
+  record) or in `OrientationFlip` bits (0-1 = rotation, 0x100 = mirror y,
+  0x1000 = mirror x, mirror first). Robust method (implemented): compose
+  child transforms (Windows XFORM row-vector: x' = x*M00 + y*M10 + M20),
+  then fit the dihedral + translation that lands the most pins on their
+  `CODPinComp`s. Result on first sheets of the corpus: 98.74% of pins exact;
+  the rest are real attach drift, bridged with a wire stub.
+- **Connectors.** `CVirtualConnector` types: `NI_EWB_VIRTUAL_GLOBAL` (7911)
+  and `_LOCAL` (233) -> global / local labels, named by their
+  `CIITSymTextCompName`. Child transforms there are template frames
+  (identical for every instance). Connectors with an empty `ConnectList`
+  (22 in Design1) sit off-page and their Ci nodes contain no parts: unwired
+  in the source.
+- **Net-name modifiers on wires:** `NI_EWB_NET_AUTONAMED` (33582),
+  `_GLOBAL` (12733), `_GLOBAL_GROUND` (4595), `_NAME` (1256, user net name
+  in `Item@Value` -> local label), `_HIERARCHY_COMP` (827), `_VIRTUAL`
+  (255), `_HIERARCHY` (236), `_BUS_ENTRY` (158), `_OFFPAGE` (44), `_HIDDEN`
+  (18). Buses are `CIITBusCompV8`.
+- **Power ports**: ground / VCC are ordinary `CIITSymbolComp`s whose Ci
+  component is POWER_SOURCES with one pin; emitted as KiCad `(power global)`
+  symbols whose value is the Ci refdes = net name ("0" for ground, matching
+  Ultiboard's net name).
+- **KiCad instance orientation (measured with kicad-cli netlists):** rotation
+  first, then mirror; lib point (x, y) lands at at + K(x, -y). Table in
+  `src/emit/kicad-sch.ts` (`KICAD_ORIENT`).
+- **Design1's Ci* netlist looks stale vs its drawing**: labels ADC0/ADC1,
+  GPIO23/24/25 sit one pin apart from where Ci says (Ci's ADC1 has a single
+  pin). The KiCad output reproduces the drawing. Treat Ci as "Multisim's
+  cached netlist", not gospel, when they disagree.
+- **kicad-cli ERC ignores `schematic.connection_grid_size`** (tested 1/5/10/25
+  mil, minimal and full project files: off-grid count unchanged), though it
+  honours `erc.rule_severities`. So `endpoint_off_grid` in CLI ERC is
+  expected noise at our 10 mil scale. The generated `.kicad_pro` still sets
+  10 mil for the editor (GUI behaviour unverified; no foreground testing).
+  ERC JSON positions are in units of 100 mm.
 - **NUL bytes in source.** The old emitter used literal `\0` characters as
   map-key separators, making git/grep treat the file as binary. Use
   `JSON.stringify([a, b])` keys instead.

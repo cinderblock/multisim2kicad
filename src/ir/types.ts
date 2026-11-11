@@ -103,39 +103,99 @@ export interface Board {
   nets: Net[];
 }
 
-export interface SymbolPin {
-  name: string;            // e.g. "IOVDD"; empty string -> "~" in KiCad
-  number: string;          // e.g. "1"; Multisim's CSV ("1,10,22,33,42,49") is
-                           // split — see parser.
-  at: Point;               // connection point in symbol-local coords (nm)
+// ---------------------------------------------------------------------------
+// Schematic IR. Coordinates are Multisim schematic units (integers in every
+// corpus sample; nominally 0.25 mm), Y-down, origin at the page's top-left.
+// The emitter picks the physical scale (see plans/converter.md decisions).
+
+export interface SchPoint {
+  x: number;
+  y: number;
 }
 
-// A schematic symbol placeholder: bounding box, identity, and pins.
-// Rotation and OrientationFlip come in a later Phase-3 sub-chunk.
+/**
+ * A dihedral transform as a 2x2 integer matrix: p' = (a*x + c*y, b*x + d*y).
+ * Maps symbol-local coordinates (Y-down) onto the sheet, before translation.
+ */
+export interface Dihedral {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+}
+
+export type SchGraphic =
+  | { kind: "polyline"; points: SchPoint[]; width: number; fill: boolean }
+  | { kind: "rect"; a: SchPoint; b: SchPoint; width: number; fill: boolean }
+  | { kind: "circle"; center: SchPoint; radius: number; width: number; fill: boolean }
+  | { kind: "arc"; start: SchPoint; mid: SchPoint; end: SchPoint; width: number }
+  | { kind: "text"; at: SchPoint; text: string; size: number };
+
+export interface SymbolPin {
+  name: string;            // e.g. "IOVDD"; empty -> "~" in KiCad
+  number: string;          // one physical pin number (CSV aggregates are split)
+  at: SchPoint;            // connection point, symbol-local frame
+  // Unit vector from the connection point toward the symbol body, and the
+  // drawn pin length (0 when the source has no pin line).
+  dir: SchPoint;
+  length: number;
+  // Where Multisim's wiring actually attaches (sheet coords), when it differs
+  // from the transformed pin position. The emitter bridges the gap.
+  attach?: SchPoint;
+}
+
+export interface SymbolText {
+  text: string;
+  at: SchPoint;            // symbol-local frame
+  hidden: boolean;
+}
+
+/** A placed part (or power port), in its own local frame plus a placement. */
 export interface SchematicSymbol {
   reference: string;       // e.g. "U2"
   value: string;           // e.g. "RP2040"
-  at: Point;               // sheet position (nm)
-  // Symbol-local bbox (nm), relative to `at`. The local frame matches what
-  // KiCad's lib_symbol uses for rectangles/pins inside the symbol body.
-  bbox: { x0: number; y0: number; x1: number; y1: number };
+  kind: "part" | "power";
+  at: SchPoint;            // sheet position of the local origin
+  transform: Dihedral;     // local -> sheet orientation
+  graphics: SchGraphic[];  // body graphics, local frame
   pins: SymbolPin[];
+  refText?: SymbolText;
+  valueText?: SymbolText;
+  showPinNames: boolean;
+  showPinNumbers: boolean;
 }
 
-// A schematic wire segment in sheet coords (nm). Multi-point lines from
-// CODMultiLineComp are exploded into per-segment Wire entries on parse.
+// A wire as a polyline in sheet coords.
 export interface SchematicWire {
-  from: Point;
-  to: Point;
+  points: SchPoint[];
 }
 
-// Multisim schematic IR. Labels + Ci* netlist cross-check come in later
-// Phase-3 chunks.
+export interface SchematicLabel {
+  name: string;
+  at: SchPoint;            // sheet coords; on a wire or pin
+  kind: "local" | "global";
+  // Direction (sheet frame, Y-down) the label body extends from its anchor.
+  dir: SchPoint;
+}
+
+export interface SchematicText {
+  text: string;
+  at: SchPoint;
+  size: number;
+}
+
+export interface SchematicSheet {
+  name: string;
+  size: { width: number; height: number }; // page size in units
+  symbols: SchematicSymbol[];
+  wires: SchematicWire[];
+  labels: SchematicLabel[];
+  texts: SchematicText[];
+}
+
+// Multisim schematic IR. Hierarchy (more than one sheet) arrives with D1.
 export interface Schematic {
   source: Source;
   projectName: string;
-  sheetTitle: string;
-  workArea: { left: number; bottom: number; right: number; top: number };
-  symbols: SchematicSymbol[];
-  wires: SchematicWire[];
+  sheets: SchematicSheet[];
 }
