@@ -426,6 +426,28 @@ hierarchy, connectors), since those are what make an output useless today.
   expected noise at our 10 mil scale. The generated `.kicad_pro` still sets
   10 mil for the editor (GUI behaviour unverified; no foreground testing).
   ERC JSON positions are in units of 100 mm.
+- **(2026-11-11) Multisim connects only what its ID graph links; KiCad
+  connects whatever touches.** Corpus designs stack parts on top of each
+  other (LED-Delay's J1-J4 headers share one spot) and leave wires ending on
+  unrelated pins. The emitter carries each item's Multisim net id (per-page
+  union-find over link `Connect1/2`, `ConnectList`s, pin<->connector) and
+  resolves contacts: one net keeps a point, every other net there gets its
+  own off-grid (half-unit) rendezvous point, stacked symbols each move by
+  their own off-grid offset and are re-linked to same-net items only.
+- **Copy-pasted parts keep stale `CODPinComp` centres** (no transform on the
+  pin point) while their wires carry the paste offset in the link's own
+  transform. Attachment positions therefore come from the link endpoint
+  (`Connect1` = first point, `Connect2` = last) when one exists. This took
+  pin placement from 98.74% to 99.92% exact over all corpus pages.
+- **Name labels / power ports by the pin's net modifier value**
+  (`NI_EWB_NET_GLOBAL` / `_GROUND` / `_VIRTUAL`), not by their displayed
+  text: that is what Multisim joins on.
+- **Hierarchy:** see `plans/multisim-hierarchy.md` (research write-up) and
+  `src/parse/ms-hierarchy.ts`. The drawing-graph flattener reproduces
+  Multisim's exports exactly on every hierarchical design except Buttons
+  (Ultiboard pin swaps not back-annotated). KiCad emission: one file per
+  page, blocks -> sheet symbols, ports -> hierarchical labels, final refdes
+  per instance path; verified on 1-Wire-HV-AC (21/21, P=R=100%).
 - **NUL bytes in source.** The old emitter used literal `\0` characters as
   map-key separators, making git/grep treat the file as binary. Use
   `JSON.stringify([a, b])` keys instead.
@@ -533,8 +555,16 @@ hierarchy, connectors), since those are what make an output useless today.
       schematic nets exact 0/254; PCB net pins on a pad 473/6765.
 - [x] (2026-11-11) C1/C2 pads + vias: PCB pins on pads 6755/6765.
 - [x] (2026-11-11) A5 tests (12, bun test).
-- [ ] **Current step: D1-D3** (schematic hierarchy, rotation/flip,
-      connectors/labels/junctions).
+- [x] (2026-11-11) D2/D3 schematic rewrite (`c1dcfd1`): real wires,
+      fitted placement, KiCad orientation, power ports, labels, junctions.
+- [x] (2026-11-11) Hierarchy research (background agent) -> drawing-graph
+      flattener as the scorecard reference (`8e7149b`).
+- [x] (2026-11-11) D1 hierarchy + Multisim-faithful connectivity
+      (`6ae6d1c`). Schematic nets exact: 0/254 (baseline, old reference)
+      -> 134/255 (D2/D3) -> 1605/1790 with the full flattened reference;
+      18/39 designs exact; all 39 load in KiCad 10.
+- [ ] **Current step:** remaining schematic misses (OpAmp(s), Amplifier,
+      3-Phase Driver 2015, Limit Switch, buses), then B2 per the order.
 
 ## Open questions for the user
 
