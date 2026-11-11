@@ -1,0 +1,120 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { emitKicadPcb } from "./emit/kicad-pcb.ts";
+import { emitKicadSch } from "./emit/kicad-sch.ts";
+import { parsePcbXml } from "./parse/pcb.ts";
+import { parseSchematicXml } from "./parse/sch.ts";
+import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
+import { parseCiNetlist } from "./ref/ci-netlist.ts";
+import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
+import { checkSexp } from "./util/check-sexp.ts";
+
+const sample = (name: string) => readFileSync(join(import.meta.dir, "..", "samples", name), "utf8");
+
+describe("ub-geom", () => {
+  test("pie sweeps counter-clockwise from start to end", () => {
+    const c = { x: 0, y: 0 };
+    // Half pie from +x to -x CCW must pass through +y (upper half).
+    const prim = ubPrimitive("UBPie", {
+      "@_Radius": "1000",
+      Object: { Point: [{ "@_X": "1000", "@_Y": "0" }, { "@_X": "-1000", "@_Y": "0" }, { "@_X": "0", "@_Y": "0" }] },
+    });
+    expect(prim?.kind).toBe("poly");
+    const ys = prim?.kind === "poly" ? prim.points.map((p) => p.y) : [];
+    expect(Math.max(...ys)).toBeCloseTo(1000, 0);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(-1e-6);
+    expect(ccwSweep(c, { x: 1, y: 0 }, { x: 0, y: 1 })).toBeCloseTo(Math.PI / 2);
+    expect(ccwSweep(c, { x: 0, y: 1 }, { x: 1, y: 0 })).toBeCloseTo((3 * Math.PI) / 2);
+  });
+
+  test("arc with start == end is a full circle", () => {
+    const prim = ubPrimitive("UBArc", {
+      "@_Radius": "500",
+      "@_LineThickness": "100",
+      Object: { Point: [{ "@_X": "500", "@_Y": "0" }, { "@_X": "500", "@_Y": "0" }, { "@_X": "0", "@_Y": "0" }] },
+    });
+    expect(prim).toEqual({ kind: "circle", center: { x: 0, y: 0 }, radius: 500, width: 100, fill: false });
+  });
+
+  test("rounded rectangle stays within its corners", () => {
+    const sq = [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 1000 }, { x: 0, y: 1000 }];
+    const poly = roundedPolygon(sq, 200);
+    for (const p of poly) {
+      expect(p.x).toBeGreaterThanOrEqual(-1e-6);
+      expect(p.x).toBeLessThanOrEqual(1000 + 1e-6);
+    }
+    // Corners are cut: no point at the exact square corner.
+    expect(poly.some((p) => Math.hypot(p.x, p.y) < 1)).toBe(false);
+  });
+});
+
+describe("netlist comparison", () => {
+  const n = (o: Record<string, string[]>): Netlist =>
+    new Map(Object.entries(o).map(([k, v]) => [k, v.map((s) => ({ refdes: s.split(".")[0]!, pin: s.split(".")[1]! }))]));
+
+  test("identical partitions score perfectly regardless of names", () => {
+    const s = compareNetlists(n({ A: ["R1.1", "R2.1"], B: ["R1.2", "R2.2"] }), n({ X: ["R2.1", "R1.1"], Y: ["R1.2", "R2.2"] }));
+    expect([s.exactNets, s.refNets, s.pairPrecision, s.pairRecall]).toEqual([2, 2, 1, 1]);
+  });
+
+  test("a merged net costs precision, a split net costs recall", () => {
+    const ref = n({ A: ["R1.1", "R2.1"], B: ["R1.2", "R2.2"] });
+    expect(compareNetlists(ref, n({ X: ["R1.1", "R2.1", "R1.2", "R2.2"] })).pairPrecision).toBeCloseTo(2 / 6);
+    expect(compareNetlists(ref, n({ X: ["R1.1"], Y: ["R2.1"], Z: ["R1.2", "R2.2"] })).pairRecall).toBeCloseTo(1 / 2);
+  });
+
+  test("components on only one side are ignored", () => {
+    const s = compareNetlists(n({ A: ["R1.1", "R2.1"] }), n({ A: ["R1.1", "R2.1", "C9.1"] }));
+    expect(s.pairPrecision).toBe(1);
+    expect(s.onlyGot).toEqual(["C9"]);
+  });
+
+  test("foldNetNames merges case variants", () => {
+    expect([...foldNetNames(n({ En: ["U1.3"], EN: ["U4.3"] })).keys()]).toEqual(["EN"]);
+  });
+});
+
+describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
+  const board = parsePcbXml(sample("Design1.ewprj.xml"));
+
+  test("parses components, pads, nets and holes", () => {
+    expect(board.components.length).toBe(3);
+    expect(board.components.reduce((n, c) => n + c.pads.length, 0)).toBe(51);
+    expect(board.nets.length).toBe(3);
+    expect(board.holes.filter((h) => !h.plated).length).toBe(4);
+  });
+
+  test("every net pin lands on a pad except the source's POEA/POEC naming quirk", () => {
+    const pads = new Set(board.components.flatMap((c) => c.pads.map((p) => `${c.reference}.${p.number}`)));
+    const missing = board.nets.flatMap((n) => n.pins).filter((p) => !pads.has(`${p.refdes}.${p.pin}`));
+    expect(missing.map((p) => `${p.refdes}.${p.pin}`).sort()).toEqual(["U1.POEA", "U1.POEC"]);
+  });
+
+  test("emits balanced S-expressions with netted tracks", () => {
+    const out = emitKicadPcb(board);
+    expect(checkSexp(out).ok).toBe(true);
+    const segs = out.match(/\(segment [^\n]*/g) ?? [];
+    expect(segs.length).toBe(6);
+    expect(segs.every((s) => !s.includes("(net 0)"))).toBe(true);
+  });
+});
+
+describe("Design1 schematic (samples/Design1.ms14.xml)", () => {
+  const xml = sample("Design1.ms14.xml");
+
+  test("Ci* reference netlist", () => {
+    const ci = parseCiNetlist(xml);
+    expect(ci.hierarchical).toBe(false);
+    expect(ci.circuits.length).toBe(1);
+    const c = ci.circuits[0]!;
+    expect(c.components.length).toBe(19);
+    expect(c.nets.get("Reset")).toEqual([{ refdes: "U2", pin: "26" }, { refdes: "U1", pin: "34" }]);
+    expect(c.kinds.get("0")).toBe("power");
+  });
+
+  test("emits balanced S-expressions", () => {
+    const out = emitKicadSch(parseSchematicXml(xml));
+    expect(checkSexp(out).ok).toBe(true);
+  });
+});

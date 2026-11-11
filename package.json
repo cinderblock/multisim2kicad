@@ -7,7 +7,10 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/main.ts",
-    "start": "bun run src/main.ts"
+    "start": "bun run src/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p .",
+    "corpus": "bun run scripts/corpus.ts"
   },
   "dependencies": {
     "electronics-workbench-decoder": "^0.3.0",
