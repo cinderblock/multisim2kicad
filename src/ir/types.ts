@@ -142,6 +142,10 @@ export interface SymbolPin {
   // Where Multisim's wiring actually attaches (sheet coords), when it differs
   // from the transformed pin position. The emitter bridges the gap.
   attach?: SchPoint;
+  // Multisim connectivity (ID graph, per page). Items that touch in the
+  // drawing are only connected in Multisim if they share a netId; the
+  // emitter uses this to avoid geometric joins Multisim doesn't make.
+  netId?: string;
 }
 
 export interface SymbolText {
@@ -163,19 +167,30 @@ export interface SchematicSymbol {
   valueText?: SymbolText;
   showPinNames: boolean;
   showPinNumbers: boolean;
+  /**
+   * Key for final-refdes lookup: drawn refdes + Multisim section name. The
+   * final refdes depends on which hierarchy instance the sheet is in.
+   */
+  drawnKey?: string;
+  /** Power port that Multisim doesn't connect to anything. */
+  floating?: boolean;
 }
 
 // A wire as a polyline in sheet coords.
 export interface SchematicWire {
   points: SchPoint[];
+  netId?: string;
 }
 
 export interface SchematicLabel {
   name: string;
   at: SchPoint;            // sheet coords; on a wire or pin
-  kind: "local" | "global";
+  kind: "local" | "global" | "hierarchical";
   // Direction (sheet frame, Y-down) the label body extends from its anchor.
   dir: SchPoint;
+  netId?: string;
+  // Not connected to anything in Multisim (even if it touches something).
+  floating?: boolean;
 }
 
 export interface SchematicText {
@@ -184,8 +199,20 @@ export interface SchematicText {
   size: number;
 }
 
+/** A hierarchical block (sub-sheet instance) placed on a page. */
+export interface SheetBlock {
+  id: string;              // source object id, matches SchInstance.blockId
+  childSheet: string;      // unique sheet title it instantiates
+  a: SchPoint;             // rectangle corners, sheet coords
+  b: SchPoint;
+  pins: { name: string; at: SchPoint; attach?: SchPoint }[];
+}
+
 export interface SchematicSheet {
   name: string;
+  title: string;           // unique sheet this page belongs to
+  page: string;            // page name within that sheet
+  blocks: SheetBlock[];
   size: { width: number; height: number }; // page size in units
   symbols: SchematicSymbol[];
   wires: SchematicWire[];
@@ -193,9 +220,23 @@ export interface SchematicSheet {
   texts: SchematicText[];
 }
 
-// Multisim schematic IR. Hierarchy (more than one sheet) arrives with D1.
+/** One instantiation of a unique sheet in the design hierarchy. */
+export interface SchInstance {
+  sheet: string;           // unique sheet title
+  name: string;            // final instance name ("" for the root)
+  blockId?: string;        // SheetBlock.id on the parent page
+  parentPage?: string;     // page of the parent sheet holding the block
+  /** Final refdes by `${page}|${drawnKey}`; absent -> keep the drawn name. */
+  refdes: Record<string, string>;
+  /** Drawn -> final pin numbers by `${page}|${drawnKey}`. */
+  pinRemaps: Record<string, Record<string, string>>;
+  children: SchInstance[];
+}
+
 export interface Schematic {
   source: Source;
   projectName: string;
-  sheets: SchematicSheet[];
+  rootSheet: string;       // unique sheet title of the root
+  sheets: SchematicSheet[]; // every page of every unique sheet
+  root: SchInstance;
 }

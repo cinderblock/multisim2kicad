@@ -5,7 +5,7 @@ import { designBaseName, loadDesign } from "./load.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
 import { parseSchematicXml } from "./parse/sch.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
-import { emitKicadSch, kicadProSchematicSettings } from "./emit/kicad-sch.ts";
+import { emitKicadSchProject, kicadProSchematicSettings } from "./emit/kicad-sch.ts";
 
 const NM_PER_MM = 1_000_000;
 
@@ -52,7 +52,8 @@ export async function convertSch(input: string, xml: string, outDir: string): Pr
   const base = designBaseName(input);
   const outPath = join(outDir, `${base}.kicad_sch`);
   await mkdir(dirname(outPath), { recursive: true });
-  await writeFile(outPath, emitKicadSch(sch), "utf8");
+  const files = emitKicadSchProject(sch, base);
+  for (const [name, text] of files) await writeFile(join(outDir, name), text, "utf8");
   await writeProjectFile(join(outDir, `${base}.kicad_pro`));
 
   console.log(`${basename(input)}`);
@@ -65,9 +66,12 @@ export async function convertSch(input: string, xml: string, outDir: string): Pr
     console.log(`  symbols:    ${sheet.symbols.length - power} parts + ${power} power ports (${pinCount} pins)`);
     console.log(`  wires:      ${sheet.wires.length}  labels: ${sheet.labels.length}  texts: ${sheet.texts.length}`);
   }
+  console.log(`  instances:  ${countInstances(sch.root)} sheet instance(s), ${files.size} file(s)`);
   console.log(`  wrote:      ${outPath}`);
   return outPath;
 }
+
+const countInstances = (i: { children: any[] }): number => 1 + i.children.reduce((n: number, c: any) => n + countInstances(c), 0);
 
 /**
  * Minimal .kicad_pro: KiCad fills in defaults for everything not given. The
