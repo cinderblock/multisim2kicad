@@ -6,10 +6,9 @@
  * output with kicad-cli (ERC / DRC, and a schematic netlist export) and
  * scores it against EW's own data:
  *
- * - Schematics: KiCad's exported netlist vs a reference netlist. Flat
- *   designs use Multisim's own Ci* netlist; hierarchical ones (until Phase D1
- *   flattens Ci*) use Multisim's flattened netlist from a sibling `.ewnet`, or
- *   the paired `.ewprj` net table. Scored by exact nets + pin-pair
+ * - Schematics: KiCad's exported netlist vs Multisim's flattened netlist,
+ *   rebuilt from the drawing's ID graph (src/parse/ms-hierarchy.ts; verified
+ *   against .ewnet / .ewprj exports). Scored by exact nets + pin-pair
  *   precision/recall (net names ignored).
  * - PCBs: share of EW net pins that landed on a pad, plus DRC counts.
  *
@@ -21,16 +20,15 @@
  * only the newest version of each design (by the `@YYYY-MM-DD-sha` suffix)
  * is used; `--all` takes every version. Writes <out>/report.{json,md}.
  */
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { parseEwnet, ewnetConnectivity } from "electronics-workbench-decoder";
 import { convertPcb, convertSch } from "../src/main.ts";
 import { loadDesign } from "../src/load.ts";
 import { parsePcbXml } from "../src/parse/pcb.ts";
 import { parseCiNetlist } from "../src/ref/ci-netlist.ts";
+import { flattenNetlist, parseMultisimDesign } from "../src/parse/ms-hierarchy.ts";
 import {
   compareNetlists,
-  foldNetNames,
   type Netlist,
   type NetlistScore,
   parseKicadXmlNetlist,
@@ -111,8 +109,6 @@ interface Row {
   ms: number;
 }
 
-const exists = async (p: string) => !!(await stat(p).catch(() => null));
-
 async function erc(row: Row, file: string) {
   const report = `${file}.erc.json`;
   const r = hidden(["sch", "erc", "--format", "json", "--output", report, file]);
@@ -161,23 +157,19 @@ async function kicadNetlist(file: string): Promise<Netlist | undefined> {
   }
 }
 
-/** Reference netlist for a schematic: Ci* when flat, else Multisim's flattened exports. */
-async function referenceNetlist(input: string, xml: string): Promise<{ source: string; nets: Netlist } | undefined> {
+/**
+ * Reference netlist for a schematic: Multisim's own flattened netlist from
+ * the drawing's ID graph (verified against .ewnet / .ewprj exports; see
+ * src/parse/ms-hierarchy.ts). Falls back to the cached Ci* netlist.
+ */
+async function referenceNetlist(_input: string, xml: string): Promise<{ source: string; nets: Netlist } | undefined> {
+  try {
+    const nets = flattenNetlist(parseMultisimDesign(xml));
+    if (nets.size) return { source: "drawing", nets };
+  } catch {}
   const ci = parseCiNetlist(xml);
-  if (!ci.hierarchical) {
-    const main = ci.circuits.sort((a, b) => b.components.length - a.components.length)[0];
-    if (main) return { source: "ci", nets: main.nets };
-  }
-  const base = input.replace(DESIGN, "");
-  if (await exists(`${base}.ewnet`)) {
-    const n = parseEwnet(await readFile(`${base}.ewnet`));
-    return { source: "ewnet", nets: foldNetNames(ewnetConnectivity(n)) };
-  }
-  if (await exists(`${base}.ewprj`)) {
-    const b = parsePcbXml((await loadDesign(`${base}.ewprj`)).xml);
-    return { source: "ewprj", nets: new Map(b.nets.map((n) => [n.name, n.pins])) };
-  }
-  return undefined;
+  const main = ci.circuits.sort((a, b) => b.components.length - a.components.length)[0];
+  return main ? { source: "ci", nets: main.nets } : undefined;
 }
 
 async function quiet<T>(fn: () => Promise<T>): Promise<T> {
