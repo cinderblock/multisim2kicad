@@ -49,6 +49,28 @@ Schematic" is a no-op.
 - Bun + TypeScript. KiCad 10 is the verification target; emitter keeps
   writing the older `20240108`-era PCB format that KiCad 10 reads.
 - Show the roadmap before starting large new phases (user, 2026-11-11).
+- **Roadmap + order approved** (user, 2026-11-11): A4-A5 -> B1 -> C1-C2 ->
+  D1-D3, then the rest.
+- **ewd depth** (user, 2026-11-11): B1 + B2 now, B3 typed models grown
+  gradually, moving parser code into ewd once proven here.
+- **Schematic coordinates** (user, 2026-11-11: "convert to integer units in
+  the intermediate state"): schematic IR uses **integer Multisim units**, not
+  nm. The emitter maps **1 unit = 10 mil (0.254 mm)** and sets the project
+  connection grid to 10 mil, so everything is exactly on-grid with no
+  snapping (1.6% larger than Multisim's nominal 0.25 mm). Data: every pin and
+  wire coordinate in the corpus is an integer unit (8064 pin-local coords,
+  40852 wire ends, 0 fractional); only ~half are even, so a coarser unit
+  would need snapping. 187/2868 symbol origins are fractional; check how they
+  combine with rotation before relying on them.
+- **Symbols/footprints** (user, 2026-11-11): extract per-design into
+  project-local libs (E3). **Also support extracting parts from the EW
+  database directly**, so Phase F is in scope, not optional.
+- **ewd releases** (user, 2026-11-11): no need to ask; cut a release when new
+  features land.
+- **Corpus sources** (user, 2026-11-11): look for more `.ms*` / `.ewprj`
+  across the machine and in the user's published GitHub repos (including
+  older versions in git history). **Never commit or push design files found
+  on the machine** (corpus stays local + gitignored).
 
 ## Roadmap to "full translator" (revised 2026-11-11)
 
@@ -144,7 +166,8 @@ until now) is a toy:
   each symbol -> `lib_symbol` drawings. Deduplicate identical symbols into one
   library entry per part; multi-unit parts.
 - D5. Free text, graphics, title block.
-- D6. Grid policy (see open question 2).
+- D6. Integer-unit schematic IR + 10 mil emit scale + 10 mil connection grid
+  in `.kicad_pro` (decided, see Decisions).
 - **Exit:** for every corpus schematic, the KiCad-exported netlist equals the
   EW netlist (same nets, same pins); ERC is clean apart from documented
   source-faithful categories.
@@ -163,13 +186,14 @@ until now) is a toy:
   automatically and handles multi-design folders (Althea: Main / Heater /
   Buttons + `.mp14`).
 
-### Phase F - Library translation from the EW master database (optional)
+### Phase F - Library translation from the EW master database (in scope)
 
 Translate EW's own part libraries (`\\uberfall.tsl\Electronics Workbench Database\`
 `.prt` Jet DBs, readable via ewd's mdb decode) into KiCad libraries.
-Designs embed enough geometry that Phases C-E don't need this. Only worth
-doing to bring an entire EW library across, or to recover data a design
-lacks.
+Designs embed enough geometry that Phases C-E don't need this, but the user
+wants it supported too (2026-11-11): pull a part's symbol/footprint straight
+from the EW database. The DB share is mounted as `W:\` (=
+`\uberfall.tsl\Electronics Workbench Database`).
 
 ### Phase G - Ship
 
@@ -394,29 +418,13 @@ hierarchy, connectors), since those are what make an output useless today.
       pcb track_dangling 1500, silk_overlap 1005, track_width 984,
       lib_footprint_issues 917, nonmirrored_text_on_back_layer 693.
 - [x] (2026-11-11) Roadmap to full translator written.
-- [ ] **Current step: waiting for the user's go-ahead on the roadmap + open
-      questions** before starting Phase A4 / B1 / C.
+- [x] (2026-11-11) Roadmap approved; decisions recorded.
+- [ ] **Current step:** corpus expansion (local drives + GitHub) running in
+      background; next B1 (`.ewnet` reader in ewd) then A4 scorecard.
 
 ## Open questions for the user
 
-1. **ewd boundary depth.** Recommend: B1 (`.ewnet` reader) and B2 (XML
-   document model + string decoding) in ewd soon, and B3 typed design models
-   grown incrementally, moving parser code down into ewd once it's proven
-   here. Alternative: design the full typed models in ewd up front (slower,
-   more guesswork about what the converter needs).
-2. **Schematic grid.** Multisim uses a 0.25 mm unit; KiCad wants 50 mil
-   (1.27 mm). Recommend: keep exact geometry and configure the generated
-   `.kicad_pro` to drop `endpoint_off_grid` severity, because snapping moves
-   wires and pins and can break connectivity. Alternative: rescale everything
-   (0.25 mm -> 1.27 mm). That gives a big on-grid sheet that doesn't match the
-   original size.
-3. **Symbol/footprint source.** Recommend: per-design symbols/footprints
-   extracted from the design into project-local libs (Phase E3), with no
-   mapping to KiCad's stock libraries. Faithful, no fragile mapping table.
-   Stock-library mapping could come later as an optional pass.
-4. **Publishing ewd 0.3.0** when B1/B2 land: will ask per-release.
-5. (Old: CLI binary input. Resolved 2026-11-11, yes, done.)
-6. (Old: where mapping data lives. Superseded by Q3.)
+(none open; 2026-11-11 answers recorded under Decisions)
 
 ## Earlier phase notes (historical, 2026-05)
 
