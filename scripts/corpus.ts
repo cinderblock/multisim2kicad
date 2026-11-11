@@ -1,107 +1,271 @@
 #!/usr/bin/env bun
 /**
- * Corpus harness: convert every EW design under a directory, then validate
- * each output with kicad-cli (ERC for schematics, DRC for PCBs). kicad-cli is
- * always launched through scripts/run-hidden.ps1 so no dialog can reach the
- * user's screen; any dialog it raises is captured and reported.
+ * Corpus harness + fidelity scorecard.
  *
- *   bun run scripts/corpus.ts [corpusDir=corpus] [outDir=out/corpus]
+ * Converts every EW design under the corpus directory, then checks each
+ * output with kicad-cli (ERC / DRC, and a schematic netlist export) and
+ * scores it against EW's own data:
  *
- * Writes <outDir>/report.json and <outDir>/report.md.
+ * - Schematics: KiCad's exported netlist vs a reference netlist. Flat
+ *   designs use Multisim's own Ci* netlist; hierarchical ones (until Phase D1
+ *   flattens Ci*) use Multisim's flattened netlist from a sibling `.ewnet`, or
+ *   the paired `.ewprj` net table. Scored by exact nets + pin-pair
+ *   precision/recall (net names ignored).
+ * - PCBs: share of EW net pins that landed on a pad, plus DRC counts.
+ *
+ * kicad-cli always runs through scripts/run-hidden.ps1 (private desktop).
+ *
+ *   bun run scripts/corpus.ts [--all] [--filter <substr>] [--corpus <dir>] [--out <dir>]
+ *
+ * Default selection: everything under corpus/ except corpus/github/, where
+ * only the newest version of each design (by the `@YYYY-MM-DD-sha` suffix)
+ * is used; `--all` takes every version. Writes <out>/report.{json,md}.
  */
-import { readdir, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, relative, dirname, resolve } from "node:path";
-import { convertFile } from "../src/main.ts";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
+import { parseEwnet, ewnetConnectivity } from "electronics-workbench-decoder";
+import { convertPcb, convertSch } from "../src/main.ts";
+import { loadDesign } from "../src/load.ts";
+import { parsePcbXml } from "../src/parse/pcb.ts";
+import { parseCiNetlist } from "../src/ref/ci-netlist.ts";
+import {
+  compareNetlists,
+  foldNetNames,
+  type Netlist,
+  type NetlistScore,
+  parseKicadXmlNetlist,
+} from "../src/ref/netlist-compare.ts";
 
 const KICAD_CLI = process.env.KICAD_CLI ?? "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe";
 const RUN_HIDDEN = resolve(import.meta.dir, "run-hidden.ps1");
 
-const corpusDir = resolve(Bun.argv[2] ?? "corpus");
-const outRoot = resolve(Bun.argv[3] ?? "out/corpus");
+const argv = Bun.argv.slice(2);
+const flag = (name: string) => argv.includes(name);
+const opt = (name: string, dflt: string) => {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] ? argv[i + 1]! : dflt;
+};
+const corpusDir = resolve(opt("--corpus", "corpus"));
+const outRoot = resolve(opt("--out", "out/corpus"));
+const filter = opt("--filter", "");
+
+const DESIGN = /\.(ewprj|ms1\d)$/i;
 
 async function* walk(dir: string): AsyncGenerator<string> {
   for (const e of await readdir(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
-    if (e.isDirectory()) yield* walk(p);
-    else if (/\.(ewprj|ms1\d)$/i.test(e.name)) yield p;
+    if (e.isDirectory()) {
+      if (e.name === "gh-src") continue; // bare clones
+      yield* walk(p);
+    } else if (DESIGN.test(e.name)) yield p;
   }
 }
 
-interface Row {
-  input: string;
-  output?: string;
-  convertError?: string;
-  kicadExit?: number;
-  loaded?: boolean;
-  violations?: number;
-  unconnected?: number;
-  byType?: Record<string, number>;
-  dialogs?: string[];
-  ms: number;
+async function selectInputs(): Promise<string[]> {
+  const all: string[] = [];
+  for await (const f of walk(corpusDir)) all.push(f);
+  const versioned = /^(.*)@(\d{4}-\d{2}-\d{2})-([0-9a-f]{7})(\.[^.]+)$/;
+  const latest = new Map<string, string>();
+  const out: string[] = [];
+  for (const f of all.sort()) {
+    const m = versioned.exec(f);
+    if (!m || flag("--all")) {
+      out.push(f);
+      continue;
+    }
+    const k = m[1]! + m[4]!;
+    const prev = latest.get(k);
+    if (!prev || (versioned.exec(prev)![2]! < m[2]!)) latest.set(k, f);
+  }
+  out.push(...latest.values());
+  return out.filter((f) => !filter || f.toLowerCase().includes(filter.toLowerCase())).sort();
 }
 
-async function kicadCheck(file: string, kind: "sch" | "pcb"): Promise<Partial<Row>> {
-  const report = `${file}.${kind === "sch" ? "erc" : "drc"}.json`;
-  const cmd = kind === "sch" ? ["sch", "erc"] : ["pcb", "drc"];
+function hidden(args: string[], timeoutSec = 180) {
   const proc = Bun.spawnSync([
-    "pwsh", "-NoProfile", "-File", RUN_HIDDEN, "-TimeoutSec", "180", "--",
-    KICAD_CLI, ...cmd, "--format", "json", "--output", report, file,
+    "pwsh", "-NoProfile", "-File", RUN_HIDDEN, "-TimeoutSec", String(timeoutSec), "--", KICAD_CLI, ...args,
   ]);
   const stderr = proc.stderr.toString();
   const dialogs = stderr.split(/\r?\n/).filter((l) => l.startsWith("[run-hidden] dialog:"))
     .map((l) => l.slice("[run-hidden] dialog: ".length));
-  const out: Partial<Row> = { kicadExit: proc.exitCode ?? -1, dialogs };
-  try {
-    const j = JSON.parse(await readFile(report, "utf8"));
-    out.loaded = true;
-    const vs: any[] = kind === "sch"
-      ? (j.sheets ?? []).flatMap((s: any) => s.violations ?? [])
-      : (j.violations ?? []);
-    out.violations = vs.length;
-    out.unconnected = kind === "pcb" ? (j.unconnected_items ?? []).length : undefined;
-    const byType: Record<string, number> = {};
-    for (const v of vs) byType[v.type] = (byType[v.type] ?? 0) + 1;
-    out.byType = byType;
-  } catch {
-    out.loaded = false;
-  }
-  return out;
+  return { exit: proc.exitCode ?? -1, dialogs, stderr };
 }
 
+interface Row {
+  input: string;
+  kind?: "pcb" | "sch";
+  output?: string;
+  convertError?: string;
+  loaded?: boolean;
+  kicadExit?: number;
+  violations?: number;
+  byType?: Record<string, number>;
+  dialogs: string[];
+  // PCB
+  netPins?: number;
+  padPins?: number;
+  unconnected?: number;
+  // Schematic
+  refSource?: string;
+  score?: NetlistScore;
+  ms: number;
+}
+
+const exists = async (p: string) => !!(await stat(p).catch(() => null));
+
+async function erc(row: Row, file: string) {
+  const report = `${file}.erc.json`;
+  const r = hidden(["sch", "erc", "--format", "json", "--output", report, file]);
+  row.kicadExit = r.exit;
+  row.dialogs.push(...r.dialogs);
+  try {
+    const j = JSON.parse(await readFile(report, "utf8"));
+    const vs: any[] = (j.sheets ?? []).flatMap((s: any) => s.violations ?? []);
+    row.loaded = true;
+    row.violations = vs.length;
+    row.byType = tally(vs);
+  } catch {
+    row.loaded = false;
+  }
+}
+
+async function drc(row: Row, file: string) {
+  const report = `${file}.drc.json`;
+  const r = hidden(["pcb", "drc", "--format", "json", "--output", report, file]);
+  row.kicadExit = r.exit;
+  row.dialogs.push(...r.dialogs);
+  try {
+    const j = JSON.parse(await readFile(report, "utf8"));
+    row.loaded = true;
+    row.violations = (j.violations ?? []).length;
+    row.unconnected = (j.unconnected_items ?? []).length;
+    row.byType = tally(j.violations ?? []);
+  } catch {
+    row.loaded = false;
+  }
+}
+
+function tally(vs: any[]): Record<string, number> {
+  const t: Record<string, number> = {};
+  for (const v of vs) t[v.type] = (t[v.type] ?? 0) + 1;
+  return t;
+}
+
+async function kicadNetlist(file: string): Promise<Netlist | undefined> {
+  const out = `${file}.net.xml`;
+  hidden(["sch", "export", "netlist", "--format", "kicadxml", "--output", out, file]);
+  try {
+    return parseKicadXmlNetlist(await readFile(out, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Reference netlist for a schematic: Ci* when flat, else Multisim's flattened exports. */
+async function referenceNetlist(input: string, xml: string): Promise<{ source: string; nets: Netlist } | undefined> {
+  const ci = parseCiNetlist(xml);
+  if (!ci.hierarchical) {
+    const main = ci.circuits.sort((a, b) => b.components.length - a.components.length)[0];
+    if (main) return { source: "ci", nets: main.nets };
+  }
+  const base = input.replace(DESIGN, "");
+  if (await exists(`${base}.ewnet`)) {
+    const n = parseEwnet(await readFile(`${base}.ewnet`));
+    return { source: "ewnet", nets: foldNetNames(ewnetConnectivity(n)) };
+  }
+  if (await exists(`${base}.ewprj`)) {
+    const b = parsePcbXml((await loadDesign(`${base}.ewprj`)).xml);
+    return { source: "ewprj", nets: new Map(b.nets.map((n) => [n.name, n.pins])) };
+  }
+  return undefined;
+}
+
+async function quiet<T>(fn: () => Promise<T>): Promise<T> {
+  const log = console.log;
+  console.log = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.log = log;
+  }
+}
+
+const pct = (x: number | undefined) => (x === undefined ? "" : `${(100 * x).toFixed(0)}%`);
+
 const rows: Row[] = [];
-for await (const input of walk(corpusDir)) {
+const inputs = await selectInputs();
+console.log(`${inputs.length} designs`);
+for (const input of inputs) {
   const rel = relative(corpusDir, input);
   const outDir = join(outRoot, dirname(rel));
   await mkdir(outDir, { recursive: true });
   const t0 = performance.now();
-  const row: Row = { input: rel, ms: 0 };
+  const row: Row = { input: rel, dialogs: [], ms: 0 };
   try {
-    const origLog = console.log;
-    console.log = () => {};
-    try { row.output = await convertFile(input, outDir); } finally { console.log = origLog; }
-    Object.assign(row, await kicadCheck(row.output, row.output.endsWith(".kicad_sch") ? "sch" : "pcb"));
+    const design = await loadDesign(input);
+    if (design.kind === "pcb") {
+      row.kind = "pcb";
+      row.output = await quiet(() => convertPcb(input, design.xml, outDir));
+      const b = parsePcbXml(design.xml);
+      const pads = new Set(b.components.flatMap((c) => c.pads.map((p) => `${c.reference}.${p.number}`)));
+      const pins = b.nets.flatMap((n) => n.pins);
+      row.netPins = pins.length;
+      row.padPins = pins.filter((p) => pads.has(`${p.refdes}.${p.pin}`)).length;
+      await drc(row, row.output);
+    } else {
+      row.kind = "sch";
+      row.output = await quiet(() => convertSch(input, design.xml, outDir));
+      await erc(row, row.output);
+      const ref = await referenceNetlist(input, design.xml);
+      const got = row.loaded ? await kicadNetlist(row.output) : undefined;
+      if (ref && got) {
+        row.refSource = ref.source;
+        row.score = compareNetlists(ref.nets, got);
+      }
+    }
   } catch (e) {
     row.convertError = (e as Error).message.split("\n")[0];
   }
   row.ms = Math.round(performance.now() - t0);
   rows.push(row);
+  const s = row.score;
   const status = row.convertError ? `CONVERT FAIL: ${row.convertError}`
     : !row.loaded ? `KICAD LOAD FAIL (exit ${row.kicadExit})`
-    : `ok  violations=${row.violations}${row.unconnected != null ? ` unconnected=${row.unconnected}` : ""}`;
-  console.log(`${rel}\n    ${status}${row.dialogs?.length ? `  DIALOGS=${row.dialogs.length}` : ""}`);
+    : row.kind === "pcb" ? `pins on pads ${row.padPins}/${row.netPins}  unconnected=${row.unconnected}  violations=${row.violations}`
+    : s ? `nets ${s.exactNets}/${s.refNets} exact (ref=${row.refSource})  pairs P=${pct(s.pairPrecision)} R=${pct(s.pairRecall)}  violations=${row.violations}`
+    : `no reference netlist  violations=${row.violations}`;
+  console.log(`${rel}\n    ${status}${row.dialogs.length ? `  DIALOGS=${row.dialogs.length}` : ""}`);
 }
 
 await writeFile(join(outRoot, "report.json"), JSON.stringify(rows, null, 2));
+
+const top = (r: Row) => Object.entries(r.byType ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3)
+  .map(([k, v]) => `${k}×${v}`).join(", ");
+const sch = rows.filter((r) => r.kind === "sch");
+const pcb = rows.filter((r) => r.kind === "pcb");
+const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const scored = sch.filter((r) => r.score);
 const md = [
-  "| input | result | violations | unconnected | top violation types | dialogs |",
-  "| --- | --- | --- | --- | --- | --- |",
-  ...rows.map((r) => {
-    const top = Object.entries(r.byType ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3)
-      .map(([k, v]) => `${k}×${v}`).join(", ");
-    const result = r.convertError ? `convert fail: ${r.convertError}` : r.loaded ? "loads" : `load fail (${r.kicadExit})`;
-    return `| ${r.input} | ${result} | ${r.violations ?? ""} | ${r.unconnected ?? ""} | ${top} | ${r.dialogs?.join("; ") ?? ""} |`;
-  }),
+  `# Corpus scorecard`,
+  ``,
+  `- Designs: ${rows.length} (${sch.length} schematics, ${pcb.length} PCBs); load in KiCad: ${rows.filter((r) => r.loaded).length}`,
+  `- Schematic nets reproduced exactly: ${sum(scored.map((r) => r.score!.exactNets))}/${sum(scored.map((r) => r.score!.refNets))}`,
+  `- PCB net pins on a pad: ${sum(pcb.map((r) => r.padPins ?? 0))}/${sum(pcb.map((r) => r.netPins ?? 0))}`,
+  `- Dialogs captured: ${sum(rows.map((r) => r.dialogs.length))}`,
+  ``,
+  `## Schematics`,
+  ``,
+  `| input | ref | exact nets | pair P | pair R | violations | top types |`,
+  `| --- | --- | --- | --- | --- | --- | --- |`,
+  ...sch.map((r) => r.convertError ? `| ${r.input} | | convert fail: ${r.convertError} | | | | |`
+    : `| ${r.input} | ${r.refSource ?? "-"} | ${r.score ? `${r.score.exactNets}/${r.score.refNets}` : ""} | ${pct(r.score?.pairPrecision)} | ${pct(r.score?.pairRecall)} | ${r.loaded ? r.violations : "load fail"} | ${top(r)} |`),
+  ``,
+  `## PCBs`,
+  ``,
+  `| input | pins on pads | unconnected | violations | top types |`,
+  `| --- | --- | --- | --- | --- |`,
+  ...pcb.map((r) => r.convertError ? `| ${r.input} | convert fail: ${r.convertError} | | | |`
+    : `| ${r.input} | ${r.padPins}/${r.netPins} | ${r.unconnected ?? ""} | ${r.loaded ? r.violations : "load fail"} | ${top(r)} |`),
 ].join("\n");
 await writeFile(join(outRoot, "report.md"), md + "\n");
-const ok = rows.filter((r) => r.loaded).length;
-console.log(`\n${ok}/${rows.length} outputs load in KiCad. Report: ${join(outRoot, "report.md")}`);
+console.log(`\n${md.split("\n").slice(2, 7).join("\n")}\nReport: ${join(outRoot, "report.md")}`);
