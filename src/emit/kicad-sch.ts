@@ -98,11 +98,23 @@ function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] 
   const local = libName.split(":").pop()!;
   const pins = uniquePins(s.pins);
   const units = [...unitsOf(refs)].sort((a, b) => a[0] - b[0]);
+  const power = s.kind === "power";
   const pinLine = (p: SymbolPin, number: string) => {
     const type = power ? "power_in" : "passive";
-    return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(p.length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(number)} ${FONT}))`;
+    // Power ports: KiCad hides their pin, so the stem is drawn as graphics.
+    const length = power ? 0 : p.length;
+    return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(number)} ${FONT}))`;
   };
-  const power = s.kind === "power";
+  const stems: SchGraphic[] = power
+    ? s.pins
+        .filter((p) => p.length > 0)
+        .map((p) => ({
+          kind: "polyline" as const,
+          points: [p.at, { x: p.at.x + p.dir.x * p.length, y: p.at.y + p.dir.y * p.length }],
+          width: 0,
+          fill: false,
+        }))
+    : [];
   const lines = [
     `\t\t(symbol ${q(libName)}`,
     power ? `\t\t\t(power global)` : "",
@@ -117,7 +129,7 @@ function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] 
     `\t\t\t(property "Footprint" "" (at 0 0 0) (hide yes) ${FONT})`,
     `\t\t\t(property "Datasheet" "" (at 0 0 0) (hide yes) ${FONT})`,
     `\t\t\t(symbol ${q(`${local}_0_1`)}`,
-    ...s.graphics.map(libGraphic).filter((x): x is string => !!x),
+    ...[...s.graphics, ...stems].map(libGraphic).filter((x): x is string => !!x),
     `\t\t\t)`,
     // One body per unit: the same drawing, pins renumbered for that section.
     ...units.flatMap(([unit, map]) => [
