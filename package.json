@@ -10,6 +10,7 @@
     "start": "bun run src/main.ts"
   },
   "dependencies": {
+    "electronics-workbench-decoder": "^0.2.0",
     "fast-xml-parser": "^4.5.0"
   },
   "devDependencies": {

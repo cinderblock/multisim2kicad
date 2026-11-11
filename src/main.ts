@@ -1,25 +1,18 @@
 #!/usr/bin/env bun
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { designBaseName, loadDesign } from "./load.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
 import { parseSchematicXml } from "./parse/sch.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
 import { emitKicadSch } from "./emit/kicad-sch.ts";
 
-function outputName(input: string): string {
-  return basename(input)
-    .replace(/\.(ewprj|ms14)\.xml$/i, "")
-    .replace(/\.xml$/i, "");
-}
-
 const NM_PER_MM = 1_000_000;
-const isMultisim = (input: string): boolean => /\.ms14\.xml$/i.test(input);
 
-async function convertPcb(input: string): Promise<void> {
-  const xml = await readFile(input, "utf8");
+export async function convertPcb(input: string, xml: string, outDir: string): Promise<string> {
   const board = parsePcbXml(xml);
 
-  const outPath = join("out", `${outputName(input)}.kicad_pcb`);
+  const outPath = join(outDir, `${designBaseName(input)}.kicad_pcb`);
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, emitKicadPcb(board), "utf8");
 
@@ -50,13 +43,13 @@ async function convertPcb(input: string): Promise<void> {
   console.log(`  holes:      ${board.holes.length} (${plated} plated/via, ${board.holes.length - plated} mounting)`);
   console.log(`  nets:       ${board.nets.length} (${netPins} pin refs)`);
   console.log(`  wrote:      ${outPath}`);
+  return outPath;
 }
 
-async function convertSch(input: string): Promise<void> {
-  const xml = await readFile(input, "utf8");
+export async function convertSch(input: string, xml: string, outDir: string): Promise<string> {
   const sch = parseSchematicXml(xml);
 
-  const outPath = join("out", `${outputName(input)}.kicad_sch`);
+  const outPath = join(outDir, `${designBaseName(input)}.kicad_sch`);
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, emitKicadSch(sch), "utf8");
 
@@ -71,25 +64,35 @@ async function convertSch(input: string): Promise<void> {
   console.log(`  symbols:    ${sch.symbols.length} (${pinCount} pins)`);
   console.log(`  wires:      ${sch.wires.length}`);
   console.log(`  wrote:      ${outPath}`);
+  return outPath;
+}
+
+export async function convertFile(input: string, outDir = "out"): Promise<string> {
+  const design = await loadDesign(input);
+  return design.kind === "schematic"
+    ? convertSch(input, design.xml, outDir)
+    : convertPcb(input, design.xml, outDir);
 }
 
 async function main() {
   const args = Bun.argv.slice(2);
-  if (args.length === 0) {
-    console.error("usage: bun run dev <file.ewprj.xml | file.ms14.xml> [...]");
+  let outDir = "out";
+  const inputs: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "-o" || args[i] === "--out") outDir = args[++i] ?? outDir;
+    else inputs.push(args[i]!);
+  }
+  if (inputs.length === 0) {
+    console.error("usage: bun run dev [-o <outDir>] <design.ewprj | design.ms14 | *.xml> [...]");
     process.exit(2);
   }
 
-  for (const input of args) {
-    if (isMultisim(input)) {
-      await convertSch(input);
-    } else {
-      await convertPcb(input);
-    }
-  }
+  for (const input of inputs) await convertFile(input, outDir);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

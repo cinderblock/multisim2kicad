@@ -4,3 +4,4 @@ out/
 *.log
 *-erc.rpt
 .DS_Store
+corpus/

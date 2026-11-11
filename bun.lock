@@ -1,9 +1,11 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "ew-conv",
       "dependencies": {
+        "electronics-workbench-decoder": "^0.2.0",
         "fast-xml-parser": "^4.5.0",
       },
       "devDependencies": {
@@ -18,6 +20,8 @@
     "@types/node": ["@types/node@25.9.1", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-xfrlY7UD5rMJk3ZVJP8BNzS28J36YJg+xp+LPXV1TdWxr8uMH5A860QNxYDGQe/ylDSgjxE52Q9VnO7p75tJxg=="],
 
     "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
+
+    "electronics-workbench-decoder": ["electronics-workbench-decoder@0.2.0", "", { "bin": { "ewd": "dist/ewd.js", "ewe": "dist/ewe.js" } }, "sha512-j5tWGAmZeQ8zL/a0VfXz2STwz6C+7ZyebG/iB8Q6+Hva4SRGrWzs0j6/2e2Ntd2H5rspNqeIKbf5nQ/sZmzGlA=="],
 
     "fast-xml-parser": ["fast-xml-parser@4.5.6", "", { "dependencies": { "strnum": "^1.0.5" }, "bin": { "fxparser": "src/cli/cli.js" } }, "sha512-Yd4vkROfJf8AuJrDIVMVmYfULKmIJszVsMv7Vo71aocsKgFxpdlpSHXSaInvyYfgw2PRuObQSW2GFpVMUjxu9A=="],
 
