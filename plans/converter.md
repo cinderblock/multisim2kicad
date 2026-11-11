@@ -448,6 +448,17 @@ hierarchy, connectors), since those are what make an output useless today.
   (Ultiboard pin swaps not back-annotated). KiCad emission: one file per
   page, blocks -> sheet symbols, ports -> hierarchical labels, final refdes
   per instance path; verified on 1-Wire-HV-AC (21/21, P=R=100%).
+- **Pin numbers: trust the netlist port, not the drawing.** A pin's
+  `PortID` -> `CiPort` pin CSV is authoritative; the drawing's `PinNumber`
+  goes stale after Ultiboard pin swaps are back-annotated (3-Phase Driver's
+  resistors came out reversed until this changed).
+- **Multi-section parts**: drawn symbols with different drawn refdes
+  (U1A, U2A, U5A, U6A) can merge into one final part (U1) as sections;
+  `RefDesInfo@IRSectionID` (0-based) gives the KiCad unit. Each unit's pins
+  are renumbered by the CIR->IR pin map.
+- **Connect1/Connect2 convention verified**: Connect1 = first point,
+  Connect2 = last point on every corpus link without a transform (thousands,
+  zero reversed).
 - **NUL bytes in source.** The old emitter used literal `\0` characters as
   map-key separators, making git/grep treat the file as binary. Use
   `JSON.stringify([a, b])` keys instead.
@@ -563,8 +574,23 @@ hierarchy, connectors), since those are what make an output useless today.
       (`6ae6d1c`). Schematic nets exact: 0/254 (baseline, old reference)
       -> 134/255 (D2/D3) -> 1605/1790 with the full flattened reference;
       18/39 designs exact; all 39 load in KiCad 10.
-- [ ] **Current step:** remaining schematic misses (OpAmp(s), Amplifier,
-      3-Phase Driver 2015, Limit Switch, buses), then B2 per the order.
+- [x] (2026-11-11) Multi-unit parts + netlist pin numbers (`c0c8f04`).
+      **Schematic nets exact: 1765/1790 (98.6%); 33/39 designs exact;
+      all 39 load in KiCad 10.**
+- [ ] Remaining schematic residuals (all small, logged here):
+  - Buses (`CIITBusCompV8`, bus entries, `CIITBusHierConnector`): both
+    iCue designs (22/26, 29/36). Not emitted yet (D3 leftover).
+  - Shared supply pins of multi-unit parts (op-amp V+/V-) appear per unit
+    in KiCad, wired on one unit and dangling on another. Proper fix: one lib
+    symbol per physical part with shared pins in the common body (D4).
+  - Multi-contact switches (Materna Control Board SW1-SW3, pins A/A'/B/B'):
+    KiCad joins a switch contact pair to the wire the reference keeps apart.
+    Not investigated.
+  - `NI_EWB_NET_HIDDEN` pins (CAN Main, 1 net) ignored.
+  - Twillbot Distribution: 164/165, not investigated.
+- [ ] **Next (approved order):** B2 (ewd XML document model + string
+      decoding), then C3-C6 (inner layers, pours, arcs/text, real
+      footprints), D4-D5, E (project linking), F (EW database), G.
 
 ## Open questions for the user
 
