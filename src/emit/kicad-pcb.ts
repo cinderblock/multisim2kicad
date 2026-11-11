@@ -1,8 +1,8 @@
-import type { Board, Component, Hole, Net, Pad, Point, Shape, Track } from "../ir/types.ts";
+import type { Board, Component, Hole, Net, Pad, PadPrimitive, Point, Shape, Track, Via } from "../ir/types.ts";
 import { ewLayerToKicad } from "../util/layer-map.ts";
 
 // KiCad 8 board format. Matches the (uuid ...) keyword used throughout
-// (KiCad 7 used (tstamp ...)). KiCad 9 reads this without complaint.
+// (KiCad 7 used (tstamp ...)). KiCad 9/10 read this without complaint.
 const KICAD_VERSION = 20240108;
 
 type LayerRow = readonly [number, string, "signal" | "user" | "power" | "mixed" | "jumper", string?];
@@ -39,11 +39,12 @@ const NM_PER_MM = 1_000_000;
 const mm = (nm: number): string => (nm / NM_PER_MM).toFixed(6);
 const fx = (nm: number): string => mm(nm);
 const fy = (nm: number): string => mm(-nm);
+const deg = (millionths: number): number => millionths / 1_000_000;
 
 const EDGE_CUTS_WIDTH_NM = 50_000; // 0.05 mm — KiCad's typical Edge.Cuts width
 
 function q(s: string): string {
-  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 }
 
 function uuid(): string {
@@ -92,7 +93,7 @@ function emitCircle(
 function emitEllipse(s: Extract<Shape, { kind: "ellipse" }>, layer: string): string[] {
   // EW circle: first two points are opposite ends of a diameter.
   if (s.points.length < 2) return [];
-  const [p0, p1] = s.points;
+  const [p0, p1] = s.points as [Point, Point];
   const cx = (p0.x + p1.x) / 2;
   const cy = (p0.y + p1.y) / 2;
   const r = Math.hypot(p1.x - p0.x, p1.y - p0.y) / 2;
@@ -149,8 +150,8 @@ function emitPolyline(s: Extract<Shape, { kind: "polyline" }>, layer: string): s
   const w = strokeWidthFor(s.thickness, layer);
   const out: string[] = [];
   for (let i = 0; i + 1 < s.points.length; i++) {
-    const p1 = s.points[i];
-    const p2 = s.points[i + 1];
+    const p1 = s.points[i]!;
+    const p2 = s.points[i + 1]!;
     out.push(emitLine(p1.x, p1.y, p2.x, p2.y, w, layer));
   }
   return out;
@@ -167,57 +168,154 @@ function emitShape(shape: Shape): string[] {
   }
 }
 
-type PadNetIndex = Map<string, { idx: number; name: string }>;
+// ---------------------------------------------------------------------------
+// Nets
+
+type NetRef = { idx: number; name: string };
+// Resolves a (refdes, pin) pair to its KiCad net, or undefined.
+type NetResolver = (refdes: string, pin: string) => NetRef | undefined;
+
+const pinKey = (refdes: string, pin: string) => JSON.stringify([refdes, pin]);
+
+function buildNets(nets: Net[]): { table: string[]; resolve: NetResolver; byName: Map<string, NetRef> } {
+  const table = [`\t(net 0 ${q("")})`];
+  const byPin = new Map<string, NetRef>();
+  const byName = new Map<string, NetRef>();
+  nets.forEach((net, i) => {
+    const ref = { idx: i + 1, name: net.name };
+    table.push(`\t(net ${ref.idx} ${q(net.name)})`);
+    byName.set(net.name.toUpperCase(), ref);
+    for (const p of net.pins) byPin.set(pinKey(p.refdes, p.pin), ref);
+  });
+  return { table, resolve: (refdes, pin) => byPin.get(pinKey(refdes, pin)), byName };
+}
 
 const posKey = (p: Point): string => `${p.x},${p.y}`;
 
-function buildPadNetIndex(components: Component[], resolve: NetResolver): PadNetIndex {
-  const m: PadNetIndex = new Map();
-  for (const c of components) {
-    for (const p of c.pads) {
-      const net = resolve(c.reference, p.number);
-      if (net) m.set(posKey(p.at), net);
+/** Is `p` inside the pad's copper (approximate for custom pads: bbox)? */
+function padContains(pad: Pad, p: Point): boolean {
+  const dx = p.x - pad.at.x;
+  const dy = p.y - pad.at.y;
+  switch (pad.shape.kind) {
+    case "circle":
+      return Math.hypot(dx, dy) <= pad.shape.diameter / 2 + 1;
+    case "rect":
+    case "roundrect": {
+      const a = -(deg(pad.rotation) * Math.PI) / 180;
+      const lx = dx * Math.cos(a) - dy * Math.sin(a);
+      const ly = dx * Math.sin(a) + dy * Math.cos(a);
+      return Math.abs(lx) <= pad.shape.width / 2 + 1 && Math.abs(ly) <= pad.shape.height / 2 + 1;
+    }
+    case "custom": {
+      const pts = pad.shape.primitives.flatMap((pr) =>
+        pr.kind === "poly" ? pr.points : [
+          { x: pr.center.x - (pr.kind === "circle" ? pr.radius : 0), y: pr.center.y },
+          { x: pr.center.x + (pr.kind === "circle" ? pr.radius : 0), y: pr.center.y },
+        ]);
+      const b = bbox(pts);
+      return p.x >= b.xMin && p.x <= b.xMax && p.y >= b.yMin && p.y <= b.yMax;
     }
   }
-  return m;
 }
 
-// EW tracks carry no net reference. Compute one per track:
-//   1. Seed each track whose endpoint touches a known pad with that net.
-//   2. Propagate through shared endpoints — mid-chain segments inherit the
-//      net of their connected pad-touching neighbours.
-function computeTrackNets(tracks: Track[], padNets: PadNetIndex): number[] {
-  const n = tracks.length;
-  const nets = new Array<number>(n).fill(0);
+interface PlacedPad {
+  pad: Pad;
+  net: NetRef;
+  copper: ("F.Cu" | "B.Cu")[];
+}
 
-  const byEndpoint = new Map<string, number[]>();
-  for (let i = 0; i < n; i++) {
-    for (const ep of [tracks[i].start, tracks[i].end]) {
-      const k = posKey(ep);
-      const list = byEndpoint.get(k);
-      if (list) list.push(i);
-      else byEndpoint.set(k, [i]);
-    }
-  }
+/**
+ * EW tracks and vias carry no reliable net reference. Compute one per item:
+ *   1. Seed each track endpoint that lies inside a netted pad on the same
+ *      copper layer, and each via whose own NetName resolves.
+ *   2. Propagate through shared endpoints (tracks <-> tracks <-> vias); a via
+ *      joins every track that ends on it, on any layer.
+ */
+function computeNets(
+  tracks: Track[],
+  vias: Via[],
+  pads: PlacedPad[],
+  byName: Map<string, NetRef>,
+): { trackNets: number[]; viaNets: number[] } {
+  const trackNets = new Array<number>(tracks.length).fill(0);
+  const viaNets = new Array<number>(vias.length).fill(0);
 
+  // Node ids: tracks are 0..T-1, vias are T..T+V-1.
+  const T = tracks.length;
+  const byPoint = new Map<string, number[]>();
+  const add = (p: Point, id: number) => {
+    const k = posKey(p);
+    const l = byPoint.get(k);
+    if (l) l.push(id);
+    else byPoint.set(k, [id]);
+  };
+  tracks.forEach((t, i) => { add(t.start, i); add(t.end, i); });
+  vias.forEach((v, i) => add(v.at, T + i));
+
+  const get = (id: number) => (id < T ? trackNets[id]! : viaNets[id - T]!);
+  const set = (id: number, n: number) => { if (id < T) trackNets[id] = n; else viaNets[id - T] = n; };
   const queue: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = padNets.get(posKey(tracks[i].start))?.idx;
-    const b = padNets.get(posKey(tracks[i].end))?.idx;
-    const seed = a ?? b;
-    if (seed) { nets[i] = seed; queue.push(i); }
-  }
 
-  while (queue.length > 0) {
-    const i = queue.shift()!;
-    for (const ep of [tracks[i].start, tracks[i].end]) {
-      for (const j of byEndpoint.get(posKey(ep)) ?? []) {
-        if (j !== i && nets[j] === 0) { nets[j] = nets[i]; queue.push(j); }
+  // Spatial bucket for pads so seeding stays fast on big boards.
+  const CELL = 2_000_000; // 2 mm
+  const grid = new Map<string, PlacedPad[]>();
+  for (const pp of pads) {
+    const r = padReach(pp.pad);
+    for (let gx = Math.floor((pp.pad.at.x - r) / CELL); gx <= Math.floor((pp.pad.at.x + r) / CELL); gx++) {
+      for (let gy = Math.floor((pp.pad.at.y - r) / CELL); gy <= Math.floor((pp.pad.at.y + r) / CELL); gy++) {
+        const k = `${gx},${gy}`;
+        const l = grid.get(k);
+        if (l) l.push(pp);
+        else grid.set(k, [pp]);
       }
     }
   }
+  const padAt = (p: Point, layer: string | undefined): PlacedPad | undefined => {
+    for (const pp of grid.get(`${Math.floor(p.x / CELL)},${Math.floor(p.y / CELL)}`) ?? []) {
+      if (layer && !pp.copper.includes(layer as "F.Cu" | "B.Cu")) continue;
+      if (padContains(pp.pad, p)) return pp;
+    }
+    return undefined;
+  };
 
-  return nets;
+  tracks.forEach((t, i) => {
+    const layer = ewLayerToKicad(t.layer);
+    const hit = padAt(t.start, layer) ?? padAt(t.end, layer);
+    if (hit) { trackNets[i] = hit.net.idx; queue.push(i); }
+  });
+  vias.forEach((v, i) => {
+    const named = v.netName ? byName.get(v.netName.toUpperCase()) : undefined;
+    const hit = named ?? padAt(v.at, undefined)?.net;
+    if (hit) { viaNets[i] = hit.idx; queue.push(T + i); }
+  });
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const pts = id < T ? [tracks[id]!.start, tracks[id]!.end] : [vias[id - T]!.at];
+    for (const p of pts) {
+      for (const j of byPoint.get(posKey(p)) ?? []) {
+        if (j !== id && get(j) === 0) { set(j, get(id)); queue.push(j); }
+      }
+    }
+  }
+  return { trackNets, viaNets };
+}
+
+function padReach(pad: Pad): number {
+  switch (pad.shape.kind) {
+    case "circle": return pad.shape.diameter / 2;
+    case "rect":
+    case "roundrect": return Math.hypot(pad.shape.width, pad.shape.height) / 2;
+    case "custom": {
+      let r = 0;
+      for (const pr of pad.shape.primitives) {
+        const pts = pr.kind === "poly" ? pr.points : [pr.center];
+        const extra = pr.kind === "poly" ? 0 : pr.kind === "circle" ? pr.radius : Math.hypot(pr.start.x - pr.center.x, pr.start.y - pr.center.y);
+        for (const p of pts) r = Math.max(r, Math.hypot(p.x - pad.at.x, p.y - pad.at.y) + extra);
+      }
+      return r;
+    }
+  }
 }
 
 function emitTrack(t: Track, netIdx: number): string | undefined {
@@ -227,36 +325,54 @@ function emitTrack(t: Track, netIdx: number): string | undefined {
   return `\t(segment (start ${fx(t.start.x)} ${fy(t.start.y)}) (end ${fx(t.end.x)} ${fy(t.end.y)}) (width ${mm(t.thickness)}) (layer ${q(layer)}) (net ${netIdx}) (uuid ${q(uuid())}))`;
 }
 
-// Resolves a (refdes, pin) pair to its KiCad net index + name, or undefined.
-type NetResolver = (refdes: string, pin: string) => { idx: number; name: string } | undefined;
-
-function buildNets(nets: Net[]): { table: string[]; resolve: NetResolver } {
-  const table = [`\t(net 0 ${q("")})`];
-  const byPin = new Map<string, { idx: number; name: string }>();
-  nets.forEach((net, i) => {
-    const idx = i + 1;
-    table.push(`\t(net ${idx} ${q(net.name)})`);
-    for (const p of net.pins) byPin.set(`${p.refdes} ${p.pin}`, { idx, name: net.name });
-  });
-  return { table, resolve: (refdes, pin) => byPin.get(`${refdes} ${pin}`) };
+function emitVia(v: Via, netIdx: number): string {
+  return `\t(via (at ${fx(v.at.x)} ${fy(v.at.y)}) (size ${mm(v.diameter)}) (drill ${mm(v.drillDiameter)}) (layers "F.Cu" "B.Cu") (net ${netIdx}) (uuid ${q(uuid())}))`;
 }
 
-function emitPad(pad: Pad, origin: Point, refdes: string, resolve: NetResolver): string {
+// ---------------------------------------------------------------------------
+// Footprints
+
+function padCopper(pad: Pad): ("F.Cu" | "B.Cu")[] {
+  return pad.side === "both" ? ["F.Cu", "B.Cu"] : pad.side === "bottom" ? ["B.Cu"] : ["F.Cu"];
+}
+
+/** Custom-pad primitive in pad-local KiCad coordinates (pad emitted unrotated). */
+function emitPrimitive(pr: PadPrimitive, at: Point): string {
+  const lx = (x: number) => mm(x - at.x);
+  const ly = (y: number) => mm(-(y - at.y));
+  switch (pr.kind) {
+    case "poly":
+      return `(gr_poly (pts ${pr.points.map((p) => `(xy ${lx(p.x)} ${ly(p.y)})`).join(" ")}) (width 0) (fill yes))`;
+    case "circle":
+      return `(gr_circle (center ${lx(pr.center.x)} ${ly(pr.center.y)}) (end ${lx(pr.center.x + pr.radius)} ${ly(pr.center.y)}) (width ${mm(pr.fill ? 0 : pr.width)}) (fill ${pr.fill ? "yes" : "no"}))`;
+    case "arc": {
+      const r = Math.hypot(pr.start.x - pr.center.x, pr.start.y - pr.center.y);
+      const a0 = Math.atan2(pr.start.y - pr.center.y, pr.start.x - pr.center.x);
+      let sweep = Math.atan2(pr.end.y - pr.center.y, pr.end.x - pr.center.x) - a0;
+      while (sweep <= 0) sweep += 2 * Math.PI;
+      const mid = { x: pr.center.x + r * Math.cos(a0 + sweep / 2), y: pr.center.y + r * Math.sin(a0 + sweep / 2) };
+      return `(gr_arc (start ${lx(pr.start.x)} ${ly(pr.start.y)}) (mid ${lx(mid.x)} ${ly(mid.y)}) (end ${lx(pr.end.x)} ${ly(pr.end.y)}) (width ${mm(pr.width)}))`;
+    }
+  }
+}
+
+function emitPad(pad: Pad, origin: Point, net: NetRef | undefined): string {
   // Position relative to footprint origin (footprint emitted at rotation 0),
   // Y flipped to KiCad's screen convention.
   const lx = mm(pad.at.x - origin.x);
   const ly = mm(-(pad.at.y - origin.y));
   const thru = pad.drillDiameter > 0;
   const type = thru ? "thru_hole" : "smd";
-  const layers = thru ? `"*.Cu" "*.Mask"` : `"F.Cu" "F.Paste" "F.Mask"`;
+  const layers = thru
+    ? `"*.Cu" "*.Mask"`
+    : pad.side === "bottom" ? `"B.Cu" "B.Paste" "B.Mask"` : `"F.Cu" "F.Paste" "F.Mask"`;
   const drill = thru ? ` (drill ${mm(pad.drillDiameter)})` : "";
 
-  let shapeTok: string;
-  let size: string;
+  let shapeTok = "circle";
+  let size = "";
   let extra = "";
   switch (pad.shape.kind) {
     case "circle":
-      shapeTok = "circle";
       size = `${mm(pad.shape.diameter)} ${mm(pad.shape.diameter)}`;
       break;
     case "rect":
@@ -271,14 +387,20 @@ function emitPad(pad: Pad, origin: Point, refdes: string, resolve: NetResolver):
       extra = ` (roundrect_rratio ${ratio.toFixed(6)})`;
       break;
     }
+    case "custom": {
+      // Tiny circular anchor at the pad centre; the primitives carry the shape.
+      shapeTok = "custom";
+      const anchor = Math.max(10_000, Math.min(pad.drillDiameter, 100_000));
+      size = `${mm(anchor)} ${mm(anchor)}`;
+      extra = ` (options (clearance outline) (anchor circle)) (primitives ${pad.shape.primitives.map((p) => emitPrimitive(p, pad.at)).join(" ")})`;
+      break;
+    }
   }
 
-  // Circle pads are rotation-invariant; for others negate to match the Y flip.
-  // (Unverified for non-square rect pads — no sample yet.)
-  const rotDeg = pad.shape.kind === "circle" ? 0 : -(pad.rotation / 1_000_000);
-  const at = rotDeg !== 0 ? `(at ${lx} ${ly} ${rotDeg})` : `(at ${lx} ${ly})`;
-
-  const net = resolve(refdes, pad.number);
+  // EW and KiCad both measure rotation counter-clockwise as seen on screen,
+  // so the angle carries over unchanged despite the Y flip.
+  const rotDeg = pad.shape.kind === "circle" || pad.shape.kind === "custom" ? 0 : deg(pad.rotation);
+  const at = rotDeg !== 0 ? `(at ${lx} ${ly} ${+rotDeg.toFixed(6)})` : `(at ${lx} ${ly})`;
   const netTok = net ? ` (net ${net.idx} ${q(net.name)})` : "";
 
   return `\t\t(pad ${q(pad.number)} ${type} ${shapeTok} ${at} (size ${size})${drill} (layers ${layers})${extra}${netTok} (uuid ${q(uuid())}))`;
@@ -293,10 +415,10 @@ function emitFootprint(c: Component, resolve: NetResolver): string {
     `\t\t(layer ${q(cu)})`,
     `\t\t(uuid ${q(uuid())})`,
     `\t\t(at ${fx(c.origin.x)} ${fy(c.origin.y)})`,
-    `\t\t(property "Reference" ${q(c.reference)} (at 0 0 0) (layer ${q(silk)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
-    `\t\t(property "Value" ${q(c.value)} (at 0 0 0) (layer ${q(fab)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
+    `\t\t(property "Reference" ${q(c.reference)} (at 0 0 0) (layer ${q(silk)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))${c.bottom ? " (justify mirror)" : ""}))`,
+    `\t\t(property "Value" ${q(c.value)} (at 0 0 0) (layer ${q(fab)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))${c.bottom ? " (justify mirror)" : ""}))`,
   ];
-  for (const pad of c.pads) lines.push(emitPad(pad, c.origin, c.reference, resolve));
+  for (const pad of c.pads) lines.push(emitPad(pad, c.origin, resolve(c.reference, pad.number)));
   lines.push(`\t)`);
   return lines.join("\n");
 }
@@ -328,16 +450,24 @@ export function emitKicadPcb(board: Board): string {
       : `\t\t(${num} ${q(name)} ${type})`;
   }).join("\n");
 
-  const { table: netTable, resolve } = buildNets(board.nets);
+  const { table: netTable, resolve, byName } = buildNets(board.nets);
   const shapeLines = board.shapes.flatMap(emitShape).join("\n");
   const footprintLines = board.components.map((c) => emitFootprint(c, resolve)).join("\n");
   const holeLines = board.holes.map(emitHole).join("\n");
-  const padNets = buildPadNetIndex(board.components, resolve);
-  const trackNets = computeTrackNets(board.tracks, padNets);
+
+  const placed: PlacedPad[] = [];
+  for (const c of board.components) {
+    for (const pad of c.pads) {
+      const net = resolve(c.reference, pad.number);
+      if (net) placed.push({ pad, net, copper: padCopper(pad) });
+    }
+  }
+  const { trackNets, viaNets } = computeNets(board.tracks, board.vias, placed, byName);
   const trackLines = board.tracks
-    .map((t, i) => emitTrack(t, trackNets[i]))
+    .map((t, i) => emitTrack(t, trackNets[i]!))
     .filter((s): s is string => s !== undefined)
     .join("\n");
+  const viaLines = board.vias.map((v, i) => emitVia(v, viaNets[i]!)).join("\n");
 
   const importNote =
     `Imported from ${board.source.application} ` +
@@ -376,6 +506,8 @@ export function emitKicadPcb(board: Board): string {
     shapeLines,
     ``,
     trackLines,
+    ``,
+    viaLines,
     ``,
     `)`,
     ``,

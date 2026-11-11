@@ -10,7 +10,9 @@ import type {
   Point,
   Shape,
   Track,
+  Via,
 } from "../ir/types.ts";
+import { ubPrimitive, UB_PRIMITIVE_TAGS } from "./ub-geom.ts";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -121,43 +123,116 @@ function collectByTag(node: any, tag: string, out: any[]): void {
   }
 }
 
-function parsePadShape(lamPad: any): PadShape | undefined {
-  if (!lamPad) return undefined;
-  if (lamPad.LayoutPadRound) {
-    return { kind: "circle", diameter: 2 * Number(lamPad.LayoutPadRound["@_Radius"] ?? 0) };
+const PAD_TAGS = [
+  "LayoutPadRound",
+  "LayoutPadSquare",
+  "LayoutPadRoundedSquare",
+  "LayoutPadRectangle",
+  "LayoutPadRoundedRectangle",
+  "LayoutPadCustom",
+] as const;
+
+// Lamination is a 64-bit layer mask (bit 0 = Top, bit 63 = Bottom); keep it
+// as a BigInt, the values don't fit a JS number.
+const TOP_BIT = 1n;
+const ALL_LAYERS = 0xffffffffffffffffn;
+const lamination = (v: unknown): bigint => {
+  if (v == null) return ALL_LAYERS;
+  try {
+    return BigInt(String(v));
+  } catch {
+    return ALL_LAYERS;
   }
-  if (lamPad.LayoutPadRoundedSquare) {
-    const p = lamPad.LayoutPadRoundedSquare;
+};
+
+interface PadGeom {
+  shape: PadShape;
+  center: Point;
+  rotation: number;
+}
+
+// One pad-shape container (holding a LayoutPad* element) -> shape + centre + rotation.
+function parsePadElement(container: any): PadGeom | undefined {
+  if (!container) return undefined;
+  for (const tag of PAD_TAGS) {
+    const p = container[tag];
+    if (!p) continue;
+    const center = { x: Number(p["@_CenterX"] ?? 0), y: Number(p["@_CenterY"] ?? 0) };
+    const rotation = Number(p["@_Rotation"] ?? 0);
     const w = 2 * Number(p["@_HalfWidth"] ?? 0);
-    return { kind: "roundrect", width: w, height: w, cornerRadius: Number(p["@_Radius"] ?? 0) };
-  }
-  if (lamPad.LayoutPadSquare) {
-    const w = 2 * Number(lamPad.LayoutPadSquare["@_HalfWidth"] ?? 0);
-    return { kind: "rect", width: w, height: w };
+    const h = 2 * Number(p["@_HalfHeight"] ?? p["@_HalfWidth"] ?? 0);
+    const r = Number(p["@_Radius"] ?? 0);
+    switch (tag) {
+      case "LayoutPadRound":
+        return { shape: { kind: "circle", diameter: 2 * r }, center, rotation };
+      case "LayoutPadSquare":
+        return { shape: { kind: "rect", width: w, height: w }, center, rotation };
+      case "LayoutPadRoundedSquare":
+        return { shape: { kind: "roundrect", width: w, height: w, cornerRadius: r }, center, rotation };
+      case "LayoutPadRectangle":
+        return { shape: { kind: "rect", width: w, height: h }, center, rotation };
+      case "LayoutPadRoundedRectangle":
+        return { shape: { kind: "roundrect", width: w, height: h, cornerRadius: r }, center, rotation };
+      case "LayoutPadCustom": {
+        // Custom shape = a CLayoutPadShape group of UB primitives in absolute
+        // coordinates (already rotated), so the pad itself is emitted unrotated.
+        const prims = [];
+        for (const ptag of UB_PRIMITIVE_TAGS) {
+          const items: any[] = [];
+          collectByTag(p.Custom, ptag, items);
+          for (const it of items) {
+            const prim = ubPrimitive(ptag, it);
+            if (prim) prims.push(prim);
+          }
+        }
+        if (prims.length === 0) return undefined;
+        return { shape: { kind: "custom", primitives: prims }, center, rotation: 0 };
+      }
+    }
   }
   return undefined;
 }
 
-function parsePin(pin: any): Pad | undefined {
-  const pt = arr(pin?.Object?.Point)[0];
-  const shape = parsePadShape(pin?.LamPad);
-  if (!pt || !shape) return undefined;
+// THT pins carry one LamPad per layer set (a pad stack). Until padstacks are
+// emitted, use the pad that covers the top layer (else the first).
+function pickLamPad(lamPads: any[]): any {
+  return lamPads.find((lp) => (lamination(lp?.["@_Lamination"]) & TOP_BIT) !== 0n) ?? lamPads[0];
+}
+
+function parsePin(pin: any, bottom: boolean, tht: boolean): Pad | undefined {
+  const container = tht ? pickLamPad(arr(pin?.LamPad)) : arr(pin?.Pad)[0];
+  const geom = parsePadElement(container);
+  if (!geom) return undefined;
   const drill = pin?.LayoutDrillObject;
   return {
     number: ownAttributes(pin).get("NUMBER") ?? "",
-    at: { x: Number(pt["@_X"]), y: Number(pt["@_Y"]) },
-    rotation: Number(pin["@_Rotation"] ?? 0),
-    shape,
-    drillDiameter: drill ? 2 * Number(drill["@_Drill-Radius"] ?? 0) : 0,
+    at: geom.center,
+    rotation: geom.rotation,
+    shape: geom.shape,
+    drillDiameter: tht && drill ? 2 * Number(drill["@_Drill-Radius"] ?? 0) : 0,
+    side: tht ? "both" : bottom ? "bottom" : "top",
   };
 }
+
+const PIN_TAGS: readonly [string, boolean][] = [
+  ["Through-Board-Pin", true],
+  ["SMT-Pin", false],
+  ["NetBridge-Pin", false],
+];
 
 function parseComponent(comp: any): Component {
   const attrs = ownAttributes(comp);
   const name = stripAsc(comp["@_Name"]);
-  const pins: any[] = [];
-  collectByTag(comp.Group, "Through-Board-Pin", pins);
-  const pads = pins.map(parsePin).filter((p): p is Pad => p !== undefined);
+  const bottom = Number(comp["@_Bottom"] ?? 0) !== 0;
+  const pads: Pad[] = [];
+  for (const [tag, tht] of PIN_TAGS) {
+    const pins: any[] = [];
+    collectByTag(comp.Group, tag, pins);
+    for (const pin of pins) {
+      const pad = parsePin(pin, bottom, tht);
+      if (pad) pads.push(pad);
+    }
+  }
   const rp = arr(comp.Group?.RefPoint)[0];
   const origin = rp
     ? { x: Number(rp["@_X"]), y: Number(rp["@_Y"]) }
@@ -168,7 +243,7 @@ function parseComponent(comp: any): Component {
     name,
     origin,
     rotation: Number(comp["@_Rotation"] ?? 0),
-    bottom: Number(comp["@_Bottom"] ?? 0) !== 0,
+    bottom,
     pads,
   };
 }
@@ -190,6 +265,23 @@ interface Collected {
   tracks: Track[];
   components: Component[];
   holes: Hole[];
+  vias: Via[];
+}
+
+function parseVia(item: any): Via | undefined {
+  const pt = arr(item?.Object?.Point)[0];
+  const drill = item?.LayoutDrillObject;
+  if (!pt || !drill) return undefined;
+  const pad = parsePadElement(arr(item?.Pad)[0]);
+  const drillDiameter = 2 * Number(drill["@_Drill-Radius"] ?? 0);
+  const diameter = pad?.shape.kind === "circle" ? pad.shape.diameter : drillDiameter + 300_000;
+  const netName = stripAsc(item["@_NetName"]);
+  return {
+    at: { x: Number(pt["@_X"]), y: Number(pt["@_Y"]) },
+    drillDiameter,
+    diameter,
+    netName: netName || undefined,
+  };
 }
 
 function walkGeometry(node: any, out: Collected): void {
@@ -215,6 +307,11 @@ function walkGeometry(node: any, out: Collected): void {
       for (const item of arr(val as any)) {
         out.components.push(parseComponent(item));
         walkGeometry(item, out); // still collect silk shapes inside the component
+      }
+    } else if (key === "RegularVia") {
+      for (const item of arr(val as any)) {
+        const v = parseVia(item);
+        if (v) out.vias.push(v);
       }
     } else if (key === "LayoutDrillObject") {
       // Only free-standing drills become board-level holes; drills with
@@ -273,7 +370,7 @@ export function parsePcbXml(xml: string): Board {
     rgb: Number(node["@_RGB"] ?? 0),
   }));
 
-  const collected: Collected = { shapes: [], tracks: [], components: [], holes: [] };
+  const collected: Collected = { shapes: [], tracks: [], components: [], holes: [], vias: [] };
   walkGeometry(designSheet, collected);
 
   return {
@@ -291,6 +388,7 @@ export function parsePcbXml(xml: string): Board {
     tracks: collected.tracks,
     components: collected.components,
     holes: collected.holes,
+    vias: collected.vias,
     nets: parseNets(root),
   };
 }

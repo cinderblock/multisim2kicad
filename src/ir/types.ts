@@ -31,17 +31,27 @@ export interface Track {
   end: Point;
 }
 
+// A filled region or stroke making up part of a custom pad (absolute nm).
+export type PadPrimitive =
+  | { kind: "poly"; points: Point[] }
+  | { kind: "arc"; center: Point; start: Point; end: Point; width: number } // CCW start -> end
+  | { kind: "circle"; center: Point; radius: number; width: number; fill: boolean };
+
+// width/height are in the pad's own frame, before `rotation` is applied.
 export type PadShape =
   | { kind: "circle"; diameter: number }
   | { kind: "rect"; width: number; height: number }
-  | { kind: "roundrect"; width: number; height: number; cornerRadius: number };
+  | { kind: "roundrect"; width: number; height: number; cornerRadius: number }
+  | { kind: "custom"; primitives: PadPrimitive[] };
 
 export interface Pad {
   number: string;
   at: Point; // absolute, nm
-  rotation: number; // millionths of a degree
+  rotation: number; // millionths of a degree, CCW in EW's Y-up frame
   shape: PadShape;
   drillDiameter: number; // nm; 0 = no hole (SMD)
+  // Copper side for SMD pads; "both" for through-hole.
+  side: "both" | "top" | "bottom";
 }
 
 export interface Component {
@@ -52,6 +62,14 @@ export interface Component {
   rotation: number; // millionths of a degree (metadata; pads are stored pre-placed)
   bottom: boolean;
   pads: Pad[];
+}
+
+// A via (EW RegularVia): plated drill + round copper ring through the board.
+export interface Via {
+  at: Point; // absolute, nm
+  drillDiameter: number; // nm
+  diameter: number; // copper ring outer diameter, nm
+  netName?: string; // EW's own NetName, when set
 }
 
 // A standalone drill (Stand-Alone="1"): plated -> via, non-plated -> mounting hole.
@@ -81,6 +99,7 @@ export interface Board {
   tracks: Track[];
   components: Component[];
   holes: Hole[];
+  vias: Via[];
   nets: Net[];
 }
 
