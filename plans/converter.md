@@ -103,17 +103,17 @@ until now) is a toy:
 - [x] A1. ewd as dependency, binary input (`ed01de0`).
 - [x] A2. Hidden kicad-cli runner (`eef0b18`).
 - [x] A3. Corpus copy + harness (`a8b80be`).
-- [ ] A4. **Fidelity scorecard** in the harness, beyond "loads": PCB pads
+- [x] A4. **Fidelity scorecard** (`9d7464b`) in the harness, beyond "loads": PCB pads
       resolved / net pins; tracks touching a same-net copper item; schematic
       netlist (`kicad-cli sch export netlist`) vs `.ewnet` / `Ci*`
       netlist (exact diff per net); counts of dropped EW classes. This is the
       definition of "done" for phases C-E.
-- [ ] A5. `bun test` with golden checks on Design1 + a couple of corpus files
+- [x] A5. `bun test` with golden checks (`11b3c7f`) on Design1 + a couple of corpus files
       (scorecard thresholds, not byte snapshots; UUIDs are random).
 
 ### Phase B - ewd: richer parsed objects (work in the ewd repo)
 
-- B1. **`.ewnet` reader** in ewd: UTF-16LE S-expression -> typed
+- [x] B1. **`.ewnet` reader** in ewd, released as ewd 0.3.0 (ewd `66ec466`, `169f5c1`): UTF-16LE S-expression -> typed
   `{ toolInfo, nets[{name, rules}], components[{refdes, device, value,
   package, pins[{number, net, pintype, label}]}], layers }`. Small, pure
   format knowledge. It gives ew-conv an authoritative netlist, pin electrical
@@ -134,6 +134,10 @@ until now) is a toy:
 
 ### Phase C - PCB fidelity on real boards
 
+- [x] C1 + C2 (`198a099`): pad kinds, SMD/custom pads, vias. Remaining from C1:
+  padstacks (THT pins with several LamPads use the top one), per-pad
+  mask/paste flags (`Solder-Paste-Mask` / `Solder-Resist-Mask` semantics
+  unverified).
 - C1. All pad kinds: rectangle, rounded rectangle, custom (polygon ->
   KiCad custom pad), SMD vs THT, per-pad layers (mask/paste), rotation.
 - C2. Vias (non-pin plated drills) + via sizes. Blind/buried if present.
@@ -332,6 +336,60 @@ hierarchy, connectors), since those are what make an output useless today.
   flags (e.g. a child `-Command`) and `--` get bound as the script's params
   ("parameter name '' is ambiguous"). It parses `$args` by hand.
 
+- **(2026-11-11) Scorecard reference netlists.** Multisim's own netlist is
+  in `Ci*` objects: `CiComponent` (refdes = `LocalName`), `CiPort` (pin
+  number CSV at `Attributes > Item > CiaCollString[1].strings[6]`),
+  `CiNode` (net = `LocalName`, members in `Ports > Item@CiID`). Component
+  kinds: virtual connectors/net labels have a single attribute string
+  (`"91"`), ground/supplies have family `POWER_SOURCES`, real parts have the
+  full manufacturer/family record. Hierarchy: one `CiCircuit` per unique
+  sheet; `CiInstComponent` (`SC1`...) instantiates it; flattened refdes are
+  re-numbered per instance (child `Q1,Q2` -> `Q1..Q6`), so flattening needs the
+  instance refdes map (D1).
+- **`.ewnet` is a snapshot.** Compared with the paired `.ewprj` net table
+  (case-folded, Ultiboard upper-cases names) it matches exactly on 3 boards;
+  others drifted (board edited after the last forward annotation; Althea
+  Main's `.ewnet` lists 37 parts vs 126 on the board). Use it as a reference
+  only when nothing better exists.
+- **Ultiboard object facts (2026-11-11):**
+  - Pins: `Through-Board-Pin` (`LamPad` per layer set, `Lamination` 64-bit
+    mask, bit 0 = Top, bit 63 = Bottom), `SMT-Pin` (`Pad`), `NetBridge-Pin`
+    (net ties, `CLayoutNetBridge` components).
+  - Pad elements `LayoutPad{Round,Square,RoundedSquare,Rectangle,
+    RoundedRectangle,Custom}` carry `CenterX/Y`, `Rotation`, `HalfWidth`,
+    `HalfHeight`, `Radius`. Coordinates are absolute (boards are often
+    centred on the origin).
+  - **Rotation is CCW as seen on screen, same as KiCad.** Proven two ways:
+    IC pad rows (pad long axis perpendicular to the row) fit +theta for 3452
+    pads vs 512 for -theta; and a KiCad SVG export of `(at 0 0 30)` shows the
+    pad turned 30 deg CCW on screen. The old emitter negated it (wrong).
+  - Vias: `RegularVia[CLayoutViaStandard]` = point + plated
+    `LayoutDrillObject` + round `Pad`; `Lamination-Active` all-ones or
+    Top|Bottom in the corpus (no blind/buried).
+  - `ObjectID` is not unique (segments of one polyline track share it,
+    copies of a footprint share it, some are 0). Don't dedupe on it.
+  - Custom pads: `LayoutPadCustom > Custom > LayoutGroup[CLayoutPadShape]`
+    of UB primitives in absolute, already-rotated coordinates.
+  - UB primitives: `UBPie`/`UBArc` points are [start, end, centre] + `Radius`,
+    sweep CCW (verified on a "HalfArc" pad's bbox); start == end = full
+    circle. `UBRectangle`/`UBRoundedRectangle`: 4 corners (may be rotated)
+    + optional anchor point. On copper with a `NetName` these are copper
+    areas (C4).
+  - Remaining unresolved net pins (10/6765) are source quirks: shield pins
+    not in the footprint (3-Phase Driver U7.S4-S6), unplaced connectors
+    (Pressure Servo J1, Althea-old Buttons J4), Design1's `POEA` vs pad
+    `POEA+` naming.
+- **NUL bytes in source.** The old emitter used literal `\0` characters as
+  map-key separators, making git/grep treat the file as binary. Use
+  `JSON.stringify([a, b])` keys instead.
+- **Bash heredocs with long Python edit scripts fail** in this harness
+  ("unexpected EOF while looking for matching `'`"). Write the script to the
+  scratchpad with the Write tool and run it.
+- **pcbnew Python (if ever scripted):** `pcbnew.LoadBoard()` turns parser
+  warnings into modal wx dialogs. Call
+  `wx.Log.SetActiveTarget(wx.LogStderr())` before loading (from a sibling
+  thread, verified on KiCad 10.0.6). kicad-cli itself prints them instead.
+
 ## Progress log
 
 - [x] Scaffold (`package.json`, `tsconfig.json`, `.gitignore`,
@@ -419,8 +477,17 @@ hierarchy, connectors), since those are what make an output useless today.
       lib_footprint_issues 917, nonmirrored_text_on_back_layer 693.
 - [x] (2026-11-11) Roadmap to full translator written.
 - [x] (2026-11-11) Roadmap approved; decisions recorded.
-- [ ] **Current step:** corpus expansion (local drives + GitHub) running in
-      background; next B1 (`.ewnet` reader in ewd) then A4 scorecard.
+- [x] (2026-11-11) Corpus expanded: GitHub repos (9 repos, 322 historical
+      versions incl. 50 `.ms13`, in `corpus/github/<repo>/<name>@<date>-<sha>`),
+      S:/T: shares (4 new client files in `corpus/drives/`). C:/P: scans were
+      still running at this point (results in scratchpad `find/`).
+- [x] (2026-11-11) B1 `.ewnet` reader -> ewd 0.3.0 published (provenance).
+- [x] (2026-11-11) A4 scorecard. Baseline (64 designs: 39 sch, 25 pcb):
+      schematic nets exact 0/254; PCB net pins on a pad 473/6765.
+- [x] (2026-11-11) C1/C2 pads + vias: PCB pins on pads 6755/6765.
+- [x] (2026-11-11) A5 tests (12, bun test).
+- [ ] **Current step: D1-D3** (schematic hierarchy, rotation/flip,
+      connectors/labels/junctions).
 
 ## Open questions for the user
 
