@@ -214,6 +214,9 @@ const fontSize = (n: any): number => Math.max(4, Math.min(12, Math.abs(num(n?.["
 // ---------------------------------------------------------------------------
 // Symbols
 
+type PortPins = (portId: string | undefined) => string[];
+let portPins: PortPins = () => [];
+
 interface ParsedPin {
   pin: SymbolPin;
   attachIds: string[];
@@ -261,7 +264,10 @@ function parsePins(pinComp: any, parent: Affine, extraGraphics: SchGraphic[], ra
   }
 
   const name = decodeStr(pinComp["@_PinName"]);
-  const numbers = decodeStr(pinComp["@_PinNumber"]).split(",").map((s) => s.trim()).filter(Boolean);
+  const fromNetlist = portPins(pinComp["@_PortID"] != null ? String(pinComp["@_PortID"]) : undefined);
+  const numbers = fromNetlist.length
+    ? fromNetlist
+    : decodeStr(pinComp["@_PinNumber"]).split(",").map((s) => s.trim()).filter(Boolean);
   if (numbers.length === 0) numbers.push(name || "?");
   return {
     pins: numbers.map((number) => ({ pin: { name, number, at: conn!, dir, length, netId: sourceId || undefined }, attachIds })),
@@ -679,6 +685,7 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
 function toSchInstance(inst: SheetInstance, sheets: SchematicSheet[], design: ReturnType<typeof parseMultisimDesign>): SchInstance {
   const refdes: Record<string, string> = {};
   const pinRemaps: Record<string, Record<string, string>> = {};
+  const units: Record<string, number> = {};
   for (const sh of sheets.filter((x) => x.title === inst.sheet)) {
     for (const sym of sh.symbols) {
       if (!sym.drawnKey) continue;
@@ -686,6 +693,8 @@ function toSchInstance(inst: SheetInstance, sheets: SchematicSheet[], design: Re
       if (final) refdes[`${sh.page}|${sym.drawnKey}`] = final;
       const remap = design.pinRemap(inst, sh.page, sym.drawnKey);
       if (remap) pinRemaps[`${sh.page}|${sym.drawnKey}`] = Object.fromEntries(remap);
+      const unit = design.finalUnit(inst, sh.page, sym.drawnKey);
+      if (unit) units[`${sh.page}|${sym.drawnKey}`] = unit;
     }
   }
   return {
@@ -695,6 +704,7 @@ function toSchInstance(inst: SheetInstance, sheets: SchematicSheet[], design: Re
     parentPage: inst.parentPage,
     refdes,
     pinRemaps,
+    units,
     children: inst.children.map((c) => toSchInstance(c, sheets, design)),
   };
 }
@@ -717,6 +727,16 @@ export function parseSchematicXml(xml: string): Schematic {
 
   const ci = parseCiNetlist(xml);
   const design = parseMultisimDesign(xml);
+  portPins = (portId) => {
+    const port = portId ? design.ci.get(portId) : undefined;
+    if (!port) return [];
+    const colls = [
+      ...arr(port.body?.Attributes?.CiaCollString),
+      ...arr(port.body?.Attributes?.Item).flatMap((it: any) => arr(it?.CiaCollString)),
+    ];
+    const csv = decodeStr(arr(colls[1]?.strings?.Item)[6]?.["@_Value"]);
+    return csv.split(",").map((x) => x.trim()).filter(Boolean);
+  };
   const sheets = designSheets.map((ds: any) => {
     const title = decodeStr(ds["@_Title"]);
     const page = decodeStr(ds["@_PageName"]) || "1";

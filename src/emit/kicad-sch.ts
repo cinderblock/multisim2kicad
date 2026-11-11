@@ -94,9 +94,14 @@ function uniquePins(pins: SymbolPin[]): SymbolPin[] {
   return pins.filter((p) => p.number && !seen.has(p.number) && seen.add(p.number));
 }
 
-function emitLibSymbol(s: SchematicSymbol, libName: string): string {
+function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] = []): string {
   const local = libName.split(":").pop()!;
   const pins = uniquePins(s.pins);
+  const units = [...unitsOf(refs)].sort((a, b) => a[0] - b[0]);
+  const pinLine = (p: SymbolPin, number: string) => {
+    const type = power ? "power_in" : "passive";
+    return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(p.length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(number)} ${FONT}))`;
+  };
   const power = s.kind === "power";
   const lines = [
     `\t\t(symbol ${q(libName)}`,
@@ -114,12 +119,12 @@ function emitLibSymbol(s: SchematicSymbol, libName: string): string {
     `\t\t\t(symbol ${q(`${local}_0_1`)}`,
     ...s.graphics.map(libGraphic).filter((x): x is string => !!x),
     `\t\t\t)`,
-    `\t\t\t(symbol ${q(`${local}_1_1`)}`,
-    ...pins.map((p) => {
-      const type = power ? "power_in" : "passive";
-      return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(p.length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(p.number)} ${FONT}))`;
-    }),
-    `\t\t\t)`,
+    // One body per unit: the same drawing, pins renumbered for that section.
+    ...units.flatMap(([unit, map]) => [
+      `\t\t\t(symbol ${q(`${local}_${unit}_1`)}`,
+      ...pins.map((p) => pinLine(p, map?.[p.number] ?? p.number)),
+      `\t\t\t)`,
+    ]),
     `\t\t\t(embedded_fonts no)`,
     `\t\t)`,
   ];
@@ -136,6 +141,17 @@ function property(name: string, value: string, at: SchPoint, hide: boolean): str
 interface InstanceRef {
   path: string;
   reference: string;
+  unit: number;
+  /** Drawn -> final pin numbers for this instance (multi-section parts). */
+  pinMap?: Record<string, string>;
+}
+
+/** Units this symbol plays across its instances, with each unit's pin renumbering. */
+function unitsOf(refs: InstanceRef[]): Map<number, Record<string, string> | undefined> {
+  const m = new Map<number, Record<string, string> | undefined>();
+  for (const r of refs) if (!m.has(r.unit) || (!m.get(r.unit) && r.pinMap)) m.set(r.unit, r.pinMap);
+  if (m.size === 0) m.set(1, undefined);
+  return m;
 }
 
 function emitInstance(sym: SchematicSymbol, libName: string, uuidStr: string, refs: InstanceRef[], projectName: string): string {
@@ -150,7 +166,7 @@ function emitInstance(sym: SchematicSymbol, libName: string, uuidStr: string, re
     `\t(symbol`,
     `\t\t(lib_id ${q(libName)})`,
     `\t\t(at ${u(s.at.x)} ${u(s.at.y)} ${angle})${mirror ? ` (mirror ${mirror})` : ""}`,
-    `\t\t(unit 1)`,
+    `\t\t(unit ${refs[0]?.unit ?? 1})`,
     `\t\t(exclude_from_sim no)`,
     `\t\t(in_bom ${power ? "no" : "yes"})`,
     `\t\t(on_board ${power ? "no" : "yes"})`,
@@ -160,8 +176,10 @@ function emitInstance(sym: SchematicSymbol, libName: string, uuidStr: string, re
     property("Value", s.value, valAt, !power && !!s.valueText?.hidden),
     property("Footprint", "", s.at, true),
     property("Datasheet", "", s.at, true),
-    ...uniquePins(s.pins).map((p) => `\t\t(pin ${q(p.number)} (uuid ${q(uuid())}))`),
-    `\t\t(instances (project ${q(projectName)} ${refs.map((r) => `(path ${q(r.path)} (reference ${q(r.reference)}) (unit 1))`).join(" ")}))`,
+    ...[...new Set(uniquePins(s.pins).flatMap((p) => [...unitsOf(refs).values()].map((m) => m?.[p.number] ?? p.number)))].map(
+      (n) => `\t\t(pin ${q(n)} (uuid ${q(uuid())}))`,
+    ),
+    `\t\t(instances (project ${q(projectName)} ${refs.map((r) => `(path ${q(r.path)} (reference ${q(r.reference)}) (unit ${r.unit}))`).join(" ")}))`,
     `\t)`,
   ].join("\n");
 }
@@ -433,7 +451,7 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean): string {
     `\t\t(comment 1 ${q(importNote)})`,
     `\t)`,
     `\t(lib_symbols`,
-    ...sheet.symbols.map((s, i) => emitLibSymbol(s, f.libNames[i]!)),
+    ...sheet.symbols.map((s, i) => emitLibSymbol(s, f.libNames[i]!, f.symbolRefs[i]!)),
     `\t)`,
     ...junctions(segments, pinPoints).map((p) => `\t(junction (at ${u(p.x)} ${u(p.y)}) (diameter 0) (color 0 0 0 0) (uuid ${q(uuid())}))`),
     ...segments.filter(([a, b]) => a.x !== b.x || a.y !== b.y).map(([a, b]) => emitWire(a, b)),
@@ -514,7 +532,8 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
           if (path.split("/").length > 2) ref = `${ref}_${inst.name || "X"}`;
         }
       }
-      f.symbolRefs[i]!.push({ path, reference: ref });
+      const k = s.drawnKey ? `${sheet.page}|${s.drawnKey}` : "";
+      f.symbolRefs[i]!.push({ path, reference: ref, unit: (k && inst.units[k]) || 1, pinMap: k ? inst.pinRemaps[k] : undefined });
     });
     for (const sub of f.sub) {
       if (sub.key.startsWith("page:")) {
@@ -548,7 +567,7 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
     // Unreferenced pages (not reachable from the root) are still written,
     // so nothing in the source is silently dropped.
     if (f.symbolRefs.some((r) => r.length === 0) && f !== rootFile) {
-      f.symbolRefs.forEach((r, i) => r.length || r.push({ path: `/${f.uuid}`, reference: f.sheet.symbols[i]!.reference || "U?" }));
+      f.symbolRefs.forEach((r, i) => r.length || r.push({ path: `/${f.uuid}`, reference: f.sheet.symbols[i]!.reference || "U?", unit: 1 }));
     }
     out.set(f.fileName, renderPage(f, sch, f === rootFile));
   }

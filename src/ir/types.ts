@@ -230,6 +230,8 @@ export interface SchInstance {
   refdes: Record<string, string>;
   /** Drawn -> final pin numbers by `${page}|${drawnKey}`. */
   pinRemaps: Record<string, Record<string, string>>;
+  /** 1-based unit of a multi-section part by `${page}|${drawnKey}`. */
+  units: Record<string, number>;
   children: SchInstance[];
 }
 

@@ -88,6 +88,8 @@ export interface MultisimDesign {
   finalRefdes(inst: SheetInstance, page: string, drawnKey: string): string | undefined;
   /** CIR -> IR pin-number remap for a part, if any. */
   pinRemap(inst: SheetInstance, page: string, drawnKey: string): Map<string, string> | undefined;
+  /** 1-based unit (section) of the final part this drawn symbol is, if multi-section. */
+  finalUnit(inst: SheetInstance, page: string, drawnKey: string): number | undefined;
   warnings: string[];
 }
 
@@ -211,6 +213,7 @@ export function parseMultisimDesign(xml: string): MultisimDesign & { ci: Map<str
 
   // CIR path -> (key -> IR refdes), and pin remaps.
   const irMap = new Map<string, Map<string, string>>();
+  const unitMap = new Map<string, number>(); // `${cir}|${key}` -> IRSectionID + 1
   const remaps = new Map<string, Map<string, string>>();
   visit(proj.Extensions, (t, o) => {
     if (t !== "RefDesInfoContainer" || o["@_CIR"] == null) return;
@@ -221,6 +224,8 @@ export function parseMultisimDesign(xml: string): MultisimDesign & { ci: Map<str
       const key = decodeStr(it["@_CIRKey"]);
       const prefix = decodeStr(ri?.["@_IRPrefix"]);
       m.set(key, String(ri?.["@_IRNumber"]) === "-1" ? prefix : `${prefix}${ri?.["@_IRNumber"] ?? ""}`);
+      const sectionId = Number(ri?.["@_IRSectionID"] ?? -1);
+      if (decodeStr(ri?.["@_IRSection"]) && sectionId >= 0) unitMap.set(`${cir}|${key}`, sectionId + 1);
       const a = arr(ri?.PinNumbersCIR?.PinNumbersCIRItem).map((x: any) => decodeStr(x["@_PinNumberCIR"]));
       const b = arr(ri?.PinNumbersIR?.PinNumbersIRItem).map((x: any) => decodeStr(x["@_PinNumberIR"]));
       if (a.length && a.length === b.length && a.some((x, i) => x !== b[i])) remaps.set(`${cir}|${key}`, new Map(a.map((x, i) => [x, b[i]!])));
@@ -265,6 +270,7 @@ export function parseMultisimDesign(xml: string): MultisimDesign & { ci: Map<str
     warnings,
     finalRefdes: (inst, page, key) => irMap.get(inst.cirOf(page))?.get(key),
     pinRemap: (inst, page, key) => remaps.get(`${inst.cirOf(page)}|${key}`),
+    finalUnit: (inst, page, key) => unitMap.get(`${inst.cirOf(page)}|${key}`),
   };
 }
 
