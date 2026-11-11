@@ -488,8 +488,17 @@ function pageNets(edges: [string, string][], linkIds: string[], pinIds: string[]
   const pins = new Map<string, number>();
   for (const id of linkIds) links.set(find(id), (links.get(find(id)) ?? 0) + 1);
   for (const id of pinIds) pins.set(find(id), (pins.get(find(id)) ?? 0) + 1);
+  // Name each net by its smallest member id, so net ids do not depend on the
+  // order edges were visited in.
+  const byId = (a: string, b: string) => (a.length - b.length) || (a < b ? -1 : a > b ? 1 : 0);
+  const label = new Map<string, string>();
+  for (const id of [...parent.keys(), ...linkIds, ...pinIds]) {
+    const r = find(id);
+    const cur = label.get(r);
+    if (cur === undefined || byId(id, cur) < 0) label.set(r, id);
+  }
   return {
-    netOf: (id: string | undefined) => (id ? find(id) : undefined),
+    netOf: (id: string | undefined) => (id ? label.get(find(id)) ?? id : undefined),
     /** Nothing else is connected to this pin in Multisim. */
     isolated: (id: string | undefined) => !!id && !links.get(find(id)) && (pins.get(find(id)) ?? 0) <= 1,
   };
