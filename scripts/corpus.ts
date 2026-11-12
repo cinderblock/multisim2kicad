@@ -131,7 +131,7 @@ async function erc(row: Row, file: string) {
 
 async function drc(row: Row, file: string) {
   const report = `${file}.drc.json`;
-  const r = hidden(["pcb", "drc", "--format", "json", "--output", report, file]);
+  const r = hidden(["pcb", "drc", "--refill-zones", "--format", "json", "--output", report, file]);
   row.kicadExit = r.exit;
   row.dialogs.push(...r.dialogs);
   try {

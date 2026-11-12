@@ -149,11 +149,44 @@ until now) is a toy:
   KiCad custom pad), SMD vs THT, per-pad layers (mask/paste), rotation.
 - C2. Vias (non-pin plated drills) + via sizes. Blind/buried if present.
 - C3. Multilayer stacks: inner layers, correct stackup order.
+  **Design (2026-11-11, from a corpus survey of 208 boards):**
+  `BoardLayerSettings@LayerLaminationPairQuantity` = N -> 2N copper layers:
+  EW 0 = F.Cu, EW 1..2N-2 = In1..In(2N-2).Cu, EW 63 = B.Cu. Every 4-layer
+  corpus board uses EW 1 and 2. Single laminates (`Top/BottomSingle
+  LaminateQuantity`) are 0 everywhere; a few 2-layer boards have stray
+  objects on EW 1 (outside the stack): dropped with a warning. THT pads
+  and vias span all copper layers. `BoardThickness` -> `(general
+  (thickness))`.
+  Non-copper map: 64 RuleAreaLayer (rule areas), 65 outline -> Edge.Cuts,
+  66/67 silk, 68/69 Top3D/Bot3D -> named user layers, 70/71 paste, 72/73
+  mask, 74/75 glue -> Adhes, 76/77 assembly -> Fab, 78 ratsnest / 79 DRC /
+  80 force vectors dropped, 81 comment -> Cmts.User, 82-91 mechanical 1-10
+  and 93+ custom (per-design names such as `01`, `PadEdit`; Althea Main
+  has 13k polylines each on `01`/`02`) -> KiCad user layers named after the
+  EW layer, allocated in order of use; 92 courtyard -> CrtYd.
 - C4. Copper pours `UBPowerPlane` -> `(zone ...)` with net, priority,
   clearance, thermal settings. Validate with `pcb drc --refill-zones`.
+  **Findings:** planes store only the outline (`Object > Point`s, already
+  arc-flattened) plus `NetName`, `LineThickness`, `ReliefSpokeWidth`,
+  `ThermalReliefStyle`, `RemoveSmallIslands` / `RemoveIslandSize`,
+  `RemoveNotEdgeConnectedIslands`, `MayVoid`, and `UBExtension@ClearToArea`
+  etc. No fill is stored, so KiCad zones (unfilled; DRC refills) are an
+  exact match. Board-level `UBPolygon` / `UBRectangle` /
+  `UBRoundedRectangle` / `UBEllipse` / `UBPie` on copper carry the same
+  attributes: they are copper areas -> zones too, with higher priority
+  than planes.
 - C5. Remaining graphics: arcs, pies, polygons, text (as real `gr_text` /
   `fp_text` where EW stores text, not stroked polylines), rule areas ->
   keepout zones.
+  **Findings:** `Arc` (CDrawArc, 197 boards, 18k) = [start, end, centre]
+  points + `Radius`, not emitted yet. Board text is `UBAttribute
+  Tag=TEXT` (`Value`, `TXTFormat@RefPointX/Y, Angle, Mirror,
+  HorizontalSize, VerticalSize, Alignment`), mostly on copper. Rule areas
+  (`LayoutRuleArea`, layer 511): `RuleAreaType` 0 (529) / 1 (10),
+  `ActiveLayersZero..Seven` 64-bit masks, `NetGroups@All` + `CompGroup
+  @Group` net lists. Semantics of type and net groups not confirmed;
+  plan: unambiguous keep-outs -> KiCad rule areas, the rest as named
+  outlines on a user layer, logged.
 - C6. Real footprints: pads/graphics in footprint-local coords with the
   component's rotation/side, so footprints move and flip as a unit.
   Footprint name from the EW package. REF/VALUE fields.
