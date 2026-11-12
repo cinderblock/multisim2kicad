@@ -1,5 +1,6 @@
 import type {
   Board,
+  BoardText,
   Component,
   EwLayer,
   Hole,
@@ -7,12 +8,15 @@ import type {
   Pad,
   PadShape,
   Point,
+  RuleArea,
   Shape,
+  Stackup,
   Track,
   Via,
+  Zone,
 } from "../ir/types.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
-import { points, ubPrimitive, UB_PRIMITIVE_TAGS } from "./ub-geom.ts";
+import { points, primitiveOutline, ubPrimitive, UB_PRIMITIVE_TAGS } from "./ub-geom.ts";
 
 /** Named children of a named child: `kids(n, "Object", "Point")`. */
 const kids = (n: EwElement | undefined, list: string, item: string): EwElement[] =>
@@ -23,6 +27,7 @@ const SHAPE_TAGS = new Set([
   "Rectangle",
   "RoundedRectangle",
   "Ellipse",
+  "Arc",
 ]);
 
 const toPoints = points;
@@ -46,6 +51,12 @@ function toShape(tag: string, item: EwElement): Shape | undefined {
       };
     case "Ellipse":
       return { kind: "ellipse", layer, thickness, points };
+    case "Arc": {
+      // CDrawArc: [start, end, centre], counter-clockwise like UBArc.
+      if (points.length < 3) return undefined;
+      const [start, end, center] = points as [Point, Point, Point];
+      return { kind: "arc", layer, thickness, start, end, center };
+    }
   }
   return undefined;
 }
@@ -229,7 +240,67 @@ interface Collected {
   components: Component[];
   holes: Hole[];
   vias: Via[];
+  zones: Zone[];
+  texts: BoardText[];
+  ruleAreas: RuleArea[];
 }
+
+/** Copper pour settings shared by power planes and copper areas. */
+function toZone(kind: Zone["kind"], item: EwElement, outline: Point[]): Zone {
+  const ext = item.child("UBExtension");
+  return {
+    kind,
+    layer: item.numOr("Layer", -1),
+    netName: item.str("NetName"),
+    outline,
+    clearance: ext?.num("Clearance") ?? 0,
+    minThickness: item.numOr("LineThickness", 0),
+    reliefSpokeWidth: item.numOr("ReliefSpokeWidth", 0),
+    thermalReliefStyle: item.numOr("ThermalReliefStyle", 0),
+    removeIslands: item.bool("RemoveSmallIslands") ?? false,
+    islandArea: item.numOr("RemoveIslandSize", 0),
+    removeNotEdgeConnected: item.bool("RemoveNotEdgeConnectedIslands") ?? false,
+  };
+}
+
+const RULE_LAYER_WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Size", "Seven"]; // sic: "Size"
+
+function toRuleArea(item: EwElement): RuleArea | undefined {
+  const outline = points(item);
+  if (outline.length < 3) return undefined;
+  const groups = item.child("NetGroups");
+  return {
+    type: item.numOr("RuleAreaType", 0),
+    outline,
+    activeLayers: RULE_LAYER_WORDS.map((w) => BigInt.asUintN(64, item.bigint(`ActiveLayers${w}`) ?? 0n)),
+    allNets: groups ? groups.bool("All") ?? false : true,
+    nets: groups?.childrenNamed("CompGroup").map((g) => g.str("Group")) ?? [],
+  };
+}
+
+function toText(item: EwElement): BoardText | undefined {
+  const text = displayText(item.str("Value"));
+  const fmt = item.child("TXTFormat");
+  if (!text || !fmt) return undefined;
+  // The Object points are the text's bounding box; its centre is where the
+  // text sits whatever the alignment code.
+  const box = points(item);
+  const at = box.length >= 4
+    ? { x: (Math.min(...box.map((p) => p.x)) + Math.max(...box.map((p) => p.x))) / 2, y: (Math.min(...box.map((p) => p.y)) + Math.max(...box.map((p) => p.y))) / 2 }
+    : { x: fmt.numOr("RefPointX", 0), y: fmt.numOr("RefPointY", 0) };
+  return {
+    layer: item.numOr("Layer", -1),
+    text,
+    at,
+    angle: fmt.numOr("Angle", 0),
+    mirror: fmt.bool("Mirror") ?? false,
+    width: fmt.numOr("HorizontalSize", 0),
+    height: fmt.numOr("VerticalSize", 0),
+    strokeWidth: item.numOr("LineThickness", 0),
+  };
+}
+
+const UB_AREA_TAGS = new Set(UB_PRIMITIVE_TAGS);
 
 function parseVia(item: EwElement): Via | undefined {
   const pt = kids(item, "Object", "Point")[0];
@@ -247,19 +318,35 @@ function parseVia(item: EwElement): Via | undefined {
   };
 }
 
-function walkGeometry(node: EwElement, out: Collected): void {
+function walkGeometry(node: EwElement, out: Collected, inComponent = false): void {
   for (const item of node.children) {
     const key = item.name;
     if (SHAPE_TAGS.has(key)) {
       const s = toShape(key, item);
       if (s) out.shapes.push(s);
-      walkGeometry(item, out);
+      walkGeometry(item, out, inComponent);
+    } else if (key === "UBPowerPlane") {
+      const outline = points(item);
+      if (outline.length >= 3) out.zones.push(toZone("plane", item, outline));
+    } else if (UB_AREA_TAGS.has(key) && !inComponent) {
+      // Board-level copper area (component-level ones are pad shapes).
+      const prim = ubPrimitive(key, item);
+      const outline = prim && primitiveOutline(prim);
+      if (outline && outline.length >= 3) out.zones.push(toZone("area", item, outline));
+    } else if (key === "LayoutRuleArea" && !inComponent) {
+      const r = toRuleArea(item);
+      if (r) out.ruleAreas.push(r);
+    } else if (key === "UBAttribute" && !inComponent) {
+      if (item.str("Tag") === "TEXT") {
+        const t = toText(item);
+        if (t) out.texts.push(t);
+      }
     } else if (key === "UBTrack") {
       const t = toTrack(item);
       if (t) out.tracks.push(t);
     } else if (key === "UBComponent") {
       out.components.push(parseComponent(item));
-      walkGeometry(item, out); // still collect silk shapes inside the component
+      walkGeometry(item, out, true); // still collect silk shapes inside the component
     } else if (key === "RegularVia") {
       const v = parseVia(item);
       if (v) out.vias.push(v);
@@ -275,9 +362,17 @@ function walkGeometry(node: EwElement, out: Collected): void {
         plated: Number(item.get("Plated") ?? 0) !== 0,
       });
     } else {
-      walkGeometry(item, out);
+      walkGeometry(item, out, inComponent);
     }
   }
+}
+
+/** Copper stack from the board settings: N lamination pairs = 2N layers. */
+function parseStackup(designSheet: EwElement): Stackup {
+  const bs = designSheet.find("BoardLayerSettings");
+  const pairs = Math.max(1, bs?.numOr("LayerLaminationPairQuantity", 1) ?? 1);
+  const inner = Array.from({ length: Math.min(2 * pairs - 2, 62) }, (_, i) => i + 1);
+  return { copper: [0, ...inner, 63], thickness: bs?.numOr("BoardThickness", 1_600_000) ?? 1_600_000 };
 }
 
 export function parsePcbXml(input: XmlInput): Board {
@@ -314,7 +409,7 @@ export function parsePcbXml(input: XmlInput): Board {
     rgb: Number(node.get("RGB") ?? 0),
   }));
 
-  const collected: Collected = { shapes: [], tracks: [], components: [], holes: [], vias: [] };
+  const collected: Collected = { shapes: [], tracks: [], components: [], holes: [], vias: [], zones: [], texts: [], ruleAreas: [] };
   walkGeometry(designSheet, collected);
 
   return {
@@ -328,6 +423,10 @@ export function parsePcbXml(input: XmlInput): Board {
     sheetTitle,
     workArea,
     layers,
+    stackup: parseStackup(designSheet),
+    zones: collected.zones,
+    texts: collected.texts,
+    ruleAreas: collected.ruleAreas,
     shapes: collected.shapes,
     tracks: collected.tracks,
     components: collected.components,

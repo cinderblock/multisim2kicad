@@ -130,6 +130,13 @@ export function ubPrimitive(tag: string, item: EwElement): PadPrimitive | undefi
 
 export const UB_PRIMITIVE_TAGS = ["UBPolygon", "UBRectangle", "UBRoundedRectangle", "UBPie", "UBArc", "UBEllipse"];
 
+/** Filled outline of a primitive (circles flattened); undefined for strokes (arcs). */
+export function primitiveOutline(p: PadPrimitive): Point[] | undefined {
+  if (p.kind === "poly") return p.points;
+  if (p.kind === "circle" && p.fill) return arcPoints(p.center, p.radius, 0, 2 * Math.PI).slice(0, -1);
+  return undefined;
+}
+
 /** Bounding box of a set of primitives. */
 export function primitivesBBox(prims: PadPrimitive[]) {
   const xs: number[] = [];

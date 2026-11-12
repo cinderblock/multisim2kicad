@@ -1,38 +1,9 @@
-import type { Board, Component, Hole, Net, Pad, PadPrimitive, Point, Shape, Track, Via } from "../ir/types.ts";
-import { ewLayerToKicad } from "../util/layer-map.ts";
+import type { Board, BoardText, Component, Hole, Net, Pad, PadPrimitive, Point, RuleArea, Shape, Track, Via, Zone } from "../ir/types.ts";
+import { LayerMap } from "./pcb-layers.ts";
 
 // KiCad 8 board format. Matches the (uuid ...) keyword used throughout
 // (KiCad 7 used (tstamp ...)). KiCad 9/10 read this without complaint.
 const KICAD_VERSION = 20240108;
-
-type LayerRow = readonly [number, string, "signal" | "user" | "power" | "mixed" | "jumper", string?];
-
-const STANDARD_LAYERS: readonly LayerRow[] = [
-  [0,  "F.Cu",      "signal"],
-  [31, "B.Cu",      "signal"],
-  [32, "B.Adhes",   "user", "B.Adhesive"],
-  [33, "F.Adhes",   "user", "F.Adhesive"],
-  [34, "B.Paste",   "user"],
-  [35, "F.Paste",   "user"],
-  [36, "B.SilkS",   "user", "B.Silkscreen"],
-  [37, "F.SilkS",   "user", "F.Silkscreen"],
-  [38, "B.Mask",    "user"],
-  [39, "F.Mask",    "user"],
-  [40, "Dwgs.User", "user", "User.Drawings"],
-  [41, "Cmts.User", "user", "User.Comments"],
-  [42, "Eco1.User", "user", "User.Eco1"],
-  [43, "Eco2.User", "user", "User.Eco2"],
-  [44, "Edge.Cuts", "user"],
-  [45, "Margin",    "user"],
-  [46, "B.CrtYd",   "user", "B.Courtyard"],
-  [47, "F.CrtYd",   "user", "F.Courtyard"],
-  [48, "B.Fab",     "user"],
-  [49, "F.Fab",     "user"],
-  [50, "User.1",    "user"],
-  [51, "User.2",    "user"],
-  [52, "User.3",    "user"],
-  [53, "User.4",    "user"],
-];
 
 // EW uses Y-up math convention; KiCad uses Y-down. Flip Y on emit.
 const NM_PER_MM = 1_000_000;
@@ -157,15 +128,98 @@ function emitPolyline(s: Extract<Shape, { kind: "polyline" }>, layer: string): s
   return out;
 }
 
-function emitShape(shape: Shape): string[] {
-  const layer = ewLayerToKicad(shape.layer);
-  if (!layer) return []; // unmapped EW layer (3D, ratsnest, DRC, page meta, etc.)
+/** Mid point of a counter-clockwise (Y-up) arc from start to end. */
+function ccwMid(center: Point, start: Point, end: Point): Point {
+  const r = Math.hypot(start.x - center.x, start.y - center.y);
+  const a0 = Math.atan2(start.y - center.y, start.x - center.x);
+  let sweep = Math.atan2(end.y - center.y, end.x - center.x) - a0;
+  while (sweep <= 1e-12) sweep += 2 * Math.PI;
+  return { x: center.x + r * Math.cos(a0 + sweep / 2), y: center.y + r * Math.sin(a0 + sweep / 2) };
+}
+
+function emitArcShape(s: Extract<Shape, { kind: "arc" }>, layer: string): string[] {
+  const r = Math.hypot(s.start.x - s.center.x, s.start.y - s.center.y);
+  if (r <= 0) return [];
+  const w = strokeWidthFor(s.thickness, layer);
+  if (Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y) < 1) return [emitCircle(s.center.x, s.center.y, r, w, layer)];
+  const m = ccwMid(s.center, s.start, s.end);
+  return [`\t(gr_arc (start ${fx(s.start.x)} ${fy(s.start.y)}) (mid ${fx(m.x)} ${fy(m.y)}) (end ${fx(s.end.x)} ${fy(s.end.y)}) (stroke (width ${mm(w)}) (type default)) (layer ${q(layer)}) (uuid ${q(uuid())}))`];
+}
+
+function emitShape(shape: Shape, lm: LayerMap): string[] {
+  const layer = lm.kicad(shape.layer);
+  if (!layer) return []; // EW-internal layer (ratsnest, DRC markers, ...)
   switch (shape.kind) {
     case "roundRect":  return emitRoundRect(shape, layer);
     case "rectangle":  return emitRectangle(shape, layer);
     case "polyline":   return emitPolyline(shape, layer);
     case "ellipse":    return emitEllipse(shape, layer);
+    case "arc":        return emitArcShape(shape, layer);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Zones, text, rule areas
+
+const pts = (outline: Point[]) => outline.map((p) => `(xy ${fx(p.x)} ${fy(p.y)})`).join(" ");
+
+/**
+ * EW pour -> KiCad zone (unfilled; KiCad refills). Copper areas outrank
+ * planes, and each zone gets its own priority (KiCad rejects overlapping
+ * zones of equal priority, even on one net); later-drawn areas win. Island removal: EW's "remove not edge connected islands" removes
+ * copper not tied to the net (KiCad mode 0); "remove small islands" alone
+ * maps to KiCad's area threshold mode with KiCad's default area, since
+ * EW's RemoveIslandSize unit is unverified.
+ */
+function emitZone(z: Zone, lm: LayerMap, net: NetRef | undefined, priority: number): string | undefined {
+  const layer = lm.kicad(z.layer);
+  if (!lm.isCopper(layer)) return undefined;
+  const mode = z.removeNotEdgeConnected ? 0 : z.removeIslands ? 2 : 1;
+  const gap = z.clearance > 0 ? z.clearance : 254_000;
+  const spoke = z.reliefSpokeWidth > 0 ? z.reliefSpokeWidth : 254_000;
+  const minT = z.minThickness > 0 ? Math.min(z.minThickness, 1_000_000) : 254_000;
+  return [
+    `\t(zone (net ${net?.idx ?? 0}) (net_name ${q(net?.name ?? "")}) (layer ${q(layer!)}) (uuid ${q(uuid())})`,
+    `\t\t(name ${q(`EW ${z.kind === "plane" ? "power plane" : "copper area"} ${z.netName}`)})`,
+    `\t\t(hatch edge 0.5)`,
+    `\t\t(priority ${priority})`,
+    `\t\t(connect_pads (clearance ${mm(gap)}))`,
+    `\t\t(min_thickness ${mm(minT)}) (filled_areas_thickness no)`,
+    `\t\t(fill (thermal_gap ${mm(gap)}) (thermal_bridge_width ${mm(spoke)}) (island_removal_mode ${mode})${mode === 2 ? " (island_area_min 10)" : ""})`,
+    `\t\t(polygon (pts ${pts(z.outline)}))`,
+    `\t)`,
+  ].join("\n");
+}
+
+function emitText(t: BoardText, lm: LayerMap): string | undefined {
+  const layer = lm.kicad(t.layer);
+  if (!layer) return undefined;
+  const h = t.height > 0 ? t.height : 1_000_000;
+  const w = t.width > 0 ? t.width : h;
+  const thick = t.strokeWidth > 0 ? t.strokeWidth : Math.round(h * 0.15);
+  const a = deg(t.angle);
+  const at = a ? `(at ${fx(t.at.x)} ${fy(t.at.y)} ${+a.toFixed(6)})` : `(at ${fx(t.at.x)} ${fy(t.at.y)})`;
+  return `\t(gr_text ${q(t.text)} ${at} (layer ${q(layer)}) (uuid ${q(uuid())}) (effects (font (size ${mm(h)} ${mm(w)}) (thickness ${mm(thick)}))${t.mirror ? " (justify mirror)" : ""}))`;
+}
+
+/**
+ * EW rule areas become KiCad rule areas that allow everything: the outline,
+ * layers and net list survive (named, for custom DRC rules) without guessing
+ * restrictions whose EW semantics are unconfirmed.
+ */
+function emitRuleArea(r: RuleArea, i: number, lm: LayerMap): string {
+  const nets = r.allNets ? "all nets" : `nets ${r.nets.join(", ") || "(none)"}`;
+  return [
+    `\t(zone (net 0) (net_name "") (layers ${lm.copper.map(q).join(" ")}) (uuid ${q(uuid())})`,
+    `\t\t(name ${q(`EW rule area ${i + 1} (type ${r.type}, ${nets})`)})`,
+    `\t\t(hatch edge 0.5)`,
+    `\t\t(connect_pads (clearance 0))`,
+    `\t\t(min_thickness 0.25) (filled_areas_thickness no)`,
+    `\t\t(keepout (tracks allowed) (vias allowed) (pads allowed) (copperpour allowed) (footprints allowed))`,
+    `\t\t(fill (thermal_gap 0.5) (thermal_bridge_width 0.5))`,
+    `\t\t(polygon (pts ${pts(r.outline)}))`,
+    `\t)`,
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +275,7 @@ function padContains(pad: Pad, p: Point): boolean {
 interface PlacedPad {
   pad: Pad;
   net: NetRef;
-  copper: ("F.Cu" | "B.Cu")[];
+  copper: string[];
 }
 
 /**
@@ -236,6 +290,7 @@ function computeNets(
   vias: Via[],
   pads: PlacedPad[],
   byName: Map<string, NetRef>,
+  lm: LayerMap,
 ): { trackNets: number[]; viaNets: number[] } {
   const trackNets = new Array<number>(tracks.length).fill(0);
   const viaNets = new Array<number>(vias.length).fill(0);
@@ -272,14 +327,14 @@ function computeNets(
   }
   const padAt = (p: Point, layer: string | undefined): PlacedPad | undefined => {
     for (const pp of grid.get(`${Math.floor(p.x / CELL)},${Math.floor(p.y / CELL)}`) ?? []) {
-      if (layer && !pp.copper.includes(layer as "F.Cu" | "B.Cu")) continue;
+      if (layer && !pp.copper.includes(layer)) continue;
       if (padContains(pp.pad, p)) return pp;
     }
     return undefined;
   };
 
   tracks.forEach((t, i) => {
-    const layer = ewLayerToKicad(t.layer);
+    const layer = lm.kicad(t.layer);
     const hit = padAt(t.start, layer) ?? padAt(t.end, layer);
     if (hit) { trackNets[i] = hit.net.idx; queue.push(i); }
   });
@@ -318,10 +373,10 @@ function padReach(pad: Pad): number {
   }
 }
 
-function emitTrack(t: Track, netIdx: number): string | undefined {
-  const layer = ewLayerToKicad(t.layer);
-  // Only copper layers can carry tracks in KiCad
-  if (layer !== "F.Cu" && layer !== "B.Cu") return undefined;
+function emitTrack(t: Track, netIdx: number, lm: LayerMap): string | undefined {
+  const layer = lm.kicad(t.layer);
+  // Only copper layers in the stack can carry tracks.
+  if (!layer || !lm.isCopper(layer)) return undefined;
   return `\t(segment (start ${fx(t.start.x)} ${fy(t.start.y)}) (end ${fx(t.end.x)} ${fy(t.end.y)}) (width ${mm(t.thickness)}) (layer ${q(layer)}) (net ${netIdx}) (uuid ${q(uuid())}))`;
 }
 
@@ -332,8 +387,8 @@ function emitVia(v: Via, netIdx: number): string {
 // ---------------------------------------------------------------------------
 // Footprints
 
-function padCopper(pad: Pad): ("F.Cu" | "B.Cu")[] {
-  return pad.side === "both" ? ["F.Cu", "B.Cu"] : pad.side === "bottom" ? ["B.Cu"] : ["F.Cu"];
+function padCopper(pad: Pad, lm: LayerMap): string[] {
+  return pad.side === "both" ? lm.copper : pad.side === "bottom" ? ["B.Cu"] : ["F.Cu"];
 }
 
 /** Custom-pad primitive in pad-local KiCad coordinates (pad emitted unrotated). */
@@ -444,14 +499,25 @@ function emitHole(h: Hole): string {
 }
 
 export function emitKicadPcb(board: Board): string {
-  const layerLines = STANDARD_LAYERS.map(([num, name, type, friendly]) => {
-    return friendly
-      ? `\t\t(${num} ${q(name)} ${type} ${q(friendly)})`
-      : `\t\t(${num} ${q(name)} ${type})`;
-  }).join("\n");
+  const lm = new LayerMap(board);
+  const layerLines = lm.table
+    .map((l) => (l.userName ? `\t\t(${l.id} ${q(l.name)} ${l.type} ${q(l.userName)})` : `\t\t(${l.id} ${q(l.name)} ${l.type})`))
+    .join("\n");
 
   const { table: netTable, resolve, byName } = buildNets(board.nets);
-  const shapeLines = board.shapes.flatMap(emitShape).join("\n");
+  const shapeLines = board.shapes.flatMap((sh) => emitShape(sh, lm)).join("\n");
+  const planeCount = board.zones.filter((z) => z.kind === "plane").length;
+  let areaIdx = 0;
+  let planeIdx = 0;
+  const zoneLines = board.zones
+    .map((z) => {
+      const priority = z.kind === "plane" ? planeIdx++ : planeCount + areaIdx++;
+      return emitZone(z, lm, byName.get(z.netName.toUpperCase()), priority);
+    })
+    .filter((x): x is string => x !== undefined)
+    .join("\n");
+  const textLines = board.texts.map((t) => emitText(t, lm)).filter((x): x is string => x !== undefined).join("\n");
+  const ruleLines = board.ruleAreas.map((r, i) => emitRuleArea(r, i, lm)).join("\n");
   const footprintLines = board.components.map((c) => emitFootprint(c, resolve)).join("\n");
   const holeLines = board.holes.map(emitHole).join("\n");
 
@@ -459,12 +525,12 @@ export function emitKicadPcb(board: Board): string {
   for (const c of board.components) {
     for (const pad of c.pads) {
       const net = resolve(c.reference, pad.number);
-      if (net) placed.push({ pad, net, copper: padCopper(pad) });
+      if (net) placed.push({ pad, net, copper: padCopper(pad, lm) });
     }
   }
-  const { trackNets, viaNets } = computeNets(board.tracks, board.vias, placed, byName);
+  const { trackNets, viaNets } = computeNets(board.tracks, board.vias, placed, byName, lm);
   const trackLines = board.tracks
-    .map((t, i) => emitTrack(t, trackNets[i]!))
+    .map((t, i) => emitTrack(t, trackNets[i]!, lm))
     .filter((s): s is string => s !== undefined)
     .join("\n");
   const viaLines = board.vias.map((v, i) => emitVia(v, viaNets[i]!)).join("\n");
@@ -479,7 +545,7 @@ export function emitKicadPcb(board: Board): string {
     `\t(generator ${q("ew-conv")})`,
     ``,
     `\t(general`,
-    `\t\t(thickness 1.6)`,
+    `\t\t(thickness ${mm(board.stackup.thickness)})`,
     `\t)`,
     ``,
     `\t(paper ${q("A4")})`,
@@ -505,9 +571,15 @@ export function emitKicadPcb(board: Board): string {
     ``,
     shapeLines,
     ``,
+    textLines,
+    ``,
     trackLines,
     ``,
     viaLines,
+    ``,
+    zoneLines,
+    ``,
+    ruleLines,
     ``,
     `)`,
     ``,

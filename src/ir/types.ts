@@ -22,7 +22,9 @@ export type Shape =
   | { kind: "polyline"; layer: number; thickness: number; points: Point[] }
   | { kind: "rectangle"; layer: number; thickness: number; points: Point[] }
   | { kind: "roundRect"; layer: number; thickness: number; points: Point[]; radius: number }
-  | { kind: "ellipse"; layer: number; thickness: number; points: Point[] };
+  | { kind: "ellipse"; layer: number; thickness: number; points: Point[] }
+  // CDrawArc: counter-clockwise (Y-up) from start to end around center.
+  | { kind: "arc"; layer: number; thickness: number; start: Point; end: Point; center: Point };
 
 export interface Track {
   layer: number;
@@ -89,12 +91,66 @@ export interface Net {
   pins: NetPinRef[];
 }
 
+/** Copper stack, top to bottom, as EW layer numbers (0, 1..2N-2, 63). */
+export interface Stackup {
+  copper: number[];
+  thickness: number; // nm
+}
+
+/**
+ * A copper pour: EW power plane (`UBPowerPlane`) or board-level copper area
+ * (`UBPolygon`, `UBRectangle`, ...). EW stores the outline and fill rules,
+ * never the computed fill.
+ */
+export interface Zone {
+  kind: "plane" | "area";
+  layer: number;
+  netName: string;
+  outline: Point[]; // absolute nm, closed implicitly
+  clearance: number; // nm
+  minThickness: number; // nm (EW LineThickness)
+  reliefSpokeWidth: number; // nm
+  thermalReliefStyle: number; // EW code (2 in every corpus board)
+  removeIslands: boolean;
+  islandArea: number; // nm^2 threshold for RemoveSmallIslands
+  removeNotEdgeConnected: boolean;
+}
+
+/** Free text on the board (`UBAttribute Tag=TEXT`). */
+export interface BoardText {
+  layer: number;
+  text: string;
+  at: Point; // centre of the text box, absolute nm
+  angle: number; // millionths of a degree, CCW
+  mirror: boolean;
+  width: number; // character width, nm
+  height: number; // character height, nm
+  strokeWidth: number; // nm
+}
+
+/**
+ * An Ultiboard rule area (keep-in / keep-out). Semantics of `type` and the
+ * net groups are not confirmed; masks are kept raw.
+ */
+export interface RuleArea {
+  type: number;
+  outline: Point[];
+  /** ActiveLayersZero..Seven, bit i of word w = EW layer 64w + i. */
+  activeLayers: bigint[];
+  allNets: boolean;
+  nets: string[];
+}
+
 export interface Board {
   source: Source;
   projectName: string;
   sheetTitle: string;
   workArea: { left: number; bottom: number; right: number; top: number };
   layers: EwLayer[];
+  stackup: Stackup;
+  zones: Zone[];
+  texts: BoardText[];
+  ruleAreas: RuleArea[];
   shapes: Shape[];
   tracks: Track[];
   components: Component[];

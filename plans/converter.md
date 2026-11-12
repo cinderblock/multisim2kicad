@@ -665,9 +665,25 @@ hierarchy, connectors), since those are what make an output useless today.
       but not the CIR path naming it). Display text is trimmed and
       CRLF->LF via `displayText()` (fast-xml-parser had done that silently
       to every attribute). Main-corpus scorecard unchanged: 1765/1790.
-- [ ] **Next (approved order):** C3-C6 (inner layers, pours, arcs/text,
-      real footprints), D4-D5, E (project linking), F (EW database), G.
-      Also: diagnose the NI sample designs' 71% (drive corpus).
+- [x] (2026-11-11) **C3-C5 first pass.** Per-board `LayerMap`
+      (`src/emit/pcb-layers.ts`): stackup-driven copper (In1..In n), fixed
+      technical layers, named KiCad user layers for 3D / mechanical / custom
+      EW layers. Power planes and board-level copper areas -> KiCad zones
+      (net, clearance, thermal spoke width, island removal; distinct
+      priorities, areas above planes). `Arc` (CDrawArc) emitted. Board text
+      (`UBAttribute TEXT`) -> `gr_text`. Rule areas -> named KiCad rule
+      areas that restrict nothing (semantics unconfirmed). DRC now runs with
+      `--refill-zones`. **24 corpus boards: DRC unconnected items 3894 ->
+      239, violations 17918 -> 17294; pins on pads unchanged.** Renders of
+      Althea Main (F.Cu, In2.Cu) look right.
+- [ ] Remaining C work: C6 (footprint-local graphics, rotation, REF/VALUE
+      placement), padstacks, unverified EW units (`RemoveIslandSize`, text
+      `Angle`), boards still unconnected: Distribution (52),
+      1-Wire-HV-AC (50, unchanged by C3-C5), Althea.old Buttons (52), Brain
+      Adapter (18); one track-net short on Althea Main (net propagation).
+- [ ] **Next (approved order):** C6, D4-D5, E (project linking), F (EW
+      database), G. Also: diagnose the NI sample designs' 71% (drive
+      corpus).
 
 ## Open questions for the user
 
