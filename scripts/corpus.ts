@@ -14,7 +14,7 @@
  *
  * kicad-cli always runs through scripts/run-hidden.ps1 (private desktop).
  *
- *   bun run scripts/corpus.ts [--all] [--filter <substr>] [--corpus <dir>] [--out <dir>]
+ *   bun run scripts/corpus.ts [--all] [--filter <substr>] [--skip <substr>] [--corpus <dir>] [--out <dir>]
  *
  * Default selection: everything under corpus/ except corpus/github/, where
  * only the newest version of each design (by the `@YYYY-MM-DD-sha` suffix)
@@ -31,7 +31,7 @@ import {
   compareNetlists,
   type Netlist,
   type NetlistScore,
-  parseKicadXmlNetlist,
+  parseKicadNetlist,
 } from "../src/ref/netlist-compare.ts";
 
 const KICAD_CLI = process.env.KICAD_CLI ?? "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe";
@@ -46,6 +46,7 @@ const opt = (name: string, dflt: string) => {
 const corpusDir = resolve(opt("--corpus", "corpus"));
 const outRoot = resolve(opt("--out", "out/corpus"));
 const filter = opt("--filter", "");
+const skip = opt("--skip", "");
 
 const DESIGN = /\.(ewprj|ms1\d)$/i;
 
@@ -76,7 +77,10 @@ async function selectInputs(): Promise<string[]> {
     if (!prev || (versioned.exec(prev)![2]! < m[2]!)) latest.set(k, f);
   }
   out.push(...latest.values());
-  return out.filter((f) => !filter || f.toLowerCase().includes(filter.toLowerCase())).sort();
+  return out
+    .filter((f) => !filter || f.toLowerCase().includes(filter.toLowerCase()))
+    .filter((f) => !skip || !f.toLowerCase().includes(skip.toLowerCase()))
+    .sort();
 }
 
 function hidden(args: string[], timeoutSec = 180) {
@@ -148,10 +152,10 @@ function tally(vs: any[]): Record<string, number> {
 }
 
 async function kicadNetlist(file: string): Promise<Netlist | undefined> {
-  const out = `${file}.net.xml`;
-  hidden(["sch", "export", "netlist", "--format", "kicadxml", "--output", out, file]);
+  const out = `${file}.net`;
+  hidden(["sch", "export", "netlist", "--format", "kicadsexpr", "--output", out, file]);
   try {
-    return parseKicadXmlNetlist(await readFile(out, "utf8"));
+    return parseKicadNetlist(await readFile(out, "utf8"));
   } catch {
     return undefined;
   }

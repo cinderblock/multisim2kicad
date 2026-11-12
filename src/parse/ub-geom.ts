@@ -11,12 +11,12 @@
  *   order (the rectangle may be rotated); a 5th point, when present, is an
  *   anchor and is ignored. UBRoundedRectangle adds `Radius`.
  */
+import type { EwElement } from "./doc.ts";
 import type { PadPrimitive, Point } from "../ir/types.ts";
 
-const arr = <T,>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 
-export function points(item: any): Point[] {
-  return arr(item?.Object?.Point).map((p: any) => ({ x: Number(p["@_X"] ?? 0), y: Number(p["@_Y"] ?? 0) }));
+export function points(item: EwElement | undefined): Point[] {
+  return (item?.child("Object")?.childrenNamed("Point") ?? []).map((p) => ({ x: Number(p.get("X") ?? 0), y: Number(p.get("Y") ?? 0) }));
 }
 
 /** Max chord deviation when approximating arcs with straight segments. */
@@ -90,10 +90,10 @@ function unit(a: Point, b: Point): Point {
  * module doesn't know. Filled outlines come back as `poly`; UBArc as `arc`
  * (or `circle` when it closes on itself).
  */
-export function ubPrimitive(tag: string, item: any): PadPrimitive | undefined {
+export function ubPrimitive(tag: string, item: EwElement): PadPrimitive | undefined {
   const pts = points(item);
-  const radius = Number(item?.["@_Radius"] ?? 0);
-  const width = Number(item?.["@_LineThickness"] ?? 0);
+  const radius = Number(item.get("Radius") ?? 0);
+  const width = Number(item.get("LineThickness") ?? 0);
   switch (tag) {
     case "UBPolygon":
       return pts.length >= 3 ? { kind: "poly", points: pts } : undefined;

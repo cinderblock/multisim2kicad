@@ -118,10 +118,17 @@ until now) is a toy:
   package, pins[{number, net, pintype, label}]}], layers }`. Small, pure
   format knowledge. It gives ew-conv an authoritative netlist, pin electrical
   types, and package names.
-- B2. **EW XML document model** in ewd: `parseDesignXml()` -> a lossless
-  typed tree (element, `Class`, attrs, children) plus EW string decoding
-  (`&ASC` / `&UNI` + `_uc` escapes, moved out of ew-conv) and unit helpers.
-  ew-conv stops depending on fast-xml-parser.
+- [x] B2. **EW XML document model** in ewd (ewd `67524e0`): `parseEwXml()`
+  -> `{ declaration, root: EwElement, application }`, `ewXmlText()` back.
+  Purpose-built, no dependencies: byte-identical round-trip on all 592
+  corpus designs (~2 GB XML), ~4x faster than fast-xml-parser. `EwElement`
+  has `cls`, `str` (`&ASC`/`&UNI` decoding), `num`, `bigint`, `bool`,
+  `child`, `childrenNamed`, `at(...)`, `find`, `findAll`, `findByClass`,
+  `closest`, `descendants()`. Also `decodeEwString` / `encodeEwString` and
+  nm unit helpers. ew-conv's parsers all take `XmlInput` (text or a parsed
+  `EwDocument`, via `src/parse/doc.ts`), the schematic path parses once
+  instead of three times, and fast-xml-parser is gone (the KiCad netlist is
+  now read as `kicadsexpr` through `src/util/sexpr.ts`).
 - B3. **Typed design models** in ewd, grown incrementally as ew-conv's
   parsers prove out: `UltiboardDesign` (layers, components + pads in
   footprint-local coords, tracks, vias, planes, nets, rules) and
@@ -242,10 +249,20 @@ hierarchy, connectors), since those are what make an output useless today.
 
 ## Findings / gotchas
 
-- `fast-xml-parser` (defaults + `ignoreAttributes:false`, `attributeNamePrefix:"@_"`)
-  parses the EW XML cleanly with no special configuration. Entity decoding is
-  automatic, so `&amp;ASCTemp` arrives as `&ASCTemp` and the strip becomes a
-  simple `s.startsWith("&ASC")` check.
+- **EW XML dialect** (surveyed over all 592 corpus designs, 2026-11-11):
+  only elements and attributes; no text content, CDATA, comments or DTD;
+  entities `&amp; &quot; &gt; &lt; &apos;` only; every file starts
+  `<?xml version="1.0" encoding="ASCII"?>`. Attribute values hold raw CR/LF
+  (318k occurrences) and, in 45 files, NUL/0x01 bytes (RTF/base64 blobs
+  in `.ms13` samples). EW writes one element per line, `/>` for empty
+  elements. ewd's `parseEwXml` relies on exactly this. (ew-conv used
+  fast-xml-parser until B2; it groups same-named children per parent, so
+  its traversal order was not document order.)
+- **Refactor guard:** `scripts/ir-hashes.ts` hashes canonical parser output
+  (PCB IR, schematic IR, drawing-graph netlist, Ci netlist) per corpus
+  design; `--compare <baseline.json>` lists any design whose output changed.
+  Schematic net ids are now the smallest member id (`c39b60a`), so they no
+  longer depend on traversal order.
 - Coordinate sanity check: `Temp.ewprj` reports `workArea 160.0 x 100.0 mm`,
   consistent with a typical Eurocard-ish PCB. Confirms nm-as-unit assumption.
 - `DesignSheet @DocType` values seen so far: `LAYOUTDESIGN` (Ultiboard).
@@ -566,8 +583,7 @@ hierarchy, connectors), since those are what make an output useless today.
       nothing. Imported 324 new unique files into `corpus/drives/`: 203
       `.ms13`, 7 `.ms11`, 26 `.ewprj`, 86 `.ewnet`, mostly from P:\Backups.
       248 of them are NI Circuit Design Suite 13 sample designs (a laptop
-      backup), which are a broad simulation-oriented test set. Not yet run
-      through the scorecard.
+      backup), which are a broad simulation-oriented test set.
 - [x] (2026-11-11) B1 `.ewnet` reader -> ewd 0.3.0 published (provenance).
 - [x] (2026-11-11) A4 scorecard. Baseline (64 designs: 39 sch, 25 pcb):
       schematic nets exact 0/254; PCB net pins on a pad 473/6765.
@@ -595,9 +611,30 @@ hierarchy, connectors), since those are what make an output useless today.
     Not investigated.
   - `NI_EWB_NET_HIDDEN` pins (CAN Main, 1 net) ignored.
   - Twillbot Distribution: 164/165, not investigated.
-- [ ] **Next (approved order):** B2 (ewd XML document model + string
-      decoding), then C3-C6 (inner layers, pours, arcs/text, real
-      footprints), D4-D5, E (project linking), F (EW database), G.
+- [x] (2026-11-11) Drive corpus scorecard (`--corpus corpus/drives`, 238
+      designs, report in `out/corpus-drives/`): 233 load in KiCad;
+      **schematic nets exact 1642/2300 (71%)**; PCB pins on pads 6437/6505.
+      Much weaker than the main corpus: the NI CDS 13 samples are `.ms13`
+      simulation circuits (instruments, analyses, mixed-signal parts). Not
+      yet diagnosed; logged as the next schematic-fidelity target (see
+      below).
+- [x] (2026-11-11) **B2 done.** ewd `parseEwXml` (ewd `67524e0`, released
+      as ewd **0.4.1**; the v0.4.0 tag exists but its publish run failed on
+      a test that needs the gitignored `samples/`, fixed in `eda2e41`).
+      ew-conv migrated off fast-xml-parser. Verified with
+      `scripts/ir-hashes.ts` against a baseline over all 592 corpus designs:
+      every output difference was traced and all are improvements:
+      `&UNI` strings now decoded in PCB values (`200Ω 5%`), `&UNI`
+      escapes followed by hex-looking text no longer truncated
+      (`ICS‐43434`), 5 Thermal Analysis samples that fast-xml-parser
+      refused (entity expansion limit 1000) now parse, and `Mag Sensor
+      .ms11` gets its final refdes (fast-xml-parser trimmed the sheet title
+      but not the CIR path naming it). Display text is trimmed and
+      CRLF->LF via `displayText()` (fast-xml-parser had done that silently
+      to every attribute). Main-corpus scorecard unchanged: 1765/1790.
+- [ ] **Next (approved order):** C3-C6 (inner layers, pours, arcs/text,
+      real footprints), D4-D5, E (project linking), F (EW database), G.
+      Also: diagnose the NI sample designs' 71% (drive corpus).
 
 ## Open questions for the user
 

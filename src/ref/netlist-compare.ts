@@ -7,7 +7,7 @@
  * set of components first, so parts one side doesn't know about don't count
  * as errors.
  */
-import { XMLParser } from "fast-xml-parser";
+import { atom, headOf, isList, listsNamed, parseSexpr } from "../util/sexpr.ts";
 
 export interface PinRef {
   refdes: string;
@@ -103,19 +103,19 @@ export function compareNetlists(ref: Netlist, got: Netlist): NetlistScore {
   };
 }
 
-const xml = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
-const arr = <T,>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
-
-/** Parse `kicad-cli sch export netlist --format kicadxml` output. */
-export function parseKicadXmlNetlist(text: string): Netlist {
-  const tree = xml.parse(text);
+/** Parse `kicad-cli sch export netlist --format kicadsexpr` output. */
+export function parseKicadNetlist(text: string): Netlist {
   const out: Netlist = new Map();
-  for (const net of arr(tree?.export?.nets?.net)) {
-    const name = String(net["@_name"] ?? net["@_code"]);
-    out.set(
-      name,
-      arr(net.node).map((n: any) => ({ refdes: String(n["@_ref"]), pin: String(n["@_pin"]) })),
-    );
+  const exp = parseSexpr(text).find((x) => headOf(x) === "export");
+  if (!isList(exp)) throw new Error("not a KiCad netlist (no (export ...))");
+  for (const nets of listsNamed(exp, "nets")) {
+    for (const net of listsNamed(nets, "net")) {
+      const name = atom(net, "name") ?? atom(net, "code") ?? "";
+      out.set(
+        name,
+        listsNamed(net, "node").map((n) => ({ refdes: atom(n, "ref") ?? "", pin: atom(n, "pin") ?? "" })),
+      );
+    }
   }
   return out;
 }

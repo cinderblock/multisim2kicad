@@ -21,7 +21,6 @@
  *   the POWER_SOURCES family with a single pin; emitted as power ports whose
  *   name is the Ci refdes (= the net name, e.g. "0", "VCC").
  */
-import { XMLParser } from "fast-xml-parser";
 import type {
   Dihedral,
   SchInstance,
@@ -38,17 +37,13 @@ import type {
   SymbolText,
 } from "../ir/types.ts";
 import { type CiNetlist, parseCiNetlist } from "../ref/ci-netlist.ts";
+import { portPinNumbers } from "../ref/ci-netlist.ts";
+import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 import { type PageIndex, parseMultisimDesign, type SheetInstance } from "./ms-hierarchy.ts";
 
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: "@_",
-});
-
-import { decodeStr } from "./ew-strings.ts";
-export { decodeStr };
-
-const arr = <T,>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+/** Child elements of `n` named `list` > `item` (e.g. `Points` > `Item`). */
+const items = (n: EwElement | undefined, list: string, item = "Item"): EwElement[] =>
+  n?.child(list)?.childrenNamed(item) ?? [];
 const num = (v: unknown, d = 0): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
@@ -65,12 +60,12 @@ interface Affine {
 }
 const IDENTITY: Affine = { m00: 1, m01: 0, m10: 0, m11: 1, m20: 0, m21: 0 };
 
-function affineOf(node: any): Affine {
-  if (!node || node["@_Transformer-M00"] === undefined) return IDENTITY;
+function affineOf(node: EwElement | undefined): Affine {
+  if (!node || node.get("Transformer-M00") === undefined) return IDENTITY;
   return {
-    m00: num(node["@_Transformer-M00"], 1), m01: num(node["@_Transformer-M01"]),
-    m10: num(node["@_Transformer-M10"]), m11: num(node["@_Transformer-M11"], 1),
-    m20: num(node["@_Transformer-M20"]), m21: num(node["@_Transformer-M21"]),
+    m00: num(node.get("Transformer-M00"), 1), m01: num(node.get("Transformer-M01")),
+    m10: num(node.get("Transformer-M10")), m11: num(node.get("Transformer-M11"), 1),
+    m20: num(node.get("Transformer-M20")), m21: num(node.get("Transformer-M21")),
   };
 }
 const apply = (t: Affine, p: SchPoint): SchPoint => ({
@@ -105,28 +100,37 @@ export function flipToDihedral(flip: number): Dihedral {
 // ---------------------------------------------------------------------------
 // Tree walking
 
-/** Collect `tag` elements under `node`, not descending into `skip` keys. */
-function collect(node: any, tag: string, out: any[], skip: ReadonlySet<string>): void {
-  if (node == null || typeof node !== "object") return;
-  if (Array.isArray(node)) {
-    for (const c of node) collect(c, tag, out, skip);
-    return;
+/**
+ * `tag` elements under `node`, in document order. Does not descend into a
+ * match, nor into elements named in `skip`.
+ */
+function collect(node: EwElement, tag: string, skip: ReadonlySet<string>): EwElement[] {
+  const out: EwElement[] = [];
+  const rec = (n: EwElement) => {
+    for (const c of n.children) {
+      if (c.name === tag) out.push(c);
+      else if (!skip.has(c.name)) rec(c);
+    }
+  };
+  rec(node);
+  return out;
+}
+
+/** `<Item Class=X ID=..><X/>` wrappers under `node` (per `collect`), as [body, wrapper ID]. */
+function wrapped(node: EwElement, cls: string, skip: ReadonlySet<string>): [EwElement, string][] {
+  const out: [EwElement, string][] = [];
+  for (const it of collect(node, "Item", skip)) {
+    const body = it.cls === cls ? it.child(cls) : undefined;
+    if (body) out.push([body, it.get("ID") ?? ""]);
   }
-  for (const [key, val] of Object.entries(node)) {
-    if (key.startsWith("@_")) continue;
-    if (key === tag) for (const item of arr(val as any)) out.push(item);
-    else if (!skip.has(key)) collect(val, tag, out, skip);
-  }
+  return out;
 }
 
 /** Direct children of an object's `Objects` list as [class, element, wrapperID]. */
-function children(node: any): [string, any, string][] {
-  const out: [string, any, string][] = [];
-  for (const item of arr(node?.Objects?.Item)) {
-    for (const [k, v] of Object.entries(item ?? {})) {
-      if (k.startsWith("@_")) continue;
-      out.push([k, v, String(item["@_ID"] ?? "")]);
-    }
+function children(node: EwElement): [string, EwElement, string][] {
+  const out: [string, EwElement, string][] = [];
+  for (const item of items(node, "Objects")) {
+    for (const c of item.children) out.push([c.name, c, item.get("ID") ?? ""]);
   }
   return out;
 }
@@ -134,9 +138,9 @@ function children(node: any): [string, any, string][] {
 // ---------------------------------------------------------------------------
 // Graphics
 
-const penWidth = (n: any): number => Math.max(0, num(n?.["@_Pen-Width"]));
+const penWidth = (n: EwElement): number => Math.max(0, num(n?.get("Pen-Width")));
 // Windows brush styles: 0 = solid, 1 = hollow.
-const filled = (n: any): boolean => String(n?.["@_Brush-Style"] ?? "1") === "0";
+const filled = (n: EwElement): boolean => String(n?.get("Brush-Style") ?? "1") === "0";
 
 function ellipsePoints(c: SchPoint, rx: number, ry: number): SchPoint[] {
   const out: SchPoint[] = [];
@@ -148,32 +152,32 @@ function ellipsePoints(c: SchPoint, rx: number, ry: number): SchPoint[] {
 }
 
 /** One drawing object (in its parent's frame after `t`), or undefined if not graphics. */
-function graphicOf(cls: string, n: any, parent: Affine, raw = false): SchGraphic | undefined {
+function graphicOf(cls: string, n: EwElement, parent: Affine, raw = false): SchGraphic | undefined {
   const t = raw ? parent : composeAffine(affineOf(n), parent);
-  if (String(n?.["@_Hidden"] ?? "0") === "1") return undefined;
+  if (String(n?.get("Hidden") ?? "0") === "1") return undefined;
   const w = penWidth(n);
   switch (cls) {
     case "CODLineComp":
-      return { kind: "polyline", points: [apply(t, pt(n["@_pt0X"], n["@_pt0Y"])), apply(t, pt(n["@_pt1X"], n["@_pt1Y"]))], width: w, fill: false };
+      return { kind: "polyline", points: [apply(t, pt(n.get("pt0X"), n.get("pt0Y"))), apply(t, pt(n.get("pt1X"), n.get("pt1Y")))], width: w, fill: false };
     case "CODMultiLineComp":
     case "CODPolygonComp": {
-      const pts = arr(n?.Points?.Item).map((p: any) => apply(t, pt(p["@_X"], p["@_Y"])));
+      const pts = items(n, "Points").map((p) => apply(t, pt(p.get("X"), p.get("Y"))));
       if (pts.length < 2) return undefined;
       if (cls === "CODPolygonComp") pts.push(pts[0]!);
       return { kind: "polyline", points: pts, width: w, fill: cls === "CODPolygonComp" && filled(n) };
     }
     case "CODRectComp": {
-      const p0 = pt(n["@_pt0X"], n["@_pt0Y"]);
-      const p1 = pt(n["@_pt1X"], n["@_pt1Y"]);
+      const p0 = pt(n.get("pt0X"), n.get("pt0Y"));
+      const p1 = pt(n.get("pt1X"), n.get("pt1Y"));
       const axisAligned = Math.abs(t.m01) < 1e-6 && Math.abs(t.m10) < 1e-6;
       if (axisAligned) return { kind: "rect", a: apply(t, p0), b: apply(t, p1), width: w, fill: filled(n) };
       const corners = [p0, { x: p1.x, y: p0.y }, p1, { x: p0.x, y: p1.y }, p0].map((p) => apply(t, p));
       return { kind: "polyline", points: corners, width: w, fill: filled(n) };
     }
     case "CODEllipseComp": {
-      const c = pt(n["@_CenterX"], n["@_CenterY"]);
-      const r1 = num(n["@_Radius1"]);
-      const r2 = num(n["@_Radius2"]);
+      const c = pt(n.get("CenterX"), n.get("CenterY"));
+      const r1 = num(n.get("Radius1"));
+      const r2 = num(n.get("Radius2"));
       if (Math.abs(r1 - r2) < 1e-6) {
         return { kind: "circle", center: apply(t, c), radius: r1 * affineScale(t), width: w, fill: filled(n) };
       }
@@ -182,13 +186,13 @@ function graphicOf(cls: string, n: any, parent: Affine, raw = false): SchGraphic
     case "CIITArcComp":
       return {
         kind: "arc",
-        start: apply(t, pt(n["@_StartX"], n["@_StartY"])),
-        mid: apply(t, pt(n["@_MiddleX"], n["@_MiddleY"])),
-        end: apply(t, pt(n["@_EndX"], n["@_EndY"])),
+        start: apply(t, pt(n.get("StartX"), n.get("StartY"))),
+        mid: apply(t, pt(n.get("MiddleX"), n.get("MiddleY"))),
+        end: apply(t, pt(n.get("EndX"), n.get("EndY"))),
         width: w,
       };
     case "CODTextComp": {
-      const text = decodeStr(n["@_Output"]);
+      const text = displayText(n.str("Output"));
       if (!text) return undefined;
       return { kind: "text", at: apply(t, { x: 0, y: 0 }), text, size: fontSize(n) };
     }
@@ -209,7 +213,7 @@ function composeAffine(child: Affine, parent: Affine): Affine {
 }
 
 /** Multisim font heights are negative pixel heights; map to schematic units. */
-const fontSize = (n: any): number => Math.max(4, Math.min(12, Math.abs(num(n?.["@_Font-Height"], -13)) * 0.4));
+const fontSize = (n: EwElement): number => Math.max(4, Math.min(12, Math.abs(num(n?.get("Font-Height"), -13)) * 0.4));
 
 // ---------------------------------------------------------------------------
 // Symbols
@@ -222,8 +226,8 @@ interface ParsedPin {
   attachIds: string[];
 }
 
-function parsePins(pinComp: any, parent: Affine, extraGraphics: SchGraphic[], raw = false, sourceId = ""): { pins: ParsedPin[]; nameHidden: boolean; numberHidden: boolean } {
-  const child = (n: any, p: Affine) => (raw ? p : composeAffine(affineOf(n), p));
+function parsePins(pinComp: EwElement, parent: Affine, extraGraphics: SchGraphic[], raw = false, sourceId = ""): { pins: ParsedPin[]; nameHidden: boolean; numberHidden: boolean } {
+  const child = (n: EwElement, p: Affine) => (raw ? p : composeAffine(affineOf(n), p));
   const t = child(pinComp, parent);
   let conn: SchPoint | undefined;
   let attachIds: string[] = [];
@@ -232,15 +236,15 @@ function parsePins(pinComp: any, parent: Affine, extraGraphics: SchGraphic[], ra
   let numberHidden = true;
   for (const [cls, n] of children(pinComp)) {
     if (cls === "CIITPinConnectorComp") {
-      conn = apply(child(n, t), pt(n["@_ptCenterX"], n["@_ptCenterY"]));
-      attachIds = arr(n?.ConnectList?.Item).map((i: any) => String(i["@_ID"]));
+      conn = apply(child(n, t), pt(n.get("ptCenterX"), n.get("ptCenterY")));
+      attachIds = items(n, "ConnectList").map((i) => String(i.get("ID")));
     } else if (cls === "CODLineComp") {
       const tt = child(n, t);
-      lines.push([apply(tt, pt(n["@_pt0X"], n["@_pt0Y"])), apply(tt, pt(n["@_pt1X"], n["@_pt1Y"]))]);
+      lines.push([apply(tt, pt(n.get("pt0X"), n.get("pt0Y"))), apply(tt, pt(n.get("pt1X"), n.get("pt1Y")))]);
     } else if (cls === "CIITPinSymTextCompName") {
-      if (String(n["@_Hidden"] ?? "0") !== "1" && decodeStr(n["@_Output"])) nameHidden = false;
+      if (String(n.get("Hidden") ?? "0") !== "1" && n.str("Output")) nameHidden = false;
     } else if (cls === "CIITPinSymTextCompNumber") {
-      if (String(n["@_Hidden"] ?? "0") !== "1" && decodeStr(n["@_Output"])) numberHidden = false;
+      if (String(n.get("Hidden") ?? "0") !== "1" && n.str("Output")) numberHidden = false;
     } else {
       const g = graphicOf(cls, n, t, raw);
       if (g) extraGraphics.push(g);
@@ -263,11 +267,11 @@ function parsePins(pinComp: any, parent: Affine, extraGraphics: SchGraphic[], ra
     }
   }
 
-  const name = decodeStr(pinComp["@_PinName"]);
-  const fromNetlist = portPins(pinComp["@_PortID"] != null ? String(pinComp["@_PortID"]) : undefined);
+  const name = displayText(pinComp.str("PinName"));
+  const fromNetlist = portPins(pinComp.get("PortID"));
   const numbers = fromNetlist.length
     ? fromNetlist
-    : decodeStr(pinComp["@_PinNumber"]).split(",").map((s) => s.trim()).filter(Boolean);
+    : pinComp.str("PinNumber").split(",").map((s) => s.trim()).filter(Boolean);
   if (numbers.length === 0) numbers.push(name || "?");
   return {
     pins: numbers.map((number) => ({ pin: { name, number, at: conn!, dir, length, netId: sourceId || undefined }, attachIds })),
@@ -276,11 +280,11 @@ function parsePins(pinComp: any, parent: Affine, extraGraphics: SchGraphic[], ra
   };
 }
 
-function symbolText(n: any, raw: boolean): SymbolText | undefined {
+function symbolText(n: EwElement | undefined, raw: boolean): SymbolText | undefined {
   if (!n) return undefined;
-  const text = decodeStr(n["@_Output"]);
+  const text = displayText(n.str("Output"));
   const at = raw ? { x: 0, y: 0 } : apply(affineOf(n), { x: 0, y: 0 });
-  return { text, at, hidden: String(n["@_Hidden"] ?? "0") === "1" || !text };
+  return { text, at, hidden: String(n.get("Hidden") ?? "0") === "1" || !text };
 }
 
 interface Placed {
@@ -289,7 +293,7 @@ interface Placed {
   fallback: SchPoint; // Transformer-M20/M21, used when no pin is attached
 }
 
-function parseSymbolLike(comp: any, raw = false): Placed {
+function parseSymbolLike(comp: EwElement, raw = false): Placed {
   const graphics: SchGraphic[] = [];
   const parsed: ParsedPin[] = [];
   let anyNameShown = false;
@@ -328,7 +332,7 @@ function parseSymbolLike(comp: any, raw = false): Placed {
       value: valueText?.text ?? "",
       kind: "part",
       at: { x: 0, y: 0 },
-      transform: flipToDihedral(num(comp["@_OrientationFlip"])),
+      transform: flipToDihedral(num(comp.get("OrientationFlip"))),
       graphics,
       pins: parsed.map((p) => p.pin),
       refText,
@@ -337,7 +341,7 @@ function parseSymbolLike(comp: any, raw = false): Placed {
       showPinNumbers: anyNumberShown,
     },
     attach,
-    fallback: pt(comp["@_Transformer-M20"], comp["@_Transformer-M21"]),
+    fallback: pt(comp.get("Transformer-M20"), comp.get("Transformer-M21")),
   };
 }
 
@@ -412,8 +416,8 @@ export const placementStats = { symbols: 0, pins: 0, pinsOnTarget: 0, raw: 0, co
  * by OrientationFlip around an unrecorded pivot. Parse both readings and keep
  * whichever lands more pins on their wiring attachment points.
  */
-function parsePlaced(comp: any, pinPts: Map<string, SchPoint>): Placed {
-  const flipD = flipToDihedral(num(comp["@_OrientationFlip"]));
+function parsePlaced(comp: EwElement, pinPts: Map<string, SchPoint>): Placed {
+  const flipD = flipToDihedral(num(comp.get("OrientationFlip")));
   const composed = parseSymbolLike(comp, false);
   const fc = fit(composed, pinPts, { a: 1, b: 0, c: 0, d: 1 });
   const raw = parseSymbolLike(comp, true);
@@ -449,13 +453,13 @@ const SYMBOLISH = new Set([
   "Background",
 ]);
 
-const pinMods = (pinComp: any): { mod: string; value: string }[] =>
-  arr(pinComp?.ElectricalObject?.ModifierInfo?.Element).flatMap((e: any) =>
-    arr(e.Item).map((i: any) => ({ mod: decodeStr(e["@_NetModifier"]), value: decodeStr(i["@_Value"]) })),
+const pinMods = (pinComp: EwElement): { mod: string; value: string }[] =>
+  (pinComp.at("ElectricalObject", "ModifierInfo")?.childrenNamed("Element") ?? []).flatMap((e) =>
+    e.childrenNamed("Item").map((i) => ({ mod: e.str("NetModifier"), value: i.str("Value") })),
   );
 
 /** First pin's net-modifier value of the given kind, for connector-like objects. */
-function connectorModValue(comp: any, mod: string): string {
+function connectorModValue(comp: EwElement, mod: string): string {
   for (const [cls, n] of children(comp)) {
     if (cls !== "CIITPinSymbolComp") continue;
     const m = pinMods(n).find((x) => x.mod === mod);
@@ -504,39 +508,35 @@ function pageNets(edges: [string, string][], linkIds: string[], pinIds: string[]
   };
 }
 
-function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): SchematicSheet {
+function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex): SchematicSheet {
   const nets = pageNets(pageIndex?.edges ?? [], pageIndex?.links.map((l) => l.id) ?? [], pageIndex?.pins.map((p) => p.id) ?? []);
   // Sheet-level pin attachment points.
   const pinPts = new Map<string, SchPoint>();
-  const wrappers: any[] = [];
-  collect(designSheet, "Item", wrappers, new Set(["CIITSymbolComp", "CVirtualConnector", "DesignSheet"]));
-  for (const w of wrappers) {
-    if (w?.["@_Class"] === "CODPinComp" && w.CODPinComp) {
-      pinPts.set(String(w["@_ID"]), pt(w.CODPinComp["@_CenterX"], w.CODPinComp["@_CenterY"]));
-    }
+  const pinSkip = new Set(["CIITSymbolComp", "CVirtualConnector", "DesignSheet"]);
+  for (const [c, id] of wrapped(designSheet, "CODPinComp", pinSkip)) {
+    pinPts.set(id, pt(c.get("CenterX"), c.get("CenterY")));
   }
   // Copy-pasted parts keep stale CODPinComp centres while their wires carry
   // the paste offset in their own transform. Where a wire ends on a pin point
   // (Connect1 = first point, Connect2 = last), that wire end is the truth.
-  for (const w of wrappers) {
-    if (w?.["@_Class"] !== "CIITLinkComp" || !w.CIITLinkComp) continue;
-    const l = w.CIITLinkComp;
+  for (const [l] of wrapped(designSheet, "CIITLinkComp", pinSkip)) {
     const t = affineOf(l);
-    const ptsL = arr(l?.Points?.Item).map((q: any) => apply(t, pt(q["@_X"], q["@_Y"])));
+    const ptsL = items(l, "Points").map((q) => apply(t, pt(q.get("X"), q.get("Y"))));
     if (ptsL.length < 2) continue;
-    for (const [attr, p] of [["@_Connect1", ptsL[0]!], ["@_Connect2", ptsL[ptsL.length - 1]!]] as const) {
-      const id = String(l[attr] ?? "");
+    for (const [attr, p] of [["Connect1", ptsL[0]!], ["Connect2", ptsL[ptsL.length - 1]!]] as const) {
+      const id = l.get(attr) ?? "";
       if (id && id !== "0" && pinPts.has(id)) pinPts.set(id, p);
     }
   }
 
   const symbols: SchematicSymbol[] = [];
-  const comps: any[] = [];
-  collect(designSheet, "CIITSymbolComp", comps, SYMBOLISH);
-  collect(designSheet, "CIITAnimationSymbolComp", comps, SYMBOLISH);
+  const comps = [
+    ...collect(designSheet, "CIITSymbolComp", SYMBOLISH),
+    ...collect(designSheet, "CIITAnimationSymbolComp", SYMBOLISH),
+  ];
   for (const comp of comps) {
     const placed = parsePlaced(comp, pinPts);
-    const ciComp = ci.componentsById.get(String(comp["@_CiComponent"] ?? ""));
+    const ciComp = ci.componentsById.get(String(comp.get("CiComponent") ?? ""));
     if (ciComp?.kind === "power" && placed.symbol.pins.length === 1) {
       placed.symbol.kind = "power";
       // The net it drives: the pin's global modifier (what Multisim joins on).
@@ -548,17 +548,15 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
     if (placed.symbol.kind === "power" && placed.symbol.pins[0] && nets.isolated(placed.symbol.pins[0].netId)) {
       placed.symbol.floating = true;
     }
-    if (ciComp) placed.symbol.drawnKey = ciComp.refdes + decodeStr(comp["@_DBComponentSectionName"]);
+    if (ciComp) placed.symbol.drawnKey = ciComp.refdes + comp.str("DBComponentSectionName");
     symbols.push(placed.symbol);
   }
 
   // Named connectors -> labels at their attachment point.
   const labels: SchematicLabel[] = [];
-  const connectors: [string, any][] = [];
+  const connectors: [string, EwElement][] = [];
   for (const cls of ["CVirtualConnector", "CIITHierConnector", "CIITOffPageConnector"]) {
-    const found: any[] = [];
-    collect(designSheet, cls, found, SYMBOLISH);
-    for (const f of found) connectors.push([cls, f]);
+    for (const f of collect(designSheet, cls, SYMBOLISH)) connectors.push([cls, f]);
   }
   for (const [cls, c] of connectors) {
     const placed = parsePlaced(c, pinPts);
@@ -573,7 +571,7 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
             connectorModValue(c, "NI_EWB_NET_GLOBAL") ||
             connectorModValue(c, "NI_EWB_NET_VIRTUAL") ||
             s.reference ||
-            decodeStr(c["@_Name"]);
+            c.str("Name");
     if (!pin || !name) continue;
     const anchorLocal = applyD(s.transform, pin.at);
     const anchor = pin.attach ?? { x: s.at.x + anchorLocal.x, y: s.at.y + anchorLocal.y };
@@ -586,7 +584,7 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
     const kind =
       cls === "CIITHierConnector"
         ? "hierarchical"
-        : cls === "CIITOffPageConnector" || String(c["@_Global"] ?? "1") === "1" || decodeStr(c["@_Type"]).includes("GLOBAL")
+        : cls === "CIITOffPageConnector" || String(c.get("Global") ?? "1") === "1" || c.str("Type").includes("GLOBAL")
           ? "global"
           : "local";
     labels.push({ name, at: anchor, kind, dir, netId: nets.netOf(pin.netId), floating: nets.isolated(pin.netId) });
@@ -595,14 +593,7 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
   // Hierarchical blocks -> sheet symbols. KiCad sheet pins must sit on the
   // sheet rectangle, so the rectangle spans the block body and its pin tips.
   const blocks: SheetBlock[] = [];
-  const macros: any[] = [];
-  const macroItems: any[] = [];
-  collect(designSheet, "Item", macroItems, SYMBOLISH);
-  for (const it of macroItems) if (it?.["@_Class"] === "CIITMacroComponent" && it.CIITMacroComponent) {
-    it.CIITMacroComponent["@_ID"] = it["@_ID"];
-    macros.push(it.CIITMacroComponent);
-  }
-  for (const m of macros) {
+  for (const [m, macroId] of wrapped(designSheet, "CIITMacroComponent", SYMBOLISH)) {
     const placed = parsePlaced(m, pinPts);
     const s = placed.symbol;
     const toSheet = (q: SchPoint) => {
@@ -627,8 +618,8 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
     const a = { x: Math.min(...all.map((q) => q.x)), y: Math.min(...all.map((q) => q.y)) };
     const b = { x: Math.max(...all.map((q) => q.x)), y: Math.max(...all.map((q) => q.y)) };
     blocks.push({
-      id: String(m["@_ID"] ?? ""),
-      childSheet: decodeStr(m.HierBlock?.CHierBlock?.["@_FileName"]),
+      id: macroId,
+      childSheet: m.at("HierBlock", "CHierBlock")?.str("FileName") ?? "",
       a,
       b,
       pins: s.pins.map((pin, i) => ({ name: pinNames.get(pin) ?? pin.name, at: pinPos[i]!, attach: pin.attach })),
@@ -637,38 +628,30 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
 
   // Wires and user net names.
   const wires: SchematicWire[] = [];
-  const linkItems: any[] = [];
-  collect(designSheet, "Item", linkItems, SYMBOLISH);
-  const links = linkItems.filter((it) => it?.["@_Class"] === "CIITLinkComp" && it.CIITLinkComp).map((it) => {
-    it.CIITLinkComp["@_ID"] = it["@_ID"];
-    return it.CIITLinkComp;
-  });
-  for (const l of links) {
+  for (const [l, linkId] of wrapped(designSheet, "CIITLinkComp", SYMBOLISH)) {
     // Links carry their own transform (copy/paste offsets).
     const lt = affineOf(l);
-    const points = arr(l?.Points?.Item).map((p: any) => apply(lt, pt(p["@_X"], p["@_Y"])));
+    const points = items(l, "Points").map((p) => apply(lt, pt(p.get("X"), p.get("Y"))));
     if (points.length < 2) continue;
-    wires.push({ points, netId: nets.netOf(String(l["@_ID"] ?? "")) });
-    for (const el of arr(l?.ElectricalObject?.ModifierInfo?.Element)) {
-      if (decodeStr(el?.["@_NetModifier"]) !== "NI_EWB_NET_NAME") continue;
-      const name = decodeStr(arr(el.Item)[0]?.["@_Value"]);
-      if (name) labels.push({ name, at: points[0]!, kind: "local", dir: { x: 1, y: 0 }, netId: nets.netOf(String(l["@_ID"] ?? "")) });
+    wires.push({ points, netId: nets.netOf(linkId) });
+    for (const el of l.at("ElectricalObject", "ModifierInfo")?.childrenNamed("Element") ?? []) {
+      if (el.str("NetModifier") !== "NI_EWB_NET_NAME") continue;
+      const name = el.child("Item")?.str("Value") ?? "";
+      if (name) labels.push({ name, at: points[0]!, kind: "local", dir: { x: 1, y: 0 }, netId: nets.netOf(linkId) });
     }
   }
 
   // Free text on the sheet (not inside symbols / the title block).
   const texts: SchematicText[] = [];
-  const textComps: any[] = [];
-  collect(designSheet, "CODTextComp", textComps, SYMBOLISH);
-  for (const t of textComps) {
-    const text = decodeStr(t["@_Output"]);
-    if (text && String(t["@_Hidden"] ?? "0") !== "1") texts.push({ text, at: apply(affineOf(t), { x: 0, y: 0 }), size: fontSize(t) });
+  for (const t of collect(designSheet, "CODTextComp", SYMBOLISH)) {
+    const text = displayText(t.str("Output"));
+    if (text && String(t.get("Hidden") ?? "0") !== "1") texts.push({ text, at: apply(affineOf(t), { x: 0, y: 0 }), size: fontSize(t) });
   }
 
   // Page size: WorkArea is nm at the nominal 0.25 mm/unit; else fit content.
   const nmPerUnit = 250_000;
-  let width = (num(designSheet["@_WorkAreaRight"]) - num(designSheet["@_WorkAreaLeft"])) / nmPerUnit;
-  let height = (num(designSheet["@_WorkAreaTop"]) - num(designSheet["@_WorkAreaBottom"])) / nmPerUnit;
+  let width = (num(designSheet.get("WorkAreaRight")) - num(designSheet.get("WorkAreaLeft"))) / nmPerUnit;
+  let height = (num(designSheet.get("WorkAreaTop")) - num(designSheet.get("WorkAreaBottom"))) / nmPerUnit;
   if (!(width > 0 && height > 0)) {
     const xs = wires.flatMap((w) => w.points.map((p) => p.x)).concat(symbols.map((s) => s.at.x));
     const ys = wires.flatMap((w) => w.points.map((p) => p.y)).concat(symbols.map((s) => s.at.y));
@@ -676,8 +659,8 @@ function parseSheet(designSheet: any, ci: CiNetlist, pageIndex?: PageIndex): Sch
     height = Math.max(840, ...ys.map((y) => y + 40));
   }
 
-  const title = decodeStr(designSheet["@_Title"]);
-  const page = decodeStr(designSheet["@_PageName"]) || "1";
+  const title = designSheet.str("Title");
+  const page = designSheet.str("PageName") || "1";
   return {
     name: title,
     title,
@@ -718,49 +701,42 @@ function toSchInstance(inst: SheetInstance, sheets: SchematicSheet[], design: Re
   };
 }
 
-export function parseSchematicXml(xml: string): Schematic {
-  const tree = parser.parse(xml);
-
-  if (tree.ElectronicsWorkbench) {
+export function parseSchematicXml(input: XmlInput): Schematic {
+  const doc = docOf(input);
+  if (doc.application === "ultiboard") {
     throw new Error("input is an Ultiboard PCB; use the PCB converter (parsePcbXml)");
   }
-  const root = tree.MSMElectronicsWorkbench;
-  if (!root) throw new Error("not a Multisim schematic XML file");
+  if (doc.application !== "multisim") throw new Error("not a Multisim schematic XML file");
+  const root = doc.root;
 
-  const creator = root.history?.creator ?? {};
-  const project = root.Project ?? {};
-  const designSheets = arr(project.UniqueSheets?.SheetInfos?.SheetContainer)
-    .map((sc: any) => sc?.Sheet?.Variable?.DesignSheet)
-    .filter(Boolean);
+  const creator = root.at("history", "creator");
+  const project = root.child("Project");
+  const designSheets = (project?.at("UniqueSheets", "SheetInfos")?.childrenNamed("SheetContainer") ?? [])
+    .map((sc) => sc.at("Sheet", "Variable", "DesignSheet"))
+    .filter((ds): ds is EwElement => ds != null);
   if (designSheets.length === 0) throw new Error("no DesignSheet element found");
 
-  const ci = parseCiNetlist(xml);
-  const design = parseMultisimDesign(xml);
+  const ci = parseCiNetlist(doc);
+  const design = parseMultisimDesign(doc);
   portPins = (portId) => {
     const port = portId ? design.ci.get(portId) : undefined;
-    if (!port) return [];
-    const colls = [
-      ...arr(port.body?.Attributes?.CiaCollString),
-      ...arr(port.body?.Attributes?.Item).flatMap((it: any) => arr(it?.CiaCollString)),
-    ];
-    const csv = decodeStr(arr(colls[1]?.strings?.Item)[6]?.["@_Value"]);
-    return csv.split(",").map((x) => x.trim()).filter(Boolean);
+    return port ? portPinNumbers(port.body) : [];
   };
-  const sheets = designSheets.map((ds: any) => {
-    const title = decodeStr(ds["@_Title"]);
-    const page = decodeStr(ds["@_PageName"]) || "1";
+  const sheets = designSheets.map((ds) => {
+    const title = ds.str("Title");
+    const page = ds.str("PageName") || "1";
     return parseSheet(ds, ci, design.pages.find((p) => p.title === title && p.page === page));
   });
   const rootSheet = design.rootTitle || sheets[0]!.title;
 
   return {
     source: {
-      application: creator["@_application"] ?? "unknown",
-      versionMajor: num(creator["@_versionMajor"]),
-      versionMinor: num(creator["@_versionMinor"]),
-      schema: num(root["@_Schema"]),
+      application: creator?.get("application") ?? "unknown",
+      versionMajor: num(creator?.get("versionMajor")),
+      versionMinor: num(creator?.get("versionMinor")),
+      schema: num(root.get("Schema")),
     },
-    projectName: decodeStr(project["@_Name"]),
+    projectName: project?.str("Name") ?? "",
     rootSheet,
     sheets,
     root: toSchInstance(design.root, sheets, design),

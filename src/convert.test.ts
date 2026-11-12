@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { parseEwXml } from "electronics-workbench-decoder";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
@@ -10,16 +11,14 @@ import { parseCiNetlist } from "./ref/ci-netlist.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import { checkSexp } from "./util/check-sexp.ts";
 
+const el = (xml: string) => parseEwXml(xml).root;
 const sample = (name: string) => readFileSync(join(import.meta.dir, "..", "samples", name), "utf8");
 
 describe("ub-geom", () => {
   test("pie sweeps counter-clockwise from start to end", () => {
     const c = { x: 0, y: 0 };
     // Half pie from +x to -x CCW must pass through +y (upper half).
-    const prim = ubPrimitive("UBPie", {
-      "@_Radius": "1000",
-      Object: { Point: [{ "@_X": "1000", "@_Y": "0" }, { "@_X": "-1000", "@_Y": "0" }, { "@_X": "0", "@_Y": "0" }] },
-    });
+    const prim = ubPrimitive("UBPie", el(`<UBPie Radius="1000"><Object><Point X="1000" Y="0"/><Point X="-1000" Y="0"/><Point X="0" Y="0"/></Object></UBPie>`));
     expect(prim?.kind).toBe("poly");
     const ys = prim?.kind === "poly" ? prim.points.map((p) => p.y) : [];
     expect(Math.max(...ys)).toBeCloseTo(1000, 0);
@@ -29,11 +28,7 @@ describe("ub-geom", () => {
   });
 
   test("arc with start == end is a full circle", () => {
-    const prim = ubPrimitive("UBArc", {
-      "@_Radius": "500",
-      "@_LineThickness": "100",
-      Object: { Point: [{ "@_X": "500", "@_Y": "0" }, { "@_X": "500", "@_Y": "0" }, { "@_X": "0", "@_Y": "0" }] },
-    });
+    const prim = ubPrimitive("UBArc", el(`<UBArc Radius="500" LineThickness="100"><Object><Point X="500" Y="0"/><Point X="500" Y="0"/><Point X="0" Y="0"/></Object></UBArc>`));
     expect(prim).toEqual({ kind: "circle", center: { x: 0, y: 0 }, radius: 500, width: 100, fill: false });
   });
 

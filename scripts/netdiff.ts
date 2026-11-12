@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import { loadDesign } from "../src/load.ts";
 import { convertSch } from "../src/main.ts";
 import { flattenNetlist, parseMultisimDesign } from "../src/parse/ms-hierarchy.ts";
-import { parseKicadXmlNetlist } from "../src/ref/netlist-compare.ts";
+import { parseKicadNetlist } from "../src/ref/netlist-compare.ts";
 
 const [input, outArg] = Bun.argv.slice(2);
 if (!input) {
@@ -24,13 +24,13 @@ const log = console.log;
 console.log = () => {};
 const sch = await convertSch(input, xml, outDir);
 console.log = log;
-const netFile = `${sch}.net.xml`;
+const netFile = `${sch}.net`;
 Bun.spawnSync([
   "pwsh", "-NoProfile", "-File", resolve(import.meta.dir, "run-hidden.ps1"), "-TimeoutSec", "120", "--",
   process.env.KICAD_CLI ?? "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe",
-  "sch", "export", "netlist", "--format", "kicadxml", "--output", netFile, sch,
+  "sch", "export", "netlist", "--format", "kicadsexpr", "--output", netFile, sch,
 ]);
-const got = parseKicadXmlNetlist(await readFile(netFile, "utf8"));
+const got = parseKicadNetlist(await readFile(netFile, "utf8"));
 const ref = flattenNetlist(parseMultisimDesign(xml));
 
 const k = (p: { refdes: string; pin: string }) => `${p.refdes}.${p.pin}`;

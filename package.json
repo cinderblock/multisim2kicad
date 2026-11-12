@@ -13,8 +13,7 @@
     "corpus": "bun run scripts/corpus.ts"
   },
   "dependencies": {
-    "electronics-workbench-decoder": "^0.3.0",
-    "fast-xml-parser": "^4.5.0"
+    "electronics-workbench-decoder": "^0.4.1"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -3,6 +3,7 @@
  *
  *   bun run scripts/ir-hashes.ts [--corpus <dir>] [--filter <substr>] > hashes.json
  *   bun run scripts/ir-hashes.ts --compare hashes.json
+ *   bun run scripts/ir-hashes.ts --filter <one design> --dump   (canonical JSON)
  *
  * Covers the PCB and schematic IR, the drawing-graph reference netlist and the
  * Ci* netlist, in canonical form (unordered collections sorted). A parser
@@ -25,6 +26,8 @@ const opt = (name: string, dflt: string) => {
 const corpusDir = resolve(opt("--corpus", "corpus"));
 const filter = opt("--filter", "").toLowerCase();
 const compareWith = opt("--compare", "");
+// --dump: print canonical JSON instead of hashes (for diffing one design).
+const dump = argv.includes("--dump");
 
 const files: string[] = [];
 async function walk(d: string) {
@@ -75,7 +78,7 @@ const canonCi = (ci: any) => ({
 });
 const attempt = (f: () => unknown) => {
   try {
-    return hash(f());
+    return dump ? JSON.stringify(f(), replacer, 1) : hash(f());
   } catch (e) {
     return `error: ${String(e).slice(0, 120)}`;
   }

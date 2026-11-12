@@ -28,10 +28,8 @@
  * Known gaps: bus ports across hierarchy (CIITBusHierConnector), external
  * hierarchical-block files (Subcircuit="0"), NI_EWB_NET_HIDDEN pins.
  */
-import { XMLParser } from "fast-xml-parser";
-import { decodeStr } from "./ew-strings.ts";
-
-const arr = <T,>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+import { ciCollStrings, collValues } from "../ref/ci-netlist.ts";
+import { docOf, type EwElement, type XmlInput } from "./doc.ts";
 
 export interface NetPin {
   refdes: string;
@@ -57,10 +55,10 @@ export interface PageIndex {
   title: string;
   page: string;
   /** The page's DesignSheet element (for drawing extraction). */
-  designSheet: any;
+  designSheet: EwElement;
   edges: [string, string][];
   pins: PinRec[];
-  symbols: Map<string, { kind: string; ciComp: string; obj: any }>;
+  symbols: Map<string, { kind: string; ciComp: string; obj: EwElement }>;
   links: { id: string; mods: Mod[] }[];
 }
 
@@ -93,21 +91,14 @@ export interface MultisimDesign {
   warnings: string[];
 }
 
-const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", parseAttributeValue: false, parseTagValue: false });
-
-function visit(node: any, cb: (tag: string, obj: any) => void, tag = ""): void {
-  if (node == null || typeof node !== "object") return;
-  if (Array.isArray(node)) {
-    for (const c of node) visit(c, cb, tag);
-    return;
-  }
-  if (tag) cb(tag, node);
-  for (const [k, v] of Object.entries(node)) if (!k.startsWith("@_")) visit(v, cb, k);
+export interface CiItem {
+  cls: string;
+  body: EwElement;
 }
 
-const modsOf = (o: any): Mod[] =>
-  arr(o?.ElectricalObject?.ModifierInfo?.Element).flatMap((e: any) =>
-    arr(e.Item).map((i: any) => ({ mod: decodeStr(e["@_NetModifier"]), value: decodeStr(i["@_Value"]) })),
+const modsOf = (o: EwElement): Mod[] =>
+  (o.at("ElectricalObject", "ModifierInfo")?.childrenNamed("Element") ?? []).flatMap((e) =>
+    e.childrenNamed("Item").map((i) => ({ mod: e.str("NetModifier"), value: i.str("Value") })),
   );
 
 const OWNER_CLASSES = new Set([
@@ -121,36 +112,32 @@ const OWNER_CLASSES = new Set([
   "CIITHierConnector",
 ]);
 
-function indexPage(ds: any, sheetComp: Map<string, string>, warnings: string[]): PageIndex {
+function indexPage(ds: EwElement, sheetComp: Map<string, string>, warnings: string[]): PageIndex {
   const pg: PageIndex = {
-    title: decodeStr(ds?.["@_Title"]),
-    page: decodeStr(ds?.["@_PageName"]) || "1",
+    title: ds.str("Title"),
+    page: ds.str("PageName") || "1",
     designSheet: ds,
     edges: [],
     pins: [],
     symbols: new Map(),
     links: [],
   };
-  const walk = (node: any, owner: { id: string; kind: string } | null): void => {
-    if (node == null || typeof node !== "object") return;
-    if (Array.isArray(node)) {
-      for (const c of node) walk(c, owner);
-      return;
-    }
-    const cls = node["@_Class"];
-    const id = node["@_ID"];
-    if (id != null && typeof cls === "string" && node[cls] && !cls.startsWith("Ci")) {
-      const o = node[cls];
-      const sid = String(id);
+  // Drawing objects are `<Item Class=X ID=..><X ...>` wrappers; an owner
+  // (symbol, connector, macro, pin) scopes the pins drawn inside it.
+  const visit = (node: EwElement, owner: { id: string; kind: string } | null): void => {
+    const cls = node.cls;
+    const sid = node.get("ID");
+    const o = cls ? node.child(cls) : undefined;
+    if (sid != null && cls && o && !cls.startsWith("Ci")) {
       let next = owner;
       if (cls === "CIITLinkComp") {
-        for (const c of [o["@_Connect1"], o["@_Connect2"]]) if (c != null && c !== "0") pg.edges.push([sid, String(c)]);
+        for (const c of [o.get("Connect1"), o.get("Connect2")]) if (c != null && c !== "0") pg.edges.push([sid, c]);
         pg.links.push({ id: sid, mods: modsOf(o) });
       } else if (cls === "CODPinComp" || cls === "CIITPinConnectorComp") {
-        for (const c of arr(o.ConnectList?.Item)) pg.edges.push([sid, String(c["@_ID"])]);
+        for (const c of o.child("ConnectList")?.childrenNamed("Item") ?? []) pg.edges.push([sid, c.get("ID") ?? ""]);
         if (cls === "CIITPinConnectorComp" && owner?.kind === "pin") pg.edges.push([sid, owner.id]);
       } else if (OWNER_CLASSES.has(cls)) {
-        pg.symbols.set(sid, { kind: cls, ciComp: String(o["@_CiComponent"] ?? ""), obj: o });
+        pg.symbols.set(sid, { kind: cls, ciComp: o.get("CiComponent") ?? "", obj: o });
         next = { id: sid, kind: cls };
       } else if (cls === "CIITBusEntry") {
         pg.links.push({ id: sid, mods: modsOf(o) });
@@ -161,9 +148,9 @@ function indexPage(ds: any, sheetComp: Map<string, string>, warnings: string[]):
             id: sid,
             owner: owner.id,
             ownerKind: owner.kind,
-            portId: o["@_PortID"] != null ? String(o["@_PortID"]) : undefined,
-            pinNumber: decodeStr(o["@_PinNumber"]),
-            pinName: decodeStr(o["@_PinName"]),
+            portId: o.get("PortID"),
+            pinNumber: o.str("PinNumber"),
+            pinName: o.str("PinName"),
             mods: modsOf(o),
           });
         } else {
@@ -171,67 +158,67 @@ function indexPage(ds: any, sheetComp: Map<string, string>, warnings: string[]):
         }
         next = { id: sid, kind: "pin" };
       }
-      walk(o, next);
+      for (const c of o.children) visit(c, next);
       return;
     }
     if (cls === "CSheetComponentMSM" || cls === "CSheetComponent") {
-      sheetComp.set(String(node["@_ObjectID"]), decodeStr(node["@_SheetName"]));
+      sheetComp.set(node.get("ObjectID") ?? "", node.str("SheetName"));
     }
-    for (const [k, v] of Object.entries(node)) if (!k.startsWith("@_")) walk(v, owner);
+    for (const c of node.children) visit(c, owner);
   };
-  walk(ds, null);
+  visit(ds, null);
   return pg;
 }
 
 /** Ci* items by CiID (used only for pin numbers, instance names, part kinds). */
-function indexCi(proj: any) {
-  const ci = new Map<string, { cls: string; body: any }>();
-  visit(proj.UniqueSheets, (_t, o) => {
-    const cls = o["@_Class"];
-    if (typeof cls === "string" && cls.startsWith("Ci") && o["@_CiID"] != null && o[cls]) ci.set(String(o["@_CiID"]), { cls, body: o[cls] });
-  });
+function indexCi(proj: EwElement): Map<string, CiItem> {
+  const ci = new Map<string, CiItem>();
+  for (const o of proj.child("UniqueSheets")?.descendants() ?? []) {
+    const cls = o.cls;
+    if (!cls?.startsWith("Ci") || !o.has("CiID")) continue;
+    const body = o.child(cls);
+    if (body) ci.set(o.get("CiID")!, { cls, body });
+  }
   return ci;
 }
 
-const strColls = (body: any): string[][] =>
-  [...arr(body?.Attributes?.CiaCollString), ...arr(body?.Attributes?.Item).flatMap((it: any) => arr(it?.CiaCollString))].map(
-    (c: any) => arr(c?.strings?.Item).map((s: any) => decodeStr(s?.["@_Value"])),
-  );
+const strColls = (body: EwElement): string[][] => ciCollStrings(body).map(collValues);
 
-export function parseMultisimDesign(xml: string): MultisimDesign & { ci: Map<string, { cls: string; body: any }> } {
+export function parseMultisimDesign(input: XmlInput): MultisimDesign & { ci: Map<string, CiItem> } {
   const warnings: string[] = [];
-  const tree = parser.parse(xml);
-  const proj = tree?.MSMElectronicsWorkbench?.Project;
+  const { root: top } = docOf(input);
+  const proj = top.name === "MSMElectronicsWorkbench" ? top.child("Project") : undefined;
   if (!proj) throw new Error("not a Multisim design");
   const ci = indexCi(proj);
   const sheetComp = new Map<string, string>();
-  const pages = arr(proj.UniqueSheets?.SheetInfos?.SheetContainer)
-    .map((sc: any) => sc?.Sheet?.Variable?.DesignSheet)
-    .filter(Boolean)
-    .map((ds: any) => indexPage(ds, sheetComp, warnings));
-  const rootTitle = decodeStr(proj.DesignSheet?.["@_Title"]) || pages[0]?.title || "";
+  const pages = (proj.at("UniqueSheets", "SheetInfos")?.childrenNamed("SheetContainer") ?? [])
+    .map((sc) => sc.at("Sheet", "Variable", "DesignSheet"))
+    .filter((ds): ds is EwElement => ds != null)
+    .map((ds) => indexPage(ds, sheetComp, warnings));
+  const rootTitle = proj.child("DesignSheet")?.str("Title") || pages[0]?.title || "";
 
   // CIR path -> (key -> IR refdes), and pin remaps.
   const irMap = new Map<string, Map<string, string>>();
   const unitMap = new Map<string, number>(); // `${cir}|${key}` -> IRSectionID + 1
   const remaps = new Map<string, Map<string, string>>();
-  visit(proj.Extensions, (t, o) => {
-    if (t !== "RefDesInfoContainer" || o["@_CIR"] == null) return;
-    const cir = decodeStr(o["@_CIR"]);
+  for (const o of proj.child("Extensions")?.descendants() ?? []) {
+    if (o.name !== "RefDesInfoContainer" || !o.has("CIR")) continue;
+    const cir = o.str("CIR");
     const m = new Map<string, string>();
-    for (const it of arr(o.CIRToInfoMap?.CIRToInfoMapItem)) {
-      const ri = it.RefDesInfo;
-      const key = decodeStr(it["@_CIRKey"]);
-      const prefix = decodeStr(ri?.["@_IRPrefix"]);
-      m.set(key, String(ri?.["@_IRNumber"]) === "-1" ? prefix : `${prefix}${ri?.["@_IRNumber"] ?? ""}`);
-      const sectionId = Number(ri?.["@_IRSectionID"] ?? -1);
-      if (decodeStr(ri?.["@_IRSection"]) && sectionId >= 0) unitMap.set(`${cir}|${key}`, sectionId + 1);
-      const a = arr(ri?.PinNumbersCIR?.PinNumbersCIRItem).map((x: any) => decodeStr(x["@_PinNumberCIR"]));
-      const b = arr(ri?.PinNumbersIR?.PinNumbersIRItem).map((x: any) => decodeStr(x["@_PinNumberIR"]));
+    for (const it of o.child("CIRToInfoMap")?.childrenNamed("CIRToInfoMapItem") ?? []) {
+      const ri = it.child("RefDesInfo");
+      const key = it.str("CIRKey");
+      const prefix = ri?.str("IRPrefix") ?? "";
+      const num = ri?.get("IRNumber");
+      m.set(key, num === "-1" ? prefix : `${prefix}${num ?? ""}`);
+      const sectionId = Number(ri?.get("IRSectionID") ?? -1);
+      if (ri?.str("IRSection") && sectionId >= 0) unitMap.set(`${cir}|${key}`, sectionId + 1);
+      const a = ri?.child("PinNumbersCIR")?.childrenNamed("PinNumbersCIRItem").map((x) => x.str("PinNumberCIR")) ?? [];
+      const b = ri?.child("PinNumbersIR")?.childrenNamed("PinNumbersIRItem").map((x) => x.str("PinNumberIR")) ?? [];
       if (a.length && a.length === b.length && a.some((x, i) => x !== b[i])) remaps.set(`${cir}|${key}`, new Map(a.map((x, i) => [x, b[i]!])));
     }
     irMap.set(cir, m);
-  });
+  }
 
   // Instance tree.
   const build = (sheet: string, path: string, name: string, cirOf: (p: string) => string, depth: number): SheetInstance => {
@@ -246,9 +233,9 @@ export function parseMultisimDesign(xml: string): MultisimDesign & { ci: Map<str
       const cir = cirOf(pg.page);
       for (const [sid, s] of pg.symbols) {
         if (s.kind !== "CIITMacroComponent") continue;
-        const iname = decodeStr(ci.get(s.ciComp)?.body?.["@_LocalName"]);
+        const iname = ci.get(s.ciComp)?.body.str("LocalName") ?? "";
         const child =
-          decodeStr(s.obj.HierBlock?.CHierBlock?.["@_FileName"]) || sheetComp.get(String(s.obj["@_SheetComponentObjectID"])) || "";
+          s.obj.at("HierBlock", "CHierBlock")?.str("FileName") || sheetComp.get(s.obj.get("SheetComponentObjectID") ?? "") || "";
         if (!iname) warnings.push(`macro ${sid} has no CiInstComponent`);
         const c = build(child, `${path}/${iname}`, iname, (p) => `#${p}/${child}:${iname}${cir}`, depth + 1);
         c.macroId = sid;
@@ -337,8 +324,8 @@ export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): 
         }
         const s = strColls(comp.body);
         if (s[0]?.[0] === "POWER_SOURCES" || s[1]?.[0] === "91") continue; // power / connector: joined by modifier
-        const drawn = decodeStr(comp.body["@_LocalName"]);
-        const key = drawn + decodeStr(owner.obj["@_DBComponentSectionName"]);
+        const drawn = comp.body.str("LocalName");
+        const key = drawn + owner.obj.str("DBComponentSectionName");
         const final = design.finalRefdes(inst, pg.page, key) ?? (depth === 0 ? drawn : `${inst.path}/${drawn}`);
         const remap = design.pinRemap(inst, pg.page, key);
         const nums = portPins(p.portId);
