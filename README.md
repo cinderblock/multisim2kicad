@@ -31,17 +31,25 @@ Output per input:
 
 ## What gets translated
 
-PCB: board outline, copper tracks, every pad kind (round, square, rectangle,
-rounded, custom shapes; SMD on the right side), vias, mounting holes, nets
-(pads, tracks and vias carry their nets), silkscreen/mask/fab graphics.
+PCB: board outline, the full copper stack (inner layers from the
+lamination settings), copper tracks, every pad kind (round, square,
+rectangle, rounded, custom shapes; SMD on the right side), vias, mounting
+holes, power planes and copper areas as KiCad zones (net, clearance, thermal
+and island settings), nets (pads, tracks and vias carry their nets),
+silkscreen/mask/fab/courtyard graphics including arcs, board text, rule
+areas, and 3D/mechanical/custom EW layers as named KiCad user layers.
 
-Schematic: parts with their real body graphics, pins at the exact positions
+Schematic: every page and hierarchical block as a KiCad sheet hierarchy,
+parts with their real body graphics and Multisim's final reference
+designators (multi-section parts as KiCad units), pins at the exact positions
 Multisim wires attach to, orientation (rotation/mirror), wires, junctions,
-power and ground ports, global/local net connectors, user net names, free
-text. One schematic unit maps to 10 mil so everything sits on a KiCad grid.
+power and ground ports, global/local/hierarchical net connectors, user net
+names, free text. One schematic unit maps to 10 mil so everything sits on a
+KiCad grid.
 
-Not yet: hierarchical sheets, buses, copper pours, inner layers, linked
-schematic↔board projects, symbol/footprint libraries. The plan tracks these.
+Not yet: buses, footprint-local graphics (component outlines are board
+graphics today), linked schematic/board projects, symbol/footprint
+libraries. `plans/converter.md` tracks these.
 
 ## Checking results
 
