@@ -6,7 +6,8 @@ import { designBaseName, loadDesign } from "./load.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
 import { parseSchematicXml } from "./parse/sch.ts";
 import { emitKicadPcb, footprintName } from "./emit/kicad-pcb.ts";
-import { emitKicadSchProject, kicadProSchematicSettings } from "./emit/kicad-sch.ts";
+import { emitKicadSchProject, kicadProSchematicSettings, librarySymbolsFile } from "./emit/kicad-sch.ts";
+import { databaseSymbols } from "./db/symbols.ts";
 import { emitFootprintLibrary, harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { boardCustomRules, boardProjectSettings } from "./emit/kicad-pro.ts";
 import { databaseFootprints, footprintBoard, readEwDatabase } from "./db/ewdb.ts";
@@ -238,7 +239,9 @@ const DATABASE_FILE = /\.(prj|usr)$/i;
 
 /**
  * An EW component database (`.prj` / `.usr`) -> KiCad libraries named after
- * it: `<name>.pretty/` (+ fp-lib-table). Phase F.
+ * it: `<name>.pretty/` (+ fp-lib-table) and `<name>.kicad_sym` (+
+ * sym-lib-table), each symbol's Footprint pointing into the `.pretty` when
+ * the database holds its package. Phase F.
  */
 export async function convertDatabase(input: string, outDir: string): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -250,10 +253,20 @@ export async function convertDatabase(input: string, outDir: string): Promise<vo
   await mkdir(pretty, { recursive: true });
   for (const [name, text] of emitFootprintLibrary(h.board, h.library)) await writeFile(join(pretty, name), text, "utf8");
   await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, `Footprints from the EW database ${basename(input)} (ew-conv)`);
+  const syms = databaseSymbols(db, (pkg) => {
+    const name = footprintName({ name: pkg } as Board["components"][number]);
+    return h.library.has(name) ? `${lib}:${name}` : undefined;
+  });
+  const symPath = join(outDir, `${lib}.kicad_sym`);
+  await writeFile(symPath, librarySymbolsFile(syms.specs), "utf8");
+  await addLibTableEntry(join(outDir, "sym-lib-table"), "sym_lib_table", lib, `\${KIPRJMOD}/${lib}.kicad_sym`, `Symbols from the EW database ${basename(input)} (ew-conv)`);
   const reasons = new Map<string, number>();
   for (const s of fps.skipped) reasons.set(s.reason, (reasons.get(s.reason) ?? 0) + 1);
   console.log(`${input}`);
   console.log(`  footprints: ${h.library.size} -> ${pretty}`);
+  console.log(`  symbols:    ${syms.specs.length} -> ${symPath} (${syms.specs.filter((x) => x.footprint).length} with a footprint here)`);
+  for (const w of syms.warnings.slice(0, 20)) console.log(`  warning: ${w}`);
+  if (syms.warnings.length > 20) console.log(`  ... ${syms.warnings.length - 20} more warnings`);
   if (reasons.size) console.log(`  skipped:    ${[...reasons].map(([r, n]) => `${n} ${r}`).join(", ")}`);
 }
 

@@ -236,7 +236,22 @@ export interface SymbolPin {
   netId?: string;
   // Multisim connects something to this pin (false: dangling in the source).
   connected?: boolean;
+  /** Electrical type, when the source says (EW database parts); else passive. */
+  electrical?: PinElectrical;
 }
+
+export type PinElectrical =
+  | "input"
+  | "output"
+  | "bidirectional"
+  | "tri_state"
+  | "passive"
+  | "power_in"
+  | "power_out"
+  | "open_collector"
+  | "open_emitter"
+  | "no_connect"
+  | "unspecified";
 
 export interface SymbolText {
   text: string;

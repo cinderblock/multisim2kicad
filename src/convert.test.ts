@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseEwXml } from "electronics-workbench-decoder";
+import { encodeBuffer, formatForExtension, parseEwXml } from "electronics-workbench-decoder";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseSymbolPicture, symbolPictureXml } from "./db/symbols.ts";
 import { harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
 import { boardCustomRules, boardProjectSettings, netClassName } from "./emit/kicad-pro.ts";
@@ -109,6 +110,39 @@ describe("EW database footprints (F)", () => {
     const placed = parsePcbXml(xml).components[0]!;
     expect(c.pads.map((p) => [p.number, p.at])).toEqual(placed.pads.map((p) => [p.number, p.at]));
     expect(c.graphics.length).toBe(placed.graphics.length);
+  });
+});
+
+describe("EW database symbols (F)", () => {
+  const pt = (x: number, y: number, i = 0) => `<I${i} Type="Point" X="${x}" Y="${y}"/>`;
+  const pin = (i: number, index: number, body: [number, number], wire: [number, number]) =>
+    `<I${i} Type="Pin" PShp="0" PTp="4"><PNaT Type="PinNameText" Txt="${index}" Vis="1"><PtA Type="PtrArray" S="1">${pt(0, 0)}</PtA></PNaT>` +
+    `<CTSP Type="Point" X="${body[0]}" Y="${body[1]}"/><WCP Type="WireConnectionPoint" X="${wire[0]}" Y="${wire[1]}"/></I${i}>`;
+  const doc = `<?xml version="1.0"?><DrDoc Type="BaseSymbolDocument"><LrsArr Type="PtrArray" S="4">` +
+    `<I0 Type="LayerInfo" LN="Border"><DS Type="ObjectsList"><I0 Type="BoundaryBox"><PtA Type="PtrArray" S="2">${pt(0, 0)}${pt(90, 90, 1)}</PtA></I0></DS></I0>` +
+    `<I1 Type="LayerInfo" LN="Pins"><DS Type="ObjectsList">${pin(0, 2, [45, 54], [36, 54])}${pin(1, 1, [81, 54], [90, 54])}</DS></I1>` +
+    `<I2 Type="LayerInfo" LN="1 Draw layer"><DS Type="ObjectsList">` +
+    `<I0 Type="HalfEllipseArc" PW="1" BS="1"><PtA Type="PtrArray" S="3">${pt(63, 72)}${pt(45, 72, 1)}${pt(54, 63, 2)}</PtA></I0>` +
+    `<I1 Type="Polygon" PW="1" BS="0"><PtA Type="PtrArray" S="3">${pt(62, 48)}${pt(46, 48, 1)}${pt(54, 61, 2)}</PtA></I1></DS></I2>` +
+    `<I3 Type="LayerInfo" LN="2 Draw Layer"><DS Type="ObjectsList"><I0 Type="Line"><PtA Type="PtrArray" S="2">${pt(0, 0)}${pt(9, 9, 1)}</PtA></I0></DS></I3>` +
+    `</LrsArr></DrDoc>`;
+
+  test("pins, drawing layer 1 only, arcs and filled polygons", () => {
+    const pic = parseSymbolPicture(doc);
+    expect(pic.pins).toEqual([
+      { index: 2, at: { x: 36, y: 54 }, dir: { x: 1, y: 0 }, length: 9 },
+      { index: 1, at: { x: 90, y: 54 }, dir: { x: -1, y: 0 }, length: 9 },
+    ]);
+    expect(pic.graphics).toEqual([
+      { kind: "arc", start: { x: 63, y: 72 }, mid: { x: 54, y: 63 }, end: { x: 45, y: 72 }, width: 1 },
+      { kind: "polyline", points: [{ x: 62, y: 48 }, { x: 46, y: 48 }, { x: 54, y: 61 }, { x: 62, y: 48 }], width: 1, fill: true },
+    ]);
+  });
+
+  test("a stored picture is a 5-byte prefix and EW's compressed stream", () => {
+    const enc = encodeBuffer(Buffer.from(doc), formatForExtension(".ms14")!);
+    const image = Buffer.concat([Buffer.alloc(5), enc.subarray(52)]);
+    expect(symbolPictureXml(image, doc.length)).toBe(doc);
   });
 });
 

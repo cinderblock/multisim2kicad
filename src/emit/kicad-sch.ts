@@ -118,6 +118,12 @@ interface LibEntry {
   head: string[];
   body: string[];
   units: Map<number, string[]>;
+  footprint?: string;
+  /** Extra properties (hidden), e.g. Description, Manufacturer. */
+  fields?: [string, string][];
+  /** Where Reference / Value sit (local units); default the origin. */
+  refAt?: SchPoint;
+  valueAt?: SchPoint;
 }
 
 const libLines = (gs: SchGraphic[]) => gs.map(libGraphic).filter((x): x is string => !!x);
@@ -126,7 +132,7 @@ function libParts(s: SchematicSymbol, refs: InstanceRef[], dropped: ReadonlySet<
   const pins = uniquePins(s.pins).filter((p) => !dropped.has(p.number));
   const power = s.kind === "power";
   const pinLine = (p: SymbolPin, number: string) => {
-    const type = power ? "power_in" : "passive";
+    const type = power ? "power_in" : (p.electrical ?? "passive");
     // Power ports: KiCad hides their pin, so the stem is drawn as graphics.
     const length = power ? 0 : p.length;
     return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(number)} ${FONT}))`;
@@ -236,12 +242,14 @@ const refPrefix = (s: SchematicSymbol) => /^[A-Za-z_]*/.exec(s.reference)![0] ||
 
 /** A library symbol as text, at `indent` (schematic `lib_symbols`: 2 tabs; `.kicad_sym`: 1). */
 function renderLibSymbol(e: LibEntry, fullName: string, indent: 1 | 2): string {
+  const at = (p?: SchPoint) => `(at ${p ? lib(p) : "0 0"} 0)`;
   const lines = [
     `\t\t(symbol ${q(fullName)}`,
-    ...e.head,
-    `\t\t\t(property "Value" ${q(e.value)} (at 0 0 0) ${FONT})`,
-    `\t\t\t(property "Footprint" "" (at 0 0 0) (hide yes) ${FONT})`,
+    ...e.head.map((l) => (e.refAt && l.includes(`(property "Reference"`) ? l.replace("(at 0 0 0)", at(e.refAt)) : l)),
+    `\t\t\t(property "Value" ${q(e.value)} ${at(e.valueAt)} ${FONT})`,
+    `\t\t\t(property "Footprint" ${q(e.footprint ?? "")} (at 0 0 0) (hide yes) ${FONT})`,
     `\t\t\t(property "Datasheet" "" (at 0 0 0) (hide yes) ${FONT})`,
+    ...(e.fields ?? []).map(([k, v]) => `\t\t\t(property ${q(k)} ${q(v)} (at 0 0 0) (hide yes) ${FONT})`),
     ...(e.body.length ? [`\t\t\t(symbol ${q(`${e.name}_0_1`)}`, ...e.body, `\t\t\t)`] : []),
     ...[...e.units].sort((a, b) => a[0] - b[0]).flatMap(([unit, pins]) => [`\t\t\t(symbol ${q(`${e.name}_${unit}_1`)}`, ...pins, `\t\t\t)`]),
     `\t\t\t(embedded_fonts no)`,
@@ -249,6 +257,63 @@ function renderLibSymbol(e: LibEntry, fullName: string, indent: 1 | 2): string {
   ];
   return indent === 2 ? lines.join("\n") : lines.map((l) => l.slice(1)).join("\n");
 }
+
+/** A library symbol described directly (EW database parts), not from placements. */
+export interface LibrarySymbolSpec {
+  name: string;
+  /** Reference prefix ("U"). */
+  reference: string;
+  value: string;
+  footprint?: string;
+  fields?: [string, string][];
+  showPinNames: boolean;
+  showPinNumbers: boolean;
+  /** Unit 1..n: its drawing, its pins, and pins drawn as plain stems (kept on another unit). */
+  units: { graphics: SchGraphic[]; pins: SymbolPin[]; stems?: SymbolPin[] }[];
+}
+
+/** A `.kicad_sym` file of directly described symbols; each unit centred on its pins. */
+export function librarySymbolsFile(specs: LibrarySymbolSpec[]): string {
+  const entries = specs.map((spec): LibEntry => {
+    const units = new Map<number, string[]>();
+    let head: string[] = [];
+    let box: { x0: number; y0: number; x1: number; y1: number } | undefined;
+    spec.units.forEach((unit, i) => {
+      const stems = unit.stems ?? [];
+      const centred = centreSymbol({
+        reference: spec.reference, value: spec.value, kind: "part", at: { x: 0, y: 0 }, transform: IDENTITY_D,
+        graphics: [...unit.graphics, ...stems.filter((p) => p.length > 0).map(pinStem)],
+        pins: unit.pins, showPinNames: spec.showPinNames, showPinNumbers: spec.showPinNumbers,
+      });
+      if (i === 0) {
+        const pts = [...centred.graphics.flatMap(graphicPoints), ...centred.pins.map((p) => p.at)];
+        if (pts.length) box = { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
+      }
+      const parts = libParts(centred, [{ path: "", reference: spec.reference, unit: i + 1 }], new Set());
+      head = parts.head;
+      for (const [u, lines] of parts.units) units.set(u, lines);
+    });
+    // Reference above the first unit, Value below it (text is 5 units tall).
+    const cx = box ? Math.round((box.x0 + box.x1) / 2) : 0;
+    return {
+      name: spec.name, key: spec.name, value: spec.value, head, body: [], units, footprint: spec.footprint, fields: spec.fields,
+      refAt: box && { x: cx, y: box.y0 - 4 },
+      valueAt: box && { x: cx, y: box.y1 + 4 },
+    };
+  });
+  return libraryFileText(entries);
+}
+
+const libraryFileText = (entries: LibEntry[]) =>
+  [
+    `(kicad_symbol_lib`,
+    `\t(version ${KICAD_SYM_VERSION})`,
+    `\t(generator "ew-conv")`,
+    `\t(generator_version "0.1")`,
+    ...[...entries].sort((a, b) => a.name.localeCompare(b.name)).map((e) => renderLibSymbol(e, e.name, 1)),
+    `)`,
+    ``,
+  ].join("\n");
 
 /** The symbol library: identical drawings share one entry; unit sets merge. */
 class SymbolLibrary {
@@ -292,15 +357,7 @@ class SymbolLibrary {
 
   /** `.kicad_sym` file text. */
   file(): string {
-    return [
-      `(kicad_symbol_lib`,
-      `\t(version ${KICAD_SYM_VERSION})`,
-      `\t(generator "ew-conv")`,
-      `\t(generator_version "0.1")`,
-      ...[...this.entries].sort((a, b) => a.name.localeCompare(b.name)).map((e) => renderLibSymbol(e, e.name, 1)),
-      `)`,
-      ``,
-    ].join("\n");
+    return libraryFileText(this.entries);
   }
 }
 

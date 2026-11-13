@@ -71,10 +71,16 @@ section) stay connected the way Multisim wires them. One schematic unit maps to 
 KiCad grid.
 
 An EW component database (a Multisim database project, `.prj` / `.usr`)
-becomes KiCad libraries named after it: `<name>.pretty/` with every
-Ultiboard footprint stored in it, registered in `fp-lib-table`.
+becomes KiCad libraries named after it:
 
-Not yet: symbols from the EW database (footprints are done).
+- `<name>.pretty/`: every Ultiboard footprint stored in it
+- `<name>.kicad_sym`: every component, drawn from its Multisim symbol
+  (sections as units, pin numbers from its package, pin electrical types,
+  reference prefix from its family), with its Footprint pointing into
+  `<name>.pretty` when the database holds the package (otherwise the
+  package name is kept as an `EW_Package` field)
+
+both registered in the project's lib tables.
 `plans/converter.md` tracks these.
 
 ## Checking results

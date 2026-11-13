@@ -896,9 +896,30 @@ hierarchy, connectors), since those are what make an output useless today.
       differences are text the user placed on a board's copy and 1-4 nm
       rounding in placed copies (plus genuinely older revisions, e.g.
       D0603).
-- [ ] F symbols: `SYS_SYMBOL_PICTURE` (`BaseSymbolDocument` XML) ->
-      `<db>.kicad_sym`, sections from `SYS_MAPPING_COMP_SYMBOL`, Footprint
-      property from `SYS_MAPPING_COMP_PACKAGE`; picture unwrap into ewd.
+- [x] (2026-11-13) **F symbols.** `<db>.kicad_sym` + sym-lib-table
+      (`src/db/symbols.ts`, `librarySymbolsFile` in the emitter). Picture
+      layout: pin `PNaT Txt` = 1-based index into the section's pin list
+      (`PLS` = side), `CTSP` body end, `WCP` wire point; the number text is
+      a `##` placeholder. Units are `.ms14` schematic units (checked
+      against ACS711 placed in Althea Main: same pin spacing 18, length
+      9). Draw layers 2+ are alternate looks (the Fuse's blown state:
+      seven layers stacked) -> only layer 1. Objects: Line / MultiLine,
+      Polygon (`BS=0` filled), Rectangle, Circle (centre + rim), Ellipse
+      (bbox), HalfEllipseArc (chord ends + apex; arc when circular, else a
+      polyline), SegmentArc (centre, start, end; 2 uses), Text. Component
+      `Pinout` lists sections concatenated in `Sec_Order`; package
+      `Pinout` gives each pin's pads ("1,2" -> stacked pins; no package ->
+      the pin name). Shared pads (an op-amp's supply on every section)
+      stay a pin on the first unit and are stems elsewhere. Pin types from
+      `Pin_Type` (I/O -> bidirectional, PWR/GND/VCC/VEE/VPP -> power_in,
+      OPEN_SOURCE -> open_emitter, ...). Reference prefix from the
+      family's `Template` (`U%d`; the user's "Current" family really is
+      `F%d`). Fields: Description (`Function`), Manufacturer, EW_Family,
+      EW_Package when the footprint is not in this DB (127 of 319 mappings
+      point at NI master-database packages). **v14.2: 241 symbols / 406
+      units, all plot in kicad-cli; 128 linked to a footprint in the same
+      DB.** Design conversion output unchanged (byte-identical apart from
+      UUIDs on Althea). Optional: move `symbolPictureXml` into ewd.
 - [ ] **Next (approved order):** B3 cleanup, D6, F (EW database), G. Drive-corpus
       leftovers (11 nets: ground-symbol pin naming) are optional.
 
