@@ -46,10 +46,12 @@ parts with their real body graphics and Multisim's final reference
 designators (multi-section parts as KiCad units), pins at the exact positions
 Multisim wires attach to, orientation (rotation/mirror), wires, junctions,
 power and ground ports, global/local/hierarchical net connectors, user net
-names, free text. One schematic unit maps to 10 mil so everything sits on a
+names, buses (with bus entries; buses continued across pages), free text.
+Shared supply pins of multi-section parts (an op-amp's V+/V- on every
+section) stay connected the way Multisim wires them. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
-Not yet: buses, linked schematic/board projects, symbol/footprint
+Not yet: linked schematic/board projects, symbol/footprint
 libraries. `plans/converter.md` tracks these.
 
 ## Checking results
