@@ -210,7 +210,8 @@ until now) is a toy:
   each symbol -> `lib_symbol` drawings. Deduplicate identical symbols into one
   library entry per part; multi-unit parts.
 - D5. Free text, graphics, title block.
-- D6. Integer-unit schematic IR + 10 mil emit scale + 10 mil connection grid
+- [x] D6 (done with D1-D3: `MM_PER_UNIT = 0.254`, integer IR, 10 mil
+  `connection_grid_size` in `.kicad_pro`). Integer-unit schematic IR + 10 mil emit scale + 10 mil connection grid
   in `.kicad_pro` (decided, see Decisions).
 - **Exit:** for every corpus schematic, the KiCad-exported netlist equals the
   EW netlist (same nets, same pins); ERC is clean apart from documented
@@ -920,12 +921,18 @@ hierarchy, connectors), since those are what make an output useless today.
       units, all plot in kicad-cli; 128 linked to a footprint in the same
       DB.** Design conversion output unchanged (byte-identical apart from
       UUIDs on Althea). Optional: move `symbolPictureXml` into ewd.
-- [ ] **Next (approved order):** B3 cleanup, D6, F (EW database), G. Drive-corpus
-      leftovers (11 nets: ground-symbol pin naming) are optional.
+- [ ] **Next (approved order):** B3 cleanup (typed EW models in ewd;
+      ew-conv's parsers shrink to mappers), then G (ship). G needs the
+      user's calls: see Open questions. Drive-corpus leftovers (11 nets:
+      ground-symbol pin naming) are optional.
 
 ## Open questions for the user
 
-(none open; 2026-11-11 answers recorded under Decisions)
+1. (2026-11-13, Phase G) Where should ew-conv live and ship? It has no
+   remote. Options: a public `cinderblock/ew-conv` GitHub repo (free CI:
+   `bun test` + typecheck on push), published to npm as a CLI
+   (`bunx ew-conv ...`), or keep it local. Recommendation: public repo +
+   npm, matching ewd; the corpus stays private and out of the repo.
 
 ## Earlier phase notes (historical, 2026-05)
 
