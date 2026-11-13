@@ -786,11 +786,36 @@ hierarchy, connectors), since those are what make an output useless today.
       gained one ratsnest entry (4 -> 5) on its VCC net, already split by a
       source quirk (F.Cu track ending on P1's bottom-only pad); pads are
       unchanged. Report `out/corpus-pcb-e3/`.
-- [ ] E3 symbols: project symbol library (`.kicad_sym` + sym-lib-table),
-      which wants D4's one-symbol-per-part dedupe first.
-- [ ] **Next (approved order):** D4-D5, E (project linking), F (EW
-      database), G. Also: diagnose the NI sample designs' 71% (drive
-      corpus).
+- [x] (2026-11-13) **D4 dedupe + E3 symbols: project symbol library.**
+      `<project>.kicad_sym` + `sym-lib-table`; every placed symbol points at
+      `<lib>:<part>`, and the schematic's embedded `lib_symbols` are copies
+      of the library entries. Symbols are named after the part's EW
+      database name (`dbPartName`: the `family, name, family` triple in the
+      CiComponent attribute strings; basic parts like resistors have none and
+      fall back to the reference prefix). Three things made "the same part"
+      look different and are normalised away: (1) Multisim local frames carry
+      arbitrary offsets -> each symbol's origin moves to the centre of its
+      pins, rounded to the grid, placement shifted to match; (2) some parts
+      have their rotation baked into the drawing -> a symbol is matched
+      against the library under all 8 dihedral turns (re-centred after
+      turning, since an odd pin span rounds per orientation) and the turn
+      moves into its placement (drawings with text are not turned);
+      (3) sections of one part (U8I2C / U10UART) -> reference prefix is the
+      leading letters, and each unit carries its own drawing so differently
+      drawn sections share one multi-unit symbol. A drawing that still
+      differs becomes `<name>_2`. Althea Main 234 placements: 101 per-
+      instance symbols -> 51. **Main corpus: nets unchanged (1608/1609),
+      ERC lib_symbol_issues 3233 -> 0, missing_unit 22 -> 3, total
+      violations 13367 -> 10123.** pin_not_connected +8: all hierarchical
+      sheet pins with no wire in either run (byte-identical geometry); the
+      new run flags every instance of an unwired block where the old one
+      flagged some. **Drive corpus: nets unchanged (2624/2635),
+      lib_symbol_issues 4691 -> 0, missing_unit 27 -> 5;** pin_not_connected
+      +5, all hierarchical labels (same reporting effect). Reports
+      `out/corpus-sch-g/`, `out/corpus-drives-g/`.
+- [ ] **Next (approved order):** B3 cleanup, C7 (design rules / net
+      classes into `.kicad_pro`), D6, F (EW database), G. Drive-corpus
+      leftovers (11 nets: ground-symbol pin naming) are optional.
 
 ## Open questions for the user
 

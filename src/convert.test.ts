@@ -4,13 +4,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
-import { emitKicadSch } from "./emit/kicad-sch.ts";
+import { emitKicadSch, emitKicadSchProject } from "./emit/kicad-sch.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
-import type { Board, Component, Point } from "./ir/types.ts";
+import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
 import { atom, listsNamed, parseSexpr, type Sexpr } from "./util/sexpr.ts";
 
@@ -280,6 +280,62 @@ describe("Design1 schematic (samples/Design1.ms14.xml)", () => {
     const hits = placementStats.pinsOnTarget - before.pinsOnTarget;
     expect(pins).toBeGreaterThan(150);
     expect(hits / pins).toBeGreaterThan(0.98);
+  });
+});
+
+describe("symbol library (D4/E3)", () => {
+  // A resistor as Multisim stores it: pins and body in a local frame with an
+  // arbitrary offset, sometimes with a rotation baked into the drawing.
+  const resistor = (ref: string, at: SchPoint, off: SchPoint, turned: boolean, flip = 0): SchematicSymbol => {
+    const v = (x: number, y: number) => (turned ? { x: off.x + y, y: off.y - x } : { x: off.x + x, y: off.y + y });
+    const d = (x: number, y: number) => (turned ? { x: y, y: -x } : { x, y });
+    return {
+      reference: ref, value: "1k", kind: "part", at, transform: flipToDihedral(flip), partName: "RESISTOR",
+      graphics: [{ kind: "polyline", points: [v(0, -9), v(-3, -6), v(3, 0), v(0, 9)], width: 0, fill: false }],
+      pins: [
+        { name: "1", number: "1", at: v(0, -18), dir: d(0, 1), length: 9 },
+        { name: "2", number: "2", at: v(0, 19), dir: d(0, -1), length: 10 },
+      ],
+      showPinNames: false, showPinNumbers: false,
+    };
+  };
+  const syms = [resistor("R1", { x: 40, y: 40 }, { x: 7, y: 3 }, false), resistor("R2", { x: 90, y: 40 }, { x: -11, y: 25 }, true), resistor("R3", { x: 40, y: 90 }, { x: 0, y: 0 }, true, 0x101)];
+  const sch: Schematic = { source: { application: "t", versionMajor: 0, versionMinor: 0, schema: 0 }, projectName: "t", rootSheet: "t",
+    root: { sheet: "t", name: "", refdes: {}, pinRemaps: {}, units: {}, children: [] }, sheets: [{
+      name: "t", title: "t", page: "1", blocks: [], size: { width: 200, height: 200 }, wires: [], labels: [], texts: [], buses: [], busEntries: [], symbols: syms,
+    }] };
+  const out = emitKicadSchProject(sch, "t", { library: "proj" });
+
+  test("one library symbol for one part, whatever its offset or baked rotation", () => {
+    const lib = parseSexpr(out.symbolLibrary)[0] as Sexpr[];
+    expect(listsNamed(lib, "symbol").map((x) => x[1])).toEqual(["RESISTOR"]);
+    const page = parseSexpr([...out.files.values()][0]!)[0] as Sexpr[];
+    expect(listsNamed(page, "symbol").filter((x) => atom(x, "lib_id")).map((x) => atom(x, "lib_id"))).toEqual(["proj:RESISTOR", "proj:RESISTOR", "proj:RESISTOR"]);
+  });
+
+  test("every pin stays where Multisim placed it", () => {
+    // KiCad: a lib point (x, y) lands at at + K(x, -y); K from (angle, mirror).
+    const K: Record<string, Dihedral> = {
+      "0": { a: 1, b: 0, c: 0, d: 1 }, "90": { a: 0, b: -1, c: 1, d: 0 }, "180": { a: -1, b: 0, c: 0, d: -1 }, "270": { a: 0, b: 1, c: -1, d: 0 },
+      "0x": { a: 1, b: 0, c: 0, d: -1 }, "90x": { a: 0, b: 1, c: 1, d: 0 }, "180x": { a: -1, b: 0, c: 0, d: 1 }, "270x": { a: 0, b: -1, c: -1, d: 0 },
+    };
+    const page = parseSexpr([...out.files.values()][0]!)[0] as Sexpr[];
+    const libSym = listsNamed(listsNamed(page, "lib_symbols")[0]!, "symbol")[0]!;
+    const libPins = listsNamed(libSym, "symbol").flatMap((u) => listsNamed(u, "pin"));
+    const mm = (x: Sexpr | undefined) => Number(x) / 0.254;
+    const instances = listsNamed(page, "symbol").filter((x) => atom(x, "lib_id"));
+    instances.forEach((inst, i) => {
+      const [, x, y, ang] = listsNamed(inst, "at")[0]!;
+      const k = K[`${ang}${atom(inst, "mirror") ?? ""}`]!;
+      for (const pin of libPins) {
+        const [, px, py] = listsNamed(pin, "at")[0]!;
+        const at = applyD(k, { x: mm(px), y: -mm(py) });
+        const placed = { x: Math.round(mm(x) + at.x), y: Math.round(mm(y) + at.y) };
+        const src = syms[i]!.pins.find((p) => p.number === listsNamed(pin, "number")[0]![1])!;
+        const want = applyD(syms[i]!.transform, src.at);
+        expect(placed).toEqual({ x: syms[i]!.at.x + want.x, y: syms[i]!.at.y + want.y });
+      }
+    });
   });
 });
 

@@ -248,6 +248,8 @@ export interface SchematicSymbol {
   drawnKey?: string;
   /** Power port that Multisim doesn't connect to anything. */
   floating?: boolean;
+  /** The part's name in the EW database (e.g. "BAV23C"), when known. */
+  partName?: string;
 }
 
 // A wire as a polyline in sheet coords.

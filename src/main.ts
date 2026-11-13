@@ -40,8 +40,11 @@ export async function convertProject(p: ProjectInput, outDir: string): Promise<s
   let links;
   if (sch) {
     const footprints = board ? new Map(board.components.map((c) => [c.reference, `${lib}:${footprintName(c)}`])) : undefined;
-    const out = emitKicadSchProject(sch, p.base, { footprints });
+    const out = emitKicadSchProject(sch, p.base, { footprints, library: lib });
     for (const [name, text] of out.files) await writeFile(join(outDir, name), text, "utf8");
+    // Project-local symbol library the symbols' lib ids point at.
+    await writeFile(join(outDir, `${lib}.kicad_sym`), out.symbolLibrary, "utf8");
+    await addLibTableEntry(join(outDir, "sym-lib-table"), "sym_lib_table", lib, `\${KIPRJMOD}/${lib}.kicad_sym`, "Symbols from the Multisim design (ew-conv)");
     links = out.links;
     written.push(join(outDir, `${p.base}.kicad_sch`));
     reportSch(p.sch!.input, sch, out.files.size);

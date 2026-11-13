@@ -554,6 +554,7 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
       placed.symbol.floating = true;
     }
     if (ciComp) placed.symbol.drawnKey = ciComp.refdes + comp.str("DBComponentSectionName");
+    if (ciComp?.part) placed.symbol.partName = ciComp.part;
     symbols.push(placed.symbol);
   }
 

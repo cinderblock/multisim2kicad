@@ -42,7 +42,7 @@ export interface CiNetlist {
   circuits: CiCircuitNetlist[];
   hierarchical: boolean;
   /** CiComponent id (as referenced by a drawing's `CiComponent=` attr) -> refdes + kind. */
-  componentsById: Map<string, { refdes: string; kind: CiComponentKind }>;
+  componentsById: Map<string, { refdes: string; kind: CiComponentKind; part?: string }>;
 }
 
 /** Every `<Item CiID=.. Class="Ci...">` wrapper's body element, by class, in document order. */
@@ -84,6 +84,20 @@ function componentKind(body: EwElement): CiComponentKind {
   return "part";
 }
 
+/**
+ * The part's EW database name. Database parts list `family, name, family`
+ * in their attribute strings (`MicroFit, 43650-04-11, MicroFit, ...`;
+ * virtual parts the same further in); basic parts (resistors) are all
+ * numbers and have none.
+ */
+export function dbPartName(body: EwElement): string | undefined {
+  const s = attrStrings(body);
+  for (let i = 0; i + 2 < Math.min(s.length, 24); i++) {
+    if (/[A-Za-z]/.test(s[i]!) && s[i] === s[i + 2] && s[i + 1] && s[i + 1]!.length < 64) return s[i + 1];
+  }
+  return undefined;
+}
+
 /** Pin-number CSV lives at strings[6] of a CiPort's second CiaCollString. */
 export function portPinNumbers(port: EwElement): string[] {
   const csv = collValues(ciCollStrings(port)[1])[6] ?? "";
@@ -102,12 +116,13 @@ export function drawnPinNumbers(raw: string): string[] {
 export function parseCiNetlist(input: XmlInput): CiNetlist {
   const items = collectCiItems(docOf(input).root);
 
-  const components = new Map<string, { refdes: string; circuit: string; kind: CiComponentKind }>();
+  const components = new Map<string, { refdes: string; circuit: string; kind: CiComponentKind; part?: string }>();
   for (const { id, body } of items.get("CiComponent") ?? []) {
     components.set(id, {
       refdes: body.str("LocalName"),
       circuit: body.get("Circuit") ?? "",
       kind: componentKind(body),
+      part: dbPartName(body),
     });
   }
   const instances = items.get("CiInstComponent") ?? [];
@@ -150,6 +165,6 @@ export function parseCiNetlist(input: XmlInput): CiNetlist {
   return {
     circuits: [...circuits.values()],
     hierarchical: instances.length > 0,
-    componentsById: new Map([...components].map(([id, c]) => [id, { refdes: c.refdes, kind: c.kind }])),
+    componentsById: new Map([...components].map(([id, c]) => [id, { refdes: c.refdes, kind: c.kind, part: c.part }])),
   };
 }

@@ -34,6 +34,9 @@ Output per project `<name>`:
 - `<name>.pretty/`: the board's footprints as a project library (one
   `.kicad_mod` per EW footprint, unrotated and top-side), registered in
   `fp-lib-table`
+- `<name>.kicad_sym`: the schematic's symbols as a project library (one
+  symbol per part, named after the part in the EW database, multi-section
+  parts as multi-unit symbols), registered in `sym-lib-table`
 
 When both halves are present they are linked the way KiCad expects:
 footprints carry their symbol's sheet path, symbols name their footprint,
@@ -62,8 +65,8 @@ Shared supply pins of multi-section parts (an op-amp's V+/V- on every
 section) stay connected the way Multisim wires them. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
-Not yet: a project symbol library (symbols are embedded in the schematic),
-parts pulled straight from the EW database, design rules / net classes.
+Not yet: parts pulled straight from the EW database, design rules / net
+classes.
 `plans/converter.md` tracks these.
 
 ## Checking results

@@ -11,10 +11,12 @@ import type {
   SchGraphic,
   SchPoint,
   SymbolPin,
+  SymbolText,
 } from "../ir/types.ts";
 
 // KiCad 9/10 schematic format (KiCad 10 reads it natively).
 const KICAD_SCH_VERSION = 20250610;
+const KICAD_SYM_VERSION = 20250610;
 
 /**
  * One Multisim schematic unit in mm. Multisim's nominal unit is 0.25 mm; we
@@ -104,10 +106,24 @@ const pinStem = (p: SymbolPin): SchGraphic => ({
   fill: false,
 });
 
-function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] = [], dropped: ReadonlySet<string> = new Set()): string {
-  const local = libName.split(":").pop()!;
+/**
+ * One library symbol, shared by every placed symbol drawn the same way.
+ * `head` + `body` (the drawing) must match exactly to share; each unit's
+ * pins (renumbered per section, shared pins dropped) must agree per unit.
+ */
+interface LibEntry {
+  name: string;
+  key: string;
+  value: string;
+  head: string[];
+  body: string[];
+  units: Map<number, string[]>;
+}
+
+const libLines = (gs: SchGraphic[]) => gs.map(libGraphic).filter((x): x is string => !!x);
+
+function libParts(s: SchematicSymbol, refs: InstanceRef[], dropped: ReadonlySet<string>): Omit<LibEntry, "name" | "key"> {
   const pins = uniquePins(s.pins).filter((p) => !dropped.has(p.number));
-  const units = [...unitsOf(refs)].sort((a, b) => a[0] - b[0]);
   const power = s.kind === "power";
   const pinLine = (p: SymbolPin, number: string) => {
     const type = power ? "power_in" : "passive";
@@ -115,9 +131,8 @@ function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] 
     const length = power ? 0 : p.length;
     return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(number)} ${FONT}))`;
   };
-  const stems: SchGraphic[] = s.pins.filter((p) => p.length > 0 && (power || dropped.has(p.number))).map(pinStem);
-  const lines = [
-    `\t\t(symbol ${q(libName)}`,
+  const stems = (keep: (p: SymbolPin) => boolean) => libLines(s.pins.filter((p) => p.length > 0 && keep(p)).map(pinStem));
+  const head = [
     power ? `\t\t\t(power global)` : "",
     `\t\t\t(pin_numbers${s.showPinNumbers && !power ? "" : " (hide yes)"})`,
     `\t\t\t(pin_names (offset 0.254)${s.showPinNames && !power ? "" : " (hide yes)"})`,
@@ -125,23 +140,168 @@ function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] 
     `\t\t\t(in_bom ${power ? "no" : "yes"})`,
     `\t\t\t(on_board ${power ? "no" : "yes"})`,
     `\t\t\t(duplicate_pin_numbers_are_jumpers no)`,
-    `\t\t\t(property "Reference" ${q(power ? "#PWR" : s.reference.replace(/\d+$/, "") || "U")} (at 0 0 0) ${FONT})`,
-    `\t\t\t(property "Value" ${q(s.value)} (at 0 0 0) ${FONT})`,
+    `\t\t\t(property "Reference" ${q(power ? "#PWR" : refPrefix(s))} (at 0 0 0) ${FONT})`,
+  ].filter(Boolean);
+  // One body per unit: the same drawing, pins renumbered for that section.
+  // Shared pins kept on another section are drawn as plain stems here.
+  const units = new Map<number, string[]>();
+  const drawing = [...libLines(s.graphics), ...stems((p) => power || dropped.has(p.number))];
+  for (const [unit, map] of unitsOf(refs)) units.set(unit, [...drawing, ...pins.map((p) => pinLine(p, map?.[p.number] ?? p.number))]);
+  return { value: s.value, head, body: [], units };
+}
+
+/**
+ * Move a symbol's local origin to the centre of its pins (of its drawing,
+ * when it has no pins), rounded to the grid, and shift its placement to
+ * match. Multisim's local frames carry arbitrary offsets, so the same part
+ * drawn twice would otherwise be two library symbols; KiCad also expects
+ * the origin near the body. Pins stay on grid (integer units).
+ */
+function centreSymbol(s: SchematicSymbol): SchematicSymbol {
+  const pts = s.pins.length ? s.pins.map((p) => p.at) : s.graphics.flatMap(graphicPoints);
+  if (!pts.length) return s;
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const o = { x: Math.round((Math.min(...xs) + Math.max(...xs)) / 2), y: Math.round((Math.min(...ys) + Math.max(...ys)) / 2) };
+  if (o.x === 0 && o.y === 0) return s;
+  const m = (p: SchPoint): SchPoint => ({ x: p.x - o.x, y: p.y - o.y });
+  const text = (t?: SymbolText) => t && { ...t, at: m(t.at) };
+  return {
+    ...s,
+    at: add(s.at, applyD(s.transform, o)),
+    graphics: s.graphics.map((g) => mapGraphic(g, m)),
+    pins: s.pins.map((p) => ({ ...p, at: m(p.at) })),
+    refText: text(s.refText),
+    valueText: text(s.valueText),
+  };
+}
+
+const IDENTITY_D: Dihedral = { a: 1, b: 0, c: 0, d: 1 };
+/** t after h: p -> t(h(p)). */
+const composeD = (t: Dihedral, h: Dihedral): Dihedral => ({
+  a: t.a * h.a + t.c * h.b,
+  b: t.b * h.a + t.d * h.b,
+  c: t.a * h.c + t.c * h.d,
+  d: t.b * h.c + t.d * h.d,
+});
+const transposeD = (g: Dihedral): Dihedral => ({ a: g.a, b: g.c, c: g.b, d: g.d });
+
+/** The same placed symbol with its drawing turned by `g` (placement unchanged on the sheet). */
+function reorient(s: SchematicSymbol, g: Dihedral): SchematicSymbol {
+  if (g.a === 1 && g.d === 1 && !g.b && !g.c) return s;
+  const m = (p: SchPoint) => applyD(g, p);
+  const text = (t?: SymbolText) => t && { ...t, at: m(t.at) };
+  return {
+    ...s,
+    transform: composeD(s.transform, transposeD(g)),
+    graphics: s.graphics.map((x) => mapGraphic(x, m)),
+    pins: s.pins.map((p) => ({ ...p, at: m(p.at), dir: m(p.dir) })),
+    refText: text(s.refText),
+    valueText: text(s.valueText),
+  };
+}
+
+function mapGraphic(g: SchGraphic, m: (p: SchPoint) => SchPoint): SchGraphic {
+  switch (g.kind) {
+    case "polyline":
+      return { ...g, points: g.points.map(m) };
+    case "rect":
+      return { ...g, a: m(g.a), b: m(g.b) };
+    case "circle":
+      return { ...g, center: m(g.center) };
+    case "arc":
+      return { ...g, start: m(g.start), mid: m(g.mid), end: m(g.end) };
+    case "text":
+      return { ...g, at: m(g.at) };
+  }
+}
+
+function graphicPoints(g: SchGraphic): SchPoint[] {
+  switch (g.kind) {
+    case "polyline":
+      return g.points;
+    case "rect":
+      return [g.a, g.b];
+    case "circle":
+      return [g.center];
+    case "arc":
+      return [g.start, g.mid, g.end];
+    case "text":
+      return [g.at];
+  }
+}
+
+/** Reference prefix: the letters before the number (U8I2C -> U). */
+const refPrefix = (s: SchematicSymbol) => /^[A-Za-z_]*/.exec(s.reference)![0] || "U";
+
+/** A library symbol as text, at `indent` (schematic `lib_symbols`: 2 tabs; `.kicad_sym`: 1). */
+function renderLibSymbol(e: LibEntry, fullName: string, indent: 1 | 2): string {
+  const lines = [
+    `\t\t(symbol ${q(fullName)}`,
+    ...e.head,
+    `\t\t\t(property "Value" ${q(e.value)} (at 0 0 0) ${FONT})`,
     `\t\t\t(property "Footprint" "" (at 0 0 0) (hide yes) ${FONT})`,
     `\t\t\t(property "Datasheet" "" (at 0 0 0) (hide yes) ${FONT})`,
-    `\t\t\t(symbol ${q(`${local}_0_1`)}`,
-    ...[...s.graphics, ...stems].map(libGraphic).filter((x): x is string => !!x),
-    `\t\t\t)`,
-    // One body per unit: the same drawing, pins renumbered for that section.
-    ...units.flatMap(([unit, map]) => [
-      `\t\t\t(symbol ${q(`${local}_${unit}_1`)}`,
-      ...pins.map((p) => pinLine(p, map?.[p.number] ?? p.number)),
-      `\t\t\t)`,
-    ]),
+    ...(e.body.length ? [`\t\t\t(symbol ${q(`${e.name}_0_1`)}`, ...e.body, `\t\t\t)`] : []),
+    ...[...e.units].sort((a, b) => a[0] - b[0]).flatMap(([unit, pins]) => [`\t\t\t(symbol ${q(`${e.name}_${unit}_1`)}`, ...pins, `\t\t\t)`]),
     `\t\t\t(embedded_fonts no)`,
     `\t\t)`,
   ];
-  return lines.filter(Boolean).join("\n");
+  return indent === 2 ? lines.join("\n") : lines.map((l) => l.slice(1)).join("\n");
+}
+
+/** The symbol library: identical drawings share one entry; unit sets merge. */
+class SymbolLibrary {
+  readonly entries: LibEntry[] = [];
+  private readonly names = new Set<string>();
+
+  /**
+   * The library entry for a placed symbol, and the symbol as placed from it.
+   * Multisim bakes some rotations into a part's drawing, so a symbol that
+   * matches an entry turned or mirrored is placed from that entry with the
+   * difference moved into its placement.
+   */
+  add(s: SchematicSymbol, refs: InstanceRef[], dropped: ReadonlySet<string>): { entry: LibEntry; symbol: SchematicSymbol } {
+    const base = (s.kind === "power" ? `PWR_${s.value}` : s.partName || refPrefix(s)).replace(/[^A-Za-z0-9_.+-]+/g, "_") || "U";
+    // Power symbols name their net through Value, so the value is part of them.
+    const keyOf = (parts: ReturnType<typeof libParts>) => JSON.stringify([base, parts.head, parts.body, s.kind === "power" ? s.value : ""]);
+    const fits = (e: LibEntry, key: string, parts: ReturnType<typeof libParts>) =>
+      e.key === key && [...parts.units].every(([u, pins]) => !e.units.has(u) || e.units.get(u)!.join("\n") === pins.join("\n"));
+    // Text in a drawing would turn with it, so only plain drawings are re-oriented.
+    const turns = s.graphics.some((g) => g.kind === "text") ? [IDENTITY_D] : KICAD_ORIENT.map(([m]) => m);
+    for (const g of turns) {
+      // Re-centred after turning: an odd span rounds its centre per orientation.
+      const t = centreSymbol(reorient(s, g));
+      const parts = libParts(t, refs, dropped);
+      const key = keyOf(parts);
+      const found = this.entries.find((e) => fits(e, key, parts));
+      if (found) {
+        for (const [u, pins] of parts.units) if (!found.units.has(u)) found.units.set(u, pins);
+        return { entry: found, symbol: t };
+      }
+    }
+    const parts = libParts(s, refs, dropped);
+    const key = keyOf(parts);
+    let name = base;
+    for (let n = 2; this.names.has(name.toLowerCase()); n++) name = `${base}_${n}`;
+    this.names.add(name.toLowerCase());
+    const e: LibEntry = { ...parts, name, key };
+    this.entries.push(e);
+    return { entry: e, symbol: s };
+  }
+
+  /** `.kicad_sym` file text. */
+  file(): string {
+    return [
+      `(kicad_symbol_lib`,
+      `\t(version ${KICAD_SYM_VERSION})`,
+      `\t(generator "ew-conv")`,
+      `\t(generator_version "0.1")`,
+      ...[...this.entries].sort((a, b) => a.name.localeCompare(b.name)).map((e) => renderLibSymbol(e, e.name, 1)),
+      `)`,
+      ``,
+    ].join("\n");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -324,6 +484,8 @@ interface PageFile {
   uuid: string;
   symbolUuids: string[];
   libNames: string[];
+  /** Per symbol: its library entry (filled once every instance is known). */
+  libEntries: LibEntry[];
   symbolRefs: InstanceRef[][];
   /** Per symbol: drawn pin numbers emitted as plain lines (shared pins kept on another section). */
   droppedPins: Set<string>[];
@@ -499,7 +661,7 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean, footprints?: R
     `\t\t(comment 1 ${q(importNote)})`,
     `\t)`,
     `\t(lib_symbols`,
-    ...sheet.symbols.map((s, i) => emitLibSymbol(s, f.libNames[i]!, f.symbolRefs[i]!, f.droppedPins[i])),
+    ...[...new Set(f.libEntries)].map((e) => renderLibSymbol(e, f.libNames[f.libEntries.indexOf(e)]!, 2)),
     `\t)`,
     ...junctions(segments, pinPoints).map((p) => `\t(junction (at ${u(p.x)} ${u(p.y)}) (diameter 0) (color 0 0 0 0) (uuid ${q(uuid())}))`),
     ...segments.filter(([a, b]) => a.x !== b.x || a.y !== b.y).map(([a, b]) => emitWire(a, b)),
@@ -535,13 +697,17 @@ export interface SymbolLink {
 export interface SchProjectOptions {
   /** Reference -> "lib:footprint" for the symbols' Footprint field. */
   footprints?: ReadonlyMap<string, string>;
+  /** Nickname of the project symbol library (default "ew"). */
+  library?: string;
 }
 
 export function emitKicadSchProject(
-  sch: Schematic,
+  source: Schematic,
   baseName: string,
   opts: SchProjectOptions = {},
-): { files: Map<string, string>; links: Map<string, SymbolLink> } {
+): { files: Map<string, string>; links: Map<string, SymbolLink>; symbolLibrary: string } {
+  const libNick = opts.library ?? "ew";
+  const sch: Schematic = { ...source, sheets: source.sheets.map((sh) => ({ ...sh, symbols: sh.symbols.map(centreSymbol) })) };
   const pagesOf = (title: string) => sch.sheets.filter((s) => s.title === title);
   const rootPages = pagesOf(sch.rootSheet);
   const rootFirst = rootPages[0] ?? sch.sheets[0];
@@ -559,9 +725,8 @@ export function emitKicadSchProject(
       fileName,
       uuid: uuid(),
       symbolUuids: sheet.symbols.map(() => uuid()),
-      libNames: sheet.symbols.map(
-        (s, i) => `ew:${slug(sheet.title)}_${slug(sheet.page)}_${(s.kind === "power" ? `PWR_${s.value}` : s.reference || "U").replace(/[^A-Za-z0-9_.+-]/g, "_")}__${i}`,
-      ),
+      libNames: [],
+      libEntries: [],
       symbolRefs: sheet.symbols.map(() => []),
       droppedPins: sheet.symbols.map(() => new Set<string>()),
       sub: [],
@@ -646,6 +811,17 @@ export function emitKicadSchProject(
   }
   dropSharedPins([...files.values()]);
 
+  // One library symbol per distinct drawing, across the whole project.
+  const library = new SymbolLibrary();
+  for (const f of files.values()) {
+    f.libEntries = f.sheet.symbols.map((s, i) => {
+      const r = library.add(s, f.symbolRefs[i]!, f.droppedPins[i]!);
+      f.sheet.symbols[i] = r.symbol;
+      return r.entry;
+    });
+    f.libNames = f.libEntries.map((e) => `${libNick}:${e.name}`);
+  }
+
   // Board links: one per reference (the lowest unit when a part has several).
   const links = new Map<string, SymbolLink>();
   for (const { f, i, ref, chain } of placements) {
@@ -665,7 +841,7 @@ export function emitKicadSchProject(
 
   const out = new Map<string, string>();
   for (const f of files.values()) out.set(f.fileName, renderPage(f, sch, f === rootFile, opts.footprints));
-  return { files: out, links };
+  return { files: out, links, symbolLibrary: library.file() };
 }
 
 /**
