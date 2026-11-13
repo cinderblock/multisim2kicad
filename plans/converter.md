@@ -766,8 +766,28 @@ hierarchy, connectors), since those are what make an output useless today.
       board only), Buttons 14/23 (J1/J2 pin order differs between the
       user's Multisim and Ultiboard files; each converter matches its own
       source exactly).**
-- [ ] E3: project-local libraries (`<project>.pretty`, `.kicad_sym`,
-      fp-lib-table / sym-lib-table) so the Footprint fields resolve.
+- [x] (2026-11-13) **E3 footprints: project-local footprint library.**
+      `<project>.pretty/` + `fp-lib-table` (entries merged, so projects can
+      share a folder). Each library footprint is a placed copy turned back
+      into its library drawing (C6 rules, rounded to nm). Ultiboard rounds
+      every placed copy after rotating it and KiCad compares footprints
+      exactly, so `harmonizeFootprints` places each copy from its library
+      drawing when it agrees within 10 nm, trying quarter-turns (a 2-pin
+      part may record pad 1 at the other end); a copy that matches no
+      drawing (a silk mark moved on that copy) becomes a variant
+      `<name>_2`. Fixes found on the way: rectangles drawn from their
+      corners (were bounding boxes, wrong at odd angles), rounded rectangles
+      likewise, circle rim point on the frame's +x axis, custom pads
+      written in the footprint frame at the footprint's angle, a part's 3D
+      outline on one user layer for both sides (KiCad does not swap user
+      layers on flip), mounting holes as `MountingHole_<d>mm` library
+      footprints. **24 boards: lib_footprint_issues 1921 -> 0, total DRC
+      violations 15760 -> 13853, pins on pads unchanged (5963).** LED-Delay
+      gained one ratsnest entry (4 -> 5) on its VCC net, already split by a
+      source quirk (F.Cu track ending on P1's bottom-only pad); pads are
+      unchanged. Report `out/corpus-pcb-e3/`.
+- [ ] E3 symbols: project symbol library (`.kicad_sym` + sym-lib-table),
+      which wants D4's one-symbol-per-part dedupe first.
 - [ ] **Next (approved order):** D4-D5, E (project linking), F (EW
       database), G. Also: diagnose the NI sample designs' 71% (drive
       corpus).

@@ -40,9 +40,13 @@ interface Frame {
   kind: "gr" | "fp";
   indent: string;
   xy(x: number, y: number): string;
+  /** Frame coordinates in nm (KiCad's Y-down, frame-local). */
+  local(x: number, y: number): Point;
+  /** The frame's orientation on the board, degrees CCW (footprint rotation). */
+  angle: number;
 }
 
-const BOARD: Frame = { kind: "gr", indent: "\t", xy: (x, y) => `${fx(x)} ${fy(y)}` };
+const BOARD: Frame = { kind: "gr", indent: "\t", xy: (x, y) => `${fx(x)} ${fy(y)}`, local: (x, y) => ({ x, y: -y }), angle: 0 };
 
 const stroke = (widthNm: number) => `(stroke (width ${mm(widthNm)}) (type default))`;
 
@@ -78,7 +82,10 @@ function emitCircle(
   widthNm: number, layer: string,
 ): string {
   // KiCad circle: center + a point on the circumference defines the radius.
-  return `${f.indent}(${f.kind}_circle (center ${f.xy(cx, cy)}) (end ${f.xy(cx + rNm, cy)}) ${stroke(widthNm)} (fill none) (layer ${q(layer)}) (uuid ${q(uuid())}))`;
+  // The rim point sits on the frame's +x axis, so a footprint's circles
+  // read the same at any rotation (and match the library copy).
+  const c = f.local(cx, cy);
+  return `${f.indent}(${f.kind}_circle (center ${mm(c.x)} ${mm(c.y)}) (end ${mm(c.x + rNm)} ${mm(c.y)}) ${stroke(widthNm)} (fill none) (layer ${q(layer)}) (uuid ${q(uuid())}))`;
 }
 
 function emitEllipse(f: Frame, s: Extract<Shape, { kind: "ellipse" }>, layer: string): string[] {
@@ -104,36 +111,48 @@ function bbox(points: { x: number; y: number }[]) {
 }
 
 function emitRoundRect(f: Frame, s: Extract<Shape, { kind: "roundRect" }>, layer: string): string[] {
-  // First 4 points are the bbox corners; any extras (5th anchor point seen
-  // in samples) are ignored.
+  // First 4 points are the corners, in a loop (a 5th anchor point is
+  // ignored). Built from the corners, not the bounding box, so a part at any
+  // angle keeps its outline.
   if (s.points.length < 4) return [];
-  const { xMin, xMax, yMin, yMax } = bbox(s.points.slice(0, 4));
-  const r = s.radius;
+  const corners = s.points.slice(0, 4);
   const w = strokeWidthFor(s.thickness, layer);
-  return [
-    // 4 straight edges between rounded corners
-    emitLine(f, xMin, yMin + r, xMin, yMax - r, w, layer),
-    emitLine(f, xMin + r, yMax, xMax - r, yMax, w, layer),
-    emitLine(f, xMax, yMax - r, xMax, yMin + r, w, layer),
-    emitLine(f, xMax - r, yMin, xMin + r, yMin, w, layer),
-    // 4 corner arcs (90 deg each); start/end on the bbox edges
-    emitArc(f, xMin + r, yMax - r, xMin, yMax - r, xMin + r, yMax, r, w, layer),
-    emitArc(f, xMax - r, yMax - r, xMax - r, yMax, xMax, yMax - r, r, w, layer),
-    emitArc(f, xMax - r, yMin + r, xMax, yMin + r, xMax - r, yMin, r, w, layer),
-    emitArc(f, xMin + r, yMin + r, xMin + r, yMin, xMin, yMin + r, r, w, layer),
-  ];
+  const unit = (a: Point, b: Point) => {
+    const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return { x: (b.x - a.x) / d, y: (b.y - a.y) / d };
+  };
+  const shortest = Math.min(...corners.map((p, i) => Math.hypot(corners[(i + 1) % 4]!.x - p.x, corners[(i + 1) % 4]!.y - p.y)));
+  const r = Math.max(0, Math.min(s.radius, shortest / 2));
+  // Per corner: where the arc meets the edge to the previous / next corner.
+  const ends = corners.map((p, i) => {
+    const toPrev = unit(p, corners[(i + 3) % 4]!);
+    const toNext = unit(p, corners[(i + 1) % 4]!);
+    return {
+      a: { x: p.x + toPrev.x * r, y: p.y + toPrev.y * r },
+      b: { x: p.x + toNext.x * r, y: p.y + toNext.y * r },
+      c: { x: p.x + (toPrev.x + toNext.x) * r, y: p.y + (toPrev.y + toNext.y) * r },
+    };
+  });
+  const out: string[] = [];
+  ends.forEach((e, i) => {
+    const next = ends[(i + 1) % 4]!;
+    out.push(emitLine(f, e.b.x, e.b.y, next.a.x, next.a.y, w, layer));
+  });
+  if (r > 0) for (const e of ends) out.push(emitArc(f, e.c.x, e.c.y, e.a.x, e.a.y, e.b.x, e.b.y, r, w, layer));
+  return out;
 }
 
 function emitRectangle(f: Frame, s: Extract<Shape, { kind: "rectangle" }>, layer: string): string[] {
   if (s.points.length < 4) return [];
-  const { xMin, xMax, yMin, yMax } = bbox(s.points.slice(0, 4));
+  // The 4 corners in Ultiboard's order (always a loop): a rotated part's
+  // rectangle stays rotated (not its bounding box), and copies of one
+  // footprint draw it the same way (library match).
+  const corners = s.points.slice(0, 4);
   const w = strokeWidthFor(s.thickness, layer);
-  return [
-    emitLine(f, xMin, yMin, xMax, yMin, w, layer),
-    emitLine(f, xMax, yMin, xMax, yMax, w, layer),
-    emitLine(f, xMax, yMax, xMin, yMax, w, layer),
-    emitLine(f, xMin, yMax, xMin, yMin, w, layer),
-  ];
+  return corners.map((p, i) => {
+    const q = corners[(i + 1) % 4]!;
+    return emitLine(f, p.x, p.y, q.x, q.y, w, layer);
+  });
 }
 
 function emitPolyline(f: Frame, s: Extract<Shape, { kind: "polyline" }>, layer: string): string[] {
@@ -418,22 +437,37 @@ function padCopper(pad: Pad, lm: LayerMap): string[] {
   return pad.side === "both" ? lm.copper : pad.side === "bottom" ? ["B.Cu"] : ["F.Cu"];
 }
 
-/** Custom-pad primitive in pad-local KiCad coordinates (pad emitted unrotated). */
-function emitPrimitive(pr: PadPrimitive, at: Point): string {
-  const lx = (x: number) => mm(x - at.x);
-  const ly = (y: number) => mm(-(y - at.y));
+/**
+ * Custom-pad primitive relative to its pad, in the frame's orientation (the
+ * pad is emitted at the frame's angle, so primitives read the same on every
+ * copy of a footprint and in its library entry).
+ */
+function emitPrimitive(pr: PadPrimitive, at: Point, f: Frame): string {
+  const o = f.local(at.x, at.y);
+  const rel = (x: number, y: number) => {
+    const p = f.local(x, y);
+    return { x: p.x - o.x, y: p.y - o.y };
+  };
+  const xy = (x: number, y: number) => {
+    const p = rel(x, y);
+    return `${mm(p.x)} ${mm(p.y)}`;
+  };
+  const lx = (x: number, y: number) => mm(rel(x, y).x);
+  const ly = (x: number, y: number) => mm(rel(x, y).y);
   switch (pr.kind) {
     case "poly":
-      return `(gr_poly (pts ${pr.points.map((p) => `(xy ${lx(p.x)} ${ly(p.y)})`).join(" ")}) (width 0) (fill yes))`;
-    case "circle":
-      return `(gr_circle (center ${lx(pr.center.x)} ${ly(pr.center.y)}) (end ${lx(pr.center.x + pr.radius)} ${ly(pr.center.y)}) (width ${mm(pr.fill ? 0 : pr.width)}) (fill ${pr.fill ? "yes" : "no"}))`;
+      return `(gr_poly (pts ${pr.points.map((p) => `(xy ${xy(p.x, p.y)})`).join(" ")}) (width 0) (fill yes))`;
+    case "circle": {
+      const c = rel(pr.center.x, pr.center.y);
+      return `(gr_circle (center ${mm(c.x)} ${mm(c.y)}) (end ${mm(c.x + pr.radius)} ${mm(c.y)}) (width ${mm(pr.fill ? 0 : pr.width)}) (fill ${pr.fill ? "yes" : "no"}))`;
+    }
     case "arc": {
       const r = Math.hypot(pr.start.x - pr.center.x, pr.start.y - pr.center.y);
       const a0 = Math.atan2(pr.start.y - pr.center.y, pr.start.x - pr.center.x);
       let sweep = Math.atan2(pr.end.y - pr.center.y, pr.end.x - pr.center.x) - a0;
       while (sweep <= 0) sweep += 2 * Math.PI;
       const mid = { x: pr.center.x + r * Math.cos(a0 + sweep / 2), y: pr.center.y + r * Math.sin(a0 + sweep / 2) };
-      return `(gr_arc (start ${lx(pr.start.x)} ${ly(pr.start.y)}) (mid ${lx(mid.x)} ${ly(mid.y)}) (end ${lx(pr.end.x)} ${ly(pr.end.y)}) (width ${mm(pr.width)}))`;
+      return `(gr_arc (start ${lx(pr.start.x, pr.start.y)} ${ly(pr.start.x, pr.start.y)}) (mid ${lx(mid.x, mid.y)} ${ly(mid.x, mid.y)}) (end ${lx(pr.end.x, pr.end.y)} ${ly(pr.end.x, pr.end.y)}) (width ${mm(pr.width)}))`;
     }
   }
 }
@@ -470,16 +504,17 @@ function emitPad(pad: Pad, f: Frame, net: NetRef | undefined): string {
       shapeTok = "custom";
       const anchor = Math.max(10_000, Math.min(pad.drillDiameter, 100_000));
       size = `${mm(anchor)} ${mm(anchor)}`;
-      extra = ` (options (clearance outline) (anchor circle)) (primitives ${pad.shape.primitives.map((p) => emitPrimitive(p, pad.at)).join(" ")})`;
+      extra = ` (options (clearance outline) (anchor circle)) (primitives ${pad.shape.primitives.map((p) => emitPrimitive(p, pad.at, f)).join(" ")})`;
       break;
     }
   }
 
   // EW and KiCad both measure rotation counter-clockwise as seen on screen,
   // so the angle carries over unchanged despite the Y flip. KiCad stores pad
-  // angles absolute (footprint rotation included), as EW does. Custom pads
-  // stay at 0: their primitives are already in board orientation.
-  const rotDeg = pad.shape.kind === "circle" || pad.shape.kind === "custom" ? 0 : normDeg(deg(pad.rotation));
+  // angles absolute (footprint rotation included), as EW does. Round and
+  // custom pads take the footprint's own angle (custom primitives are
+  // written in the footprint's frame), so they match the library copy.
+  const rotDeg = pad.shape.kind === "circle" || pad.shape.kind === "custom" ? normDeg(f.angle) : normDeg(deg(pad.rotation));
   const at = `(at ${f.xy(pad.at.x, pad.at.y)}${rotDeg !== 0 ? ` ${+rotDeg.toFixed(6)}` : ""})`;
   const netTok = net ? ` (net ${net.idx} ${q(net.name)})` : "";
 
@@ -505,12 +540,16 @@ function footprintFrame(c: Component): { phi: number; frame: Frame } {
   // where R is counter-clockwise as seen on screen.
   const ox = c.origin.x;
   const oy = -c.origin.y;
-  const xy = (x: number, y: number) => {
+  const local = (x: number, y: number): Point => {
     const dx = x - ox;
     const dy = -y - oy;
-    return `${mm(dx * cos - dy * sin)} ${mm(dx * sin + dy * cos)}`;
+    return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
   };
-  return { phi, frame: { kind: "fp", indent: "\t\t", xy } };
+  const xy = (x: number, y: number) => {
+    const p = local(x, y);
+    return `${mm(p.x)} ${mm(p.y)}`;
+  };
+  return { phi, frame: { kind: "fp", indent: "\t\t", xy, local, angle: phi } };
 }
 
 /** Footprint name for a part: EW's footprint (shape) name, file-name safe. */
@@ -528,6 +567,8 @@ export interface FootprintLink {
 }
 
 export interface PcbOptions {
+  /** Emit a library footprint: no position, nets or board links. */
+  library?: boolean;
   /** Footprint library nickname for the footprints' lib ids (default "ew"). */
   footprintLib?: string;
   /** Reference -> schematic symbol, to link the board to its schematic. */
@@ -543,8 +584,7 @@ function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap, opts: P
   const lines: string[] = [
     `\t(footprint ${q(`${opts.footprintLib ?? "ew"}:${footprintName(c)}`)}`,
     `\t\t(layer ${q(cu)})`,
-    `\t\t(uuid ${q(uuid())})`,
-    `\t\t(at ${fx(c.origin.x)} ${fy(c.origin.y)}${phi ? ` ${+phi.toFixed(6)}` : ""})`,
+    ...(opts.library ? [] : [`\t\t(uuid ${q(uuid())})`, `\t\t(at ${fx(c.origin.x)} ${fy(c.origin.y)}${phi ? ` ${+phi.toFixed(6)}` : ""})`]),
     ...(link
       ? [`\t\t(path ${q(link.path)})`, `\t\t(sheetname ${q(link.sheetname)})`, `\t\t(sheetfile ${q(link.sheetfile)})`]
       : []),
@@ -581,27 +621,42 @@ function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap, opts: P
   return lines.join("\n");
 }
 
-function emitHole(h: Hole, n: number): string {
+/** One footprint on its own (library files): no nets. */
+export function emitFootprintFor(c: Component, lm: LayerMap, opts: PcbOptions = {}): string {
+  return emitFootprint(c, () => undefined, lm, opts);
+}
+
+/** Library name of a mounting hole footprint: by drill size. */
+export const mountingHoleName = (drillNm: number) => `MountingHole_${+(drillNm / NM_PER_MM).toFixed(4)}mm`;
+
+/**
+ * A mechanical mounting hole: KiCad models it as a footprint holding one
+ * np_thru_hole pad with size == drill (no copper). `at` is omitted for the
+ * library copy.
+ */
+export function mountingHoleFootprint(drillNm: number, lib: string, place?: { at: Point; n: number }): string {
+  const d = mm(drillNm);
+  const name = mountingHoleName(drillNm);
+  return [
+    `\t(footprint ${q(place ? `${lib}:${name}` : name)}`,
+    `\t\t(layer "F.Cu")`,
+    ...(place ? [`\t\t(uuid ${q(uuid())})`, `\t\t(at ${fx(place.at.x)} ${fy(place.at.y)})`] : []),
+    `\t\t(property "Reference" ${q(place ? `MH${place.n}` : "MH**")} (at 0 0 0) (layer "F.Fab") (hide yes) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
+    `\t\t(property "Value" ${q(name)} (at 0 0 0) (layer "F.Fab") (hide yes) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
+    `\t\t(attr board_only exclude_from_pos_files exclude_from_bom)`,
+    `\t\t(pad "" np_thru_hole circle (at 0 0) (size ${d} ${d}) (drill ${d}) (layers "*.Cu" "*.Mask") (uuid ${q(uuid())}))`,
+    `\t)`,
+  ].join("\n");
+}
+
+function emitHole(h: Hole, n: number, lib: string): string {
   if (h.plated) {
     // Plated standalone drill -> via. No copper pad diameter in EW, so give a
     // 0.25 mm annular ring. net 0 (KiCad recomputes from connectivity).
     const size = h.drillDiameter + 500_000;
     return `\t(via (at ${fx(h.at.x)} ${fy(h.at.y)}) (size ${mm(size)}) (drill ${mm(h.drillDiameter)}) (layers "F.Cu" "B.Cu") (net 0) (uuid ${q(uuid())}))`;
   }
-  // Non-plated drill -> mechanical mounting hole. KiCad models this as a
-  // footprint holding a single np_thru_hole pad with size == drill (no copper).
-  const d = mm(h.drillDiameter);
-  return [
-    `\t(footprint ${q("ew:MountingHole")}`,
-    `\t\t(layer "F.Cu")`,
-    `\t\t(uuid ${q(uuid())})`,
-    `\t\t(at ${fx(h.at.x)} ${fy(h.at.y)})`,
-    `\t\t(property "Reference" ${q(`MH${n}`)} (at 0 0 0) (layer "F.Fab") (hide yes) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
-    `\t\t(property "Value" "MountingHole" (at 0 0 0) (layer "F.Fab") (hide yes) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
-    `\t\t(attr board_only exclude_from_pos_files exclude_from_bom)`,
-    `\t\t(pad "" np_thru_hole circle (at 0 0) (size ${d} ${d}) (drill ${d}) (layers "*.Cu" "*.Mask") (uuid ${q(uuid())}))`,
-    `\t)`,
-  ].join("\n");
+  return mountingHoleFootprint(h.drillDiameter, lib, { at: h.at, n });
 }
 
 export function emitKicadPcb(board: Board, opts: PcbOptions = {}): string {
@@ -625,7 +680,7 @@ export function emitKicadPcb(board: Board, opts: PcbOptions = {}): string {
   const textLines = board.texts.map((t) => emitText(t, lm)).filter((x): x is string => x !== undefined).join("\n");
   const ruleLines = board.ruleAreas.map((r, i) => emitRuleArea(r, i, lm)).join("\n");
   const footprintLines = board.components.map((c) => emitFootprint(c, resolve, lm, opts)).join("\n");
-  const holeLines = board.holes.map((h, i) => emitHole(h, i + 1)).join("\n");
+  const holeLines = board.holes.map((h, i) => emitHole(h, i + 1, opts.footprintLib ?? "ew")).join("\n");
 
   const placed: PlacedPad[] = [];
   for (const c of board.components) {

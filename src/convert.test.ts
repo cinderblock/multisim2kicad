@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { parseEwXml } from "electronics-workbench-decoder";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
 import { emitKicadSch } from "./emit/kicad-sch.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
@@ -9,7 +10,7 @@ import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./par
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
-import type { Board, Component } from "./ir/types.ts";
+import type { Board, Component, Point } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
 import { atom, listsNamed, parseSexpr, type Sexpr } from "./util/sexpr.ts";
 
@@ -94,6 +95,64 @@ describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
     const segs = out.match(/\(segment [^\n]*/g) ?? [];
     expect(segs.length).toBe(6);
     expect(segs.every((s) => !s.includes("(net 0)"))).toBe(true);
+  });
+});
+
+describe("footprint library (E3)", () => {
+  // A part as Ultiboard stores it (already placed), from a library drawing.
+  const placedFrom = (rotDeg: number, bottom: boolean, local: Point[]): Point[] => {
+    const t = ((bottom ? -rotDeg : rotDeg) * Math.PI) / 180;
+    return local.map((l) => {
+      const x = bottom ? -l.x : l.x;
+      return { x: 5_000_000 + Math.round(x * Math.cos(t) - l.y * Math.sin(t)), y: 7_000_000 + Math.round(x * Math.sin(t) + l.y * Math.cos(t)) };
+    });
+  };
+  const part = (ref: string, rotDeg: number, bottom: boolean, turn = 0): Component => {
+    const [p1, p2, a, b] = placedFrom(rotDeg + turn, bottom, [{ x: -800_000, y: 0 }, { x: 800_000, y: 0 }, { x: -1_500_000, y: 700_000 }, { x: 1_500_000, y: 700_000 }]);
+    const pad = (number: string, at: Point): Component["pads"][number] => ({
+      number, at, rotation: (rotDeg + turn) * 1_000_000, shape: { kind: "rect", width: 1_000_000, height: 950_000 }, drillDiameter: 0, side: bottom ? "bottom" : "top",
+    });
+    return {
+      reference: ref, value: "C", name: "CAP", origin: { x: 5_000_000, y: 7_000_000 }, rotation: rotDeg * 1_000_000, bottom,
+      pads: [pad("1", p1!), pad("2", p2!)],
+      graphics: [{ kind: "polyline", layer: bottom ? 67 : 66, thickness: 120_000, points: [a!, b!] }],
+      texts: [],
+    };
+  };
+  const board = (components: Component[]): Board => ({
+    source: { application: "t", versionMajor: 0, versionMinor: 0, schema: 0 }, projectName: "t", sheetTitle: "t",
+    workArea: { left: 0, bottom: 0, right: 0, top: 0 }, layers: [], stackup: { copper: [0, 63], thickness: 1_600_000 },
+    zones: [], texts: [], ruleAreas: [], shapes: [], tracks: [], holes: [], vias: [], nets: [], components,
+  });
+
+  test("copies at any angle and side share one library drawing", () => {
+    const parts = [part("C1", 0, false), part("C2", 30, false), part("C3", 90, true), part("C4", 217.5, true)];
+    const h = harmonizeFootprints(board(parts));
+    expect([...h.library.keys()]).toEqual(["CAP"]);
+    const lib = h.library.get("CAP")!;
+    expect(lib.pads.map((p) => [p.at.x, p.at.y, p.side])).toEqual([[-800_000, 0, "top"], [800_000, 0, "top"]]);
+    expect(lib.graphics[0]!.layer).toBe(66);
+    // Placing from the library reproduces every copy (to Ultiboard's 1 nm).
+    h.board.components.forEach((c, i) => {
+      c.pads.forEach((p, k) => {
+        expect(Math.abs(p.at.x - parts[i]!.pads[k]!.at.x)).toBeLessThanOrEqual(2);
+        expect(Math.abs(p.at.y - parts[i]!.pads[k]!.at.y)).toBeLessThanOrEqual(2);
+      });
+    });
+  });
+
+  test("a copy turned a half-turn from its recorded rotation is the same footprint", () => {
+    const h = harmonizeFootprints(board([part("C1", 0, false), part("C2", 90, true, 180)]));
+    expect([...h.library.keys()]).toEqual(["CAP"]);
+    expect(h.board.components[1]!.rotation).toBe(270_000_000);
+  });
+
+  test("a copy drawn differently becomes a variant", () => {
+    const odd = part("C2", 0, false);
+    odd.graphics[0]!.kind === "polyline" && (odd.graphics[0]!.points[0] = { x: 0, y: 0 });
+    const h = harmonizeFootprints(board([part("C1", 0, false), odd]));
+    expect([...h.library.keys()]).toEqual(["CAP", "CAP_2"]);
+    expect(h.board.components.map((c) => c.name)).toEqual(["CAP", "CAP_2"]);
   });
 });
 

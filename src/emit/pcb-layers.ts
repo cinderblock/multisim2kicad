@@ -61,6 +61,11 @@ const FIXED: Record<number, string> = {
 };
 
 const COURTYARD = 92;
+const EW_3D_TOP = 68;
+const EW_3D_BOTTOM = 69;
+
+/** EW bottom-side layers and their top-side twins (library footprints are top-side). */
+export const TOP_TWIN: Readonly<Record<number, number>> = { 67: 66, 69: 68, 71: 70, 73: 72, 75: 74, 77: 76 };
 
 /** EW-internal layers: never emitted. */
 const DROPPED = new Set([64, 78, 79, 80, 511]);
@@ -93,6 +98,10 @@ export class LayerMap {
       ...board.shapes.map((s) => s.layer),
       ...board.texts.map((t) => t.layer),
       ...board.components.flatMap((c) => [...c.graphics.map((g) => g.layer), ...c.texts.map((t) => t.layer)]),
+      // Library footprints flip bottom parts to the top: their twins too.
+      ...board.components
+        .filter((c) => c.bottom)
+        .flatMap((c) => [...c.graphics, ...c.texts].map((g) => TOP_TWIN[g.layer] ?? g.layer)),
     ]);
     const ewName = new Map(board.layers.map((l) => [l.number, l.name]));
     const wanted = [...used]
@@ -125,6 +134,10 @@ export class LayerMap {
    */
   kicadInPart(ew: number, bottom: boolean): string | undefined {
     if (bottom && ew === COURTYARD) return "B.CrtYd";
+    // KiCad has no back twin for a user layer and keeps user-layer items
+    // where they are when it flips a footprint, so a part's 3D outline uses
+    // the top 3D layer on either side (the footprint matches its library).
+    if (ew === EW_3D_BOTTOM) return this.kicad(EW_3D_TOP) ?? this.kicad(ew);
     return this.kicad(ew);
   }
 

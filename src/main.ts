@@ -7,6 +7,7 @@ import { parsePcbXml } from "./parse/pcb.ts";
 import { parseSchematicXml } from "./parse/sch.ts";
 import { emitKicadPcb, footprintName } from "./emit/kicad-pcb.ts";
 import { emitKicadSchProject, kicadProSchematicSettings } from "./emit/kicad-sch.ts";
+import { emitFootprintLibrary, harmonizeFootprints } from "./emit/footprint-lib.ts";
 
 const NM_PER_MM = 1_000_000;
 
@@ -29,7 +30,8 @@ const libNickname = (base: string) => base.replace(/[^A-Za-z0-9_.+-]+/g, "_") ||
 export async function convertProject(p: ProjectInput, outDir: string): Promise<string[]> {
   await mkdir(outDir, { recursive: true });
   const written: string[] = [];
-  const board = p.pcb ? parsePcbXml(p.pcb.xml) : undefined;
+  const parsed = p.pcb ? harmonizeFootprints(parsePcbXml(p.pcb.xml)) : undefined;
+  const board = parsed?.board;
   const sch = p.sch ? parseSchematicXml(p.sch.xml) : undefined;
   const lib = libNickname(p.base);
 
@@ -48,6 +50,11 @@ export async function convertProject(p: ProjectInput, outDir: string): Promise<s
     const path = join(outDir, `${p.base}.kicad_pcb`);
     await writeFile(path, emitKicadPcb(board, { footprintLib: lib, links }), "utf8");
     written.push(path);
+    // Project-local footprint library the footprints' lib ids point at.
+    const pretty = join(outDir, `${lib}.pretty`);
+    await mkdir(pretty, { recursive: true });
+    for (const [name, text] of emitFootprintLibrary(board, parsed!.library)) await writeFile(join(pretty, name), text, "utf8");
+    await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, "Footprints from the Ultiboard design (ew-conv)");
     reportPcb(p.pcb!.input, board, links);
   }
   await writeProjectFile(join(outDir, `${p.base}.kicad_pro`), !!sch);
@@ -136,6 +143,21 @@ async function writeProjectFile(path: string, schematic: boolean): Promise<void>
   pro.meta ??= { filename: basename(path), version: 3 };
   if (schematic) pro.schematic = { ...(pro.schematic ?? {}), ...kicadProSchematicSettings() };
   await writeFile(path, `${JSON.stringify(pro, null, 2)}\n`, "utf8");
+}
+
+/**
+ * Add (or replace) one library in a KiCad lib table, keeping other entries:
+ * several converted projects can share an output folder.
+ */
+async function addLibTableEntry(path: string, head: string, name: string, uri: string, descr: string): Promise<void> {
+  const q = (s: string) => JSON.stringify(s);
+  const entry = `\t(lib (name ${q(name)}) (type "KiCad") (uri ${q(uri)}) (options "") (descr ${q(descr)}))`;
+  let lines: string[] = [];
+  try {
+    lines = (await readFile(path, "utf8")).split(/\r?\n/).filter((l) => l.trim().startsWith("(lib "));
+  } catch {}
+  lines = lines.filter((l) => !l.includes(`(name ${q(name)})`));
+  await writeFile(path, [`(${head}`, `\t(version 7)`, ...lines, entry, `)`, ``].join("\n"), "utf8");
 }
 
 const DESIGN_FILE = /\.(ewprj|ms1\d)(\.xml)?$/i;

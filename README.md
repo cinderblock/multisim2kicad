@@ -17,17 +17,28 @@ Requires [bun](https://bun.sh).
 
 ```bash
 bun install
-bun run dev path/to/Design.ewprj path/to/Design.ms14        # writes ./out/
-bun run dev -o converted/ path/to/Design.ms14                # choose output dir
+bun run dev path/to/Design.ms14 path/to/Design.ewprj        # writes ./out/
+bun run dev -o converted/ path/to/project-folder/            # every design in a folder
 ```
 
 Inputs can be the binary EW files or XML already decoded by `ewd`; the
-design type comes from the file's contents, not its extension.
+design type comes from the file's contents, not its extension. A schematic
+and a board with the same name in the same folder (`Main.ms14` +
+`Main.ewprj`) become **one linked KiCad project**.
 
-Output per input:
+Output per project `<name>`:
 
-- `.ewprj` → `<name>.kicad_pcb`
-- `.ms1x` → `<name>.kicad_sch` + a minimal `<name>.kicad_pro`
+- `<name>.kicad_pro`
+- `<name>.kicad_sch` (+ one file per sub-sheet / extra page) from the `.ms1x`
+- `<name>.kicad_pcb` from the `.ewprj`
+- `<name>.pretty/`: the board's footprints as a project library (one
+  `.kicad_mod` per EW footprint, unrotated and top-side), registered in
+  `fp-lib-table`
+
+When both halves are present they are linked the way KiCad expects:
+footprints carry their symbol's sheet path, symbols name their footprint,
+footprint values follow the schematic, and parts that exist only on the
+board (mounting hardware, fiducials) are marked board-only.
 
 ## What gets translated
 
@@ -51,8 +62,9 @@ Shared supply pins of multi-section parts (an op-amp's V+/V- on every
 section) stay connected the way Multisim wires them. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
-Not yet: linked schematic/board projects, symbol/footprint
-libraries. `plans/converter.md` tracks these.
+Not yet: a project symbol library (symbols are embedded in the schematic),
+parts pulled straight from the EW database, design rules / net classes.
+`plans/converter.md` tracks these.
 
 ## Checking results
 
@@ -67,6 +79,11 @@ own designs there), checks each output with `kicad-cli` (ERC/DRC, netlist
 export), and scores it against EW's own data: the schematic's KiCad netlist
 vs Multisim's netlist, and the share of PCB net pins that landed on a pad.
 Report: `out/corpus/report.md`.
+
+`bun run scripts/parity.ts <output-folder>` checks converted projects that
+have both a schematic and a board: the schematic's KiCad netlist against the
+board's pad nets, compared as connectivity (net names aside), plus which
+footprints are linked, board-only or orphaned.
 
 `kicad-cli` is always run through `scripts/run-hidden.ps1`, which starts it
 on a private Windows desktop so no KiCad window or warning dialog can appear
