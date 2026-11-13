@@ -34,7 +34,9 @@ Output per input:
 PCB: board outline, the full copper stack (inner layers from the
 lamination settings), copper tracks, every pad kind (round, square,
 rectangle, rounded, custom shapes; SMD on the right side), vias, mounting
-holes, power planes and copper areas as KiCad zones (net, clearance, thermal
+holes, footprints that keep each part's rotation and side (top or
+bottom) with the part's own silkscreen/fab/courtyard drawings and its
+reference and value text as placed in Ultiboard, power planes and copper areas as KiCad zones (net, clearance, thermal
 and island settings), nets (pads, tracks and vias carry their nets),
 silkscreen/mask/fab/courtyard graphics including arcs, board text, rule
 areas, and 3D/mechanical/custom EW layers as named KiCad user layers.
@@ -47,8 +49,7 @@ power and ground ports, global/local/hierarchical net connectors, user net
 names, free text. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
-Not yet: buses, footprint-local graphics (component outlines are board
-graphics today), linked schematic/board projects, symbol/footprint
+Not yet: buses, linked schematic/board projects, symbol/footprint
 libraries. `plans/converter.md` tracks these.
 
 ## Checking results
