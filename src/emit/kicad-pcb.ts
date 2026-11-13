@@ -11,6 +11,7 @@ const mm = (nm: number): string => (nm / NM_PER_MM).toFixed(6);
 const fx = (nm: number): string => mm(nm);
 const fy = (nm: number): string => mm(-nm);
 const deg = (millionths: number): number => millionths / 1_000_000;
+const normDeg = (d: number): number => ((d % 360) + 360) % 360;
 
 const EDGE_CUTS_WIDTH_NM = 50_000; // 0.05 mm — KiCad's typical Edge.Cuts width
 
@@ -29,14 +30,32 @@ function strokeWidthFor(rawNm: number, layer: string): number {
   return 120_000; // 0.12 mm — KiCad's default silkscreen width
 }
 
+/**
+ * Where graphics land: on the board (`gr_*`, absolute) or inside a footprint
+ * (`fp_*`, footprint-local). `xy` maps an absolute EW point (nm, Y-up) to a
+ * KiCad "x y" pair in mm. Footprint frames are rigid (rotation only), so arc
+ * mid points and circle radii computed in EW coordinates carry over.
+ */
+interface Frame {
+  kind: "gr" | "fp";
+  indent: string;
+  xy(x: number, y: number): string;
+}
+
+const BOARD: Frame = { kind: "gr", indent: "\t", xy: (x, y) => `${fx(x)} ${fy(y)}` };
+
+const stroke = (widthNm: number) => `(stroke (width ${mm(widthNm)}) (type default))`;
+
 function emitLine(
+  f: Frame,
   x1: number, y1: number, x2: number, y2: number,
   widthNm: number, layer: string,
 ): string {
-  return `\t(gr_line (start ${fx(x1)} ${fy(y1)}) (end ${fx(x2)} ${fy(y2)}) (stroke (width ${mm(widthNm)}) (type default)) (layer ${q(layer)}) (uuid ${q(uuid())}))`;
+  return `${f.indent}(${f.kind}_line (start ${f.xy(x1, y1)}) (end ${f.xy(x2, y2)}) ${stroke(widthNm)} (layer ${q(layer)}) (uuid ${q(uuid())}))`;
 }
 
 function emitArc(
+  f: Frame,
   cx: number, cy: number,
   sx: number, sy: number,
   ex: number, ey: number,
@@ -50,18 +69,19 @@ function emitArc(
   const len = Math.hypot(dx, dy);
   const midX = len === 0 ? cx : cx + (dx / len) * rNm;
   const midY = len === 0 ? cy : cy + (dy / len) * rNm;
-  return `\t(gr_arc (start ${fx(sx)} ${fy(sy)}) (mid ${fx(midX)} ${fy(midY)}) (end ${fx(ex)} ${fy(ey)}) (stroke (width ${mm(widthNm)}) (type default)) (layer ${q(layer)}) (uuid ${q(uuid())}))`;
+  return `${f.indent}(${f.kind}_arc (start ${f.xy(sx, sy)}) (mid ${f.xy(midX, midY)}) (end ${f.xy(ex, ey)}) ${stroke(widthNm)} (layer ${q(layer)}) (uuid ${q(uuid())}))`;
 }
 
 function emitCircle(
+  f: Frame,
   cx: number, cy: number, rNm: number,
   widthNm: number, layer: string,
 ): string {
-  // KiCad (gr_circle): center + a point on the circumference defines the radius.
-  return `\t(gr_circle (center ${fx(cx)} ${fy(cy)}) (end ${fx(cx + rNm)} ${fy(cy)}) (stroke (width ${mm(widthNm)}) (type default)) (fill none) (layer ${q(layer)}) (uuid ${q(uuid())}))`;
+  // KiCad circle: center + a point on the circumference defines the radius.
+  return `${f.indent}(${f.kind}_circle (center ${f.xy(cx, cy)}) (end ${f.xy(cx + rNm, cy)}) ${stroke(widthNm)} (fill none) (layer ${q(layer)}) (uuid ${q(uuid())}))`;
 }
 
-function emitEllipse(s: Extract<Shape, { kind: "ellipse" }>, layer: string): string[] {
+function emitEllipse(f: Frame, s: Extract<Shape, { kind: "ellipse" }>, layer: string): string[] {
   // EW circle: first two points are opposite ends of a diameter.
   if (s.points.length < 2) return [];
   const [p0, p1] = s.points as [Point, Point];
@@ -69,7 +89,7 @@ function emitEllipse(s: Extract<Shape, { kind: "ellipse" }>, layer: string): str
   const cy = (p0.y + p1.y) / 2;
   const r = Math.hypot(p1.x - p0.x, p1.y - p0.y) / 2;
   if (r <= 0) return [];
-  return [emitCircle(cx, cy, r, strokeWidthFor(s.thickness, layer), layer)];
+  return [emitCircle(f, cx, cy, r, strokeWidthFor(s.thickness, layer), layer)];
 }
 
 function bbox(points: { x: number; y: number }[]) {
@@ -83,7 +103,7 @@ function bbox(points: { x: number; y: number }[]) {
   };
 }
 
-function emitRoundRect(s: Extract<Shape, { kind: "roundRect" }>, layer: string): string[] {
+function emitRoundRect(f: Frame, s: Extract<Shape, { kind: "roundRect" }>, layer: string): string[] {
   // First 4 points are the bbox corners; any extras (5th anchor point seen
   // in samples) are ignored.
   if (s.points.length < 4) return [];
@@ -92,38 +112,38 @@ function emitRoundRect(s: Extract<Shape, { kind: "roundRect" }>, layer: string):
   const w = strokeWidthFor(s.thickness, layer);
   return [
     // 4 straight edges between rounded corners
-    emitLine(xMin, yMin + r, xMin, yMax - r, w, layer),
-    emitLine(xMin + r, yMax, xMax - r, yMax, w, layer),
-    emitLine(xMax, yMax - r, xMax, yMin + r, w, layer),
-    emitLine(xMax - r, yMin, xMin + r, yMin, w, layer),
+    emitLine(f, xMin, yMin + r, xMin, yMax - r, w, layer),
+    emitLine(f, xMin + r, yMax, xMax - r, yMax, w, layer),
+    emitLine(f, xMax, yMax - r, xMax, yMin + r, w, layer),
+    emitLine(f, xMax - r, yMin, xMin + r, yMin, w, layer),
     // 4 corner arcs (90 deg each); start/end on the bbox edges
-    emitArc(xMin + r, yMax - r, xMin, yMax - r, xMin + r, yMax, r, w, layer),
-    emitArc(xMax - r, yMax - r, xMax - r, yMax, xMax, yMax - r, r, w, layer),
-    emitArc(xMax - r, yMin + r, xMax, yMin + r, xMax - r, yMin, r, w, layer),
-    emitArc(xMin + r, yMin + r, xMin + r, yMin, xMin, yMin + r, r, w, layer),
+    emitArc(f, xMin + r, yMax - r, xMin, yMax - r, xMin + r, yMax, r, w, layer),
+    emitArc(f, xMax - r, yMax - r, xMax - r, yMax, xMax, yMax - r, r, w, layer),
+    emitArc(f, xMax - r, yMin + r, xMax, yMin + r, xMax - r, yMin, r, w, layer),
+    emitArc(f, xMin + r, yMin + r, xMin + r, yMin, xMin, yMin + r, r, w, layer),
   ];
 }
 
-function emitRectangle(s: Extract<Shape, { kind: "rectangle" }>, layer: string): string[] {
+function emitRectangle(f: Frame, s: Extract<Shape, { kind: "rectangle" }>, layer: string): string[] {
   if (s.points.length < 4) return [];
   const { xMin, xMax, yMin, yMax } = bbox(s.points.slice(0, 4));
   const w = strokeWidthFor(s.thickness, layer);
   return [
-    emitLine(xMin, yMin, xMax, yMin, w, layer),
-    emitLine(xMax, yMin, xMax, yMax, w, layer),
-    emitLine(xMax, yMax, xMin, yMax, w, layer),
-    emitLine(xMin, yMax, xMin, yMin, w, layer),
+    emitLine(f, xMin, yMin, xMax, yMin, w, layer),
+    emitLine(f, xMax, yMin, xMax, yMax, w, layer),
+    emitLine(f, xMax, yMax, xMin, yMax, w, layer),
+    emitLine(f, xMin, yMax, xMin, yMin, w, layer),
   ];
 }
 
-function emitPolyline(s: Extract<Shape, { kind: "polyline" }>, layer: string): string[] {
+function emitPolyline(f: Frame, s: Extract<Shape, { kind: "polyline" }>, layer: string): string[] {
   if (s.points.length < 2) return [];
   const w = strokeWidthFor(s.thickness, layer);
   const out: string[] = [];
   for (let i = 0; i + 1 < s.points.length; i++) {
     const p1 = s.points[i]!;
     const p2 = s.points[i + 1]!;
-    out.push(emitLine(p1.x, p1.y, p2.x, p2.y, w, layer));
+    out.push(emitLine(f, p1.x, p1.y, p2.x, p2.y, w, layer));
   }
   return out;
 }
@@ -137,24 +157,23 @@ function ccwMid(center: Point, start: Point, end: Point): Point {
   return { x: center.x + r * Math.cos(a0 + sweep / 2), y: center.y + r * Math.sin(a0 + sweep / 2) };
 }
 
-function emitArcShape(s: Extract<Shape, { kind: "arc" }>, layer: string): string[] {
+function emitArcShape(f: Frame, s: Extract<Shape, { kind: "arc" }>, layer: string): string[] {
   const r = Math.hypot(s.start.x - s.center.x, s.start.y - s.center.y);
   if (r <= 0) return [];
   const w = strokeWidthFor(s.thickness, layer);
-  if (Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y) < 1) return [emitCircle(s.center.x, s.center.y, r, w, layer)];
+  if (Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y) < 1) return [emitCircle(f, s.center.x, s.center.y, r, w, layer)];
   const m = ccwMid(s.center, s.start, s.end);
-  return [`\t(gr_arc (start ${fx(s.start.x)} ${fy(s.start.y)}) (mid ${fx(m.x)} ${fy(m.y)}) (end ${fx(s.end.x)} ${fy(s.end.y)}) (stroke (width ${mm(w)}) (type default)) (layer ${q(layer)}) (uuid ${q(uuid())}))`];
+  return [`${f.indent}(${f.kind}_arc (start ${f.xy(s.start.x, s.start.y)}) (mid ${f.xy(m.x, m.y)}) (end ${f.xy(s.end.x, s.end.y)}) ${stroke(w)} (layer ${q(layer)}) (uuid ${q(uuid())}))`];
 }
 
-function emitShape(shape: Shape, lm: LayerMap): string[] {
-  const layer = lm.kicad(shape.layer);
+function emitShape(shape: Shape, layer: string | undefined, f: Frame = BOARD): string[] {
   if (!layer) return []; // EW-internal layer (ratsnest, DRC markers, ...)
   switch (shape.kind) {
-    case "roundRect":  return emitRoundRect(shape, layer);
-    case "rectangle":  return emitRectangle(shape, layer);
-    case "polyline":   return emitPolyline(shape, layer);
-    case "ellipse":    return emitEllipse(shape, layer);
-    case "arc":        return emitArcShape(shape, layer);
+    case "roundRect":  return emitRoundRect(f, shape, layer);
+    case "rectangle":  return emitRectangle(f, shape, layer);
+    case "polyline":   return emitPolyline(f, shape, layer);
+    case "ellipse":    return emitEllipse(f, shape, layer);
+    case "arc":        return emitArcShape(f, shape, layer);
   }
 }
 
@@ -191,15 +210,23 @@ function emitZone(z: Zone, lm: LayerMap, net: NetRef | undefined, priority: numb
   ].join("\n");
 }
 
-function emitText(t: BoardText, lm: LayerMap): string | undefined {
-  const layer = lm.kicad(t.layer);
-  if (!layer) return undefined;
+/** `(at ...)` and `(effects ...)` of a text; KiCad stores text angles absolute, even in footprints. */
+function textParts(t: BoardText, f: Frame): { at: string; effects: string } {
   const h = t.height > 0 ? t.height : 1_000_000;
   const w = t.width > 0 ? t.width : h;
   const thick = t.strokeWidth > 0 ? t.strokeWidth : Math.round(h * 0.15);
-  const a = deg(t.angle);
-  const at = a ? `(at ${fx(t.at.x)} ${fy(t.at.y)} ${+a.toFixed(6)})` : `(at ${fx(t.at.x)} ${fy(t.at.y)})`;
-  return `\t(gr_text ${q(t.text)} ${at} (layer ${q(layer)}) (uuid ${q(uuid())}) (effects (font (size ${mm(h)} ${mm(w)}) (thickness ${mm(thick)}))${t.mirror ? " (justify mirror)" : ""}))`;
+  const a = normDeg(deg(t.angle));
+  return {
+    at: `(at ${f.xy(t.at.x, t.at.y)}${a || f.kind === "fp" ? ` ${+a.toFixed(6)}` : ""})`,
+    effects: `(effects (font (size ${mm(h)} ${mm(w)}) (thickness ${mm(thick)}))${t.mirror ? " (justify mirror)" : ""})`,
+  };
+}
+
+function emitText(t: BoardText, lm: LayerMap): string | undefined {
+  const layer = lm.kicad(t.layer);
+  if (!layer) return undefined;
+  const { at, effects } = textParts(t, BOARD);
+  return `\t(gr_text ${q(t.text)} ${at} (layer ${q(layer)}) (uuid ${q(uuid())}) ${effects})`;
 }
 
 /**
@@ -411,11 +438,7 @@ function emitPrimitive(pr: PadPrimitive, at: Point): string {
   }
 }
 
-function emitPad(pad: Pad, origin: Point, net: NetRef | undefined): string {
-  // Position relative to footprint origin (footprint emitted at rotation 0),
-  // Y flipped to KiCad's screen convention.
-  const lx = mm(pad.at.x - origin.x);
-  const ly = mm(-(pad.at.y - origin.y));
+function emitPad(pad: Pad, f: Frame, net: NetRef | undefined): string {
   const thru = pad.drillDiameter > 0;
   const type = thru ? "thru_hole" : "smd";
   const layers = thru
@@ -453,27 +476,77 @@ function emitPad(pad: Pad, origin: Point, net: NetRef | undefined): string {
   }
 
   // EW and KiCad both measure rotation counter-clockwise as seen on screen,
-  // so the angle carries over unchanged despite the Y flip.
-  const rotDeg = pad.shape.kind === "circle" || pad.shape.kind === "custom" ? 0 : deg(pad.rotation);
-  const at = rotDeg !== 0 ? `(at ${lx} ${ly} ${+rotDeg.toFixed(6)})` : `(at ${lx} ${ly})`;
+  // so the angle carries over unchanged despite the Y flip. KiCad stores pad
+  // angles absolute (footprint rotation included), as EW does. Custom pads
+  // stay at 0: their primitives are already in board orientation.
+  const rotDeg = pad.shape.kind === "circle" || pad.shape.kind === "custom" ? 0 : normDeg(deg(pad.rotation));
+  const at = `(at ${f.xy(pad.at.x, pad.at.y)}${rotDeg !== 0 ? ` ${+rotDeg.toFixed(6)}` : ""})`;
   const netTok = net ? ` (net ${net.idx} ${q(net.name)})` : "";
 
   return `\t\t(pad ${q(pad.number)} ${type} ${shapeTok} ${at} (size ${size})${drill} (layers ${layers})${extra}${netTok} (uuid ${q(uuid())}))`;
 }
 
-function emitFootprint(c: Component, resolve: NetResolver): string {
+/**
+ * KiCad orientation of a placed part and its footprint-local frame.
+ *
+ * KiCad places footprint items at origin + R(phi) * local and stores bottom
+ * footprints with local Y mirrored relative to the top-side drawing. EW's
+ * bottom-side parts are origin + R(-rot) * mirrorX(local) (C6 survey);
+ * mirrorX = R(180) * mirrorY, so phi = 180 - rot on the bottom, and the same
+ * footprint flipped to the top in KiCad gets EW's top-side drawing back.
+ */
+function footprintFrame(c: Component): { phi: number; frame: Frame } {
+  const r = deg(c.rotation);
+  const phi = normDeg(+(c.bottom ? 180 - r : r).toFixed(6));
+  const t = (phi * Math.PI) / 180;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  // KiCad board coordinates are Y-down: (x, -y). local = R(-phi) * (b - o),
+  // where R is counter-clockwise as seen on screen.
+  const ox = c.origin.x;
+  const oy = -c.origin.y;
+  const xy = (x: number, y: number) => {
+    const dx = x - ox;
+    const dy = -y - oy;
+    return `${mm(dx * cos - dy * sin)} ${mm(dx * sin + dy * cos)}`;
+  };
+  return { phi, frame: { kind: "fp", indent: "\t\t", xy } };
+}
+
+function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap): string {
   const cu = c.bottom ? "B.Cu" : "F.Cu";
   const silk = c.bottom ? "B.SilkS" : "F.SilkS";
   const fab = c.bottom ? "B.Fab" : "F.Fab";
+  const { phi, frame } = footprintFrame(c);
   const lines: string[] = [
     `\t(footprint ${q("ew:" + (c.name || c.value || "UNKNOWN"))}`,
     `\t\t(layer ${q(cu)})`,
     `\t\t(uuid ${q(uuid())})`,
-    `\t\t(at ${fx(c.origin.x)} ${fy(c.origin.y)})`,
-    `\t\t(property "Reference" ${q(c.reference)} (at 0 0 0) (layer ${q(silk)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))${c.bottom ? " (justify mirror)" : ""}))`,
-    `\t\t(property "Value" ${q(c.value)} (at 0 0 0) (layer ${q(fab)}) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))${c.bottom ? " (justify mirror)" : ""}))`,
+    `\t\t(at ${fx(c.origin.x)} ${fy(c.origin.y)}${phi ? ` ${+phi.toFixed(6)}` : ""})`,
   ];
-  for (const pad of c.pads) lines.push(emitPad(pad, c.origin, resolve(c.reference, pad.number)));
+
+  // Reference and Value are footprint properties; other visible EW labels
+  // become footprint text.
+  const field = (name: string, value: string, tag: string, fallbackLayer: string) => {
+    const t = c.texts.find((x) => x.tag === tag);
+    const layer = (t && lm.kicadInPart(t.layer, c.bottom)) || fallbackLayer;
+    const parts = t
+      ? textParts(t, frame)
+      : { at: `(at 0 0 ${+phi.toFixed(6)})`, effects: `(effects (font (size 1 1) (thickness 0.15))${c.bottom ? " (justify mirror)" : ""})` };
+    const hide = t && !t.visible ? " (hide yes)" : "";
+    return `\t\t(property ${q(name)} ${q(value)} ${parts.at} (layer ${q(layer)})${hide} (uuid ${q(uuid())}) ${parts.effects})`;
+  };
+  lines.push(field("Reference", c.reference, "REFDES", silk));
+  lines.push(field("Value", c.value, "VALUE", fab));
+  for (const t of c.texts) {
+    if (t.tag === "REFDES" || t.tag === "VALUE" || !t.visible) continue;
+    const layer = lm.kicadInPart(t.layer, c.bottom);
+    if (!layer) continue;
+    const { at, effects } = textParts(t, frame);
+    lines.push(`\t\t(fp_text user ${q(t.text)} ${at} (layer ${q(layer)}) (uuid ${q(uuid())}) ${effects})`);
+  }
+  for (const g of c.graphics) lines.push(...emitShape(g, lm.kicadInPart(g.layer, c.bottom), frame));
+  for (const pad of c.pads) lines.push(emitPad(pad, frame, resolve(c.reference, pad.number)));
   lines.push(`\t)`);
   return lines.join("\n");
 }
@@ -505,7 +578,7 @@ export function emitKicadPcb(board: Board): string {
     .join("\n");
 
   const { table: netTable, resolve, byName } = buildNets(board.nets);
-  const shapeLines = board.shapes.flatMap((sh) => emitShape(sh, lm)).join("\n");
+  const shapeLines = board.shapes.flatMap((sh) => emitShape(sh, lm.kicad(sh.layer))).join("\n");
   const planeCount = board.zones.filter((z) => z.kind === "plane").length;
   let areaIdx = 0;
   let planeIdx = 0;
@@ -518,7 +591,7 @@ export function emitKicadPcb(board: Board): string {
     .join("\n");
   const textLines = board.texts.map((t) => emitText(t, lm)).filter((x): x is string => x !== undefined).join("\n");
   const ruleLines = board.ruleAreas.map((r, i) => emitRuleArea(r, i, lm)).join("\n");
-  const footprintLines = board.components.map((c) => emitFootprint(c, resolve)).join("\n");
+  const footprintLines = board.components.map((c) => emitFootprint(c, resolve, lm)).join("\n");
   const holeLines = board.holes.map(emitHole).join("\n");
 
   const placed: PlacedPad[] = [];

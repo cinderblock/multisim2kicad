@@ -9,7 +9,9 @@ import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./par
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { parseCiNetlist } from "./ref/ci-netlist.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
+import type { Board, Component } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
+import { atom, listsNamed, parseSexpr, type Sexpr } from "./util/sexpr.ts";
 
 const el = (xml: string) => parseEwXml(xml).root;
 const sample = (name: string) => readFileSync(join(import.meta.dir, "..", "samples", name), "utf8");
@@ -92,6 +94,84 @@ describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
     const segs = out.match(/\(segment [^\n]*/g) ?? [];
     expect(segs.length).toBe(6);
     expect(segs.every((s) => !s.includes("(net 0)"))).toBe(true);
+  });
+});
+
+describe("footprint placement (C6)", () => {
+  // KiCad places footprint items at origin + R(phi) * local, Y-down, R
+  // counter-clockwise on screen. Whatever orientation the emitter picks, that
+  // must land every pad and drawing back on its absolute EW position.
+  const component = (bottom: boolean): Component => ({
+    reference: bottom ? "U2" : "U1",
+    value: "X",
+    name: "PKG",
+    origin: { x: 10_000_000, y: 5_000_000 },
+    rotation: 30_000_000,
+    bottom,
+    pads: [{ number: "1", at: { x: 12_000_000, y: 6_000_000 }, rotation: 30_000_000, shape: { kind: "rect", width: 1_000_000, height: 500_000 }, drillDiameter: 0, side: bottom ? "bottom" : "top" }],
+    graphics: [{ kind: "polyline", layer: bottom ? 67 : 66, thickness: 150_000, points: [{ x: 9_000_000, y: 4_000_000 }, { x: 11_000_000, y: 7_000_000 }] }],
+    texts: [],
+  });
+  const board: Board = {
+    source: { application: "test", versionMajor: 0, versionMinor: 0, schema: 0 },
+    projectName: "t", sheetTitle: "t", workArea: { left: 0, bottom: 0, right: 0, top: 0 },
+    layers: [], stackup: { copper: [0, 63], thickness: 1_600_000 },
+    zones: [], texts: [], ruleAreas: [], shapes: [], tracks: [], holes: [], vias: [], nets: [],
+    components: [component(false), component(true)],
+  };
+  const footprints = listsNamed(parseSexpr(emitKicadPcb(board))[0] as Sexpr[], "footprint");
+  const num = (x: Sexpr | undefined) => Number(x as string);
+  const place = (fp: Sexpr[], local: Sexpr[]) => {
+    const [, ox, oy, phi] = listsNamed(fp, "at")[0]!;
+    const t = (num(phi ?? "0") * Math.PI) / 180;
+    const [x, y] = [num(local[1]), num(local[2])];
+    // R(phi) on screen with Y down: x' = x cos + y sin, y' = -x sin + y cos.
+    return { x: num(ox) + x * Math.cos(t) + y * Math.sin(t), y: num(oy) - x * Math.sin(t) + y * Math.cos(t) };
+  };
+
+  for (const [i, side] of [[0, "top"], [1, "bottom"]] as const) {
+    test(`${side}: pads and drawings land on their EW positions`, () => {
+      const fp = footprints[i]!;
+      expect(atom(fp, "layer")).toBe(side === "top" ? "F.Cu" : "B.Cu");
+      const pad = listsNamed(fp, "pad")[0]!;
+      const p = place(fp, listsNamed(pad, "at")[0]!);
+      expect(p.x).toBeCloseTo(12, 6);
+      expect(p.y).toBeCloseTo(-6, 6);
+      // Pad angles are absolute in KiCad files.
+      expect(num(listsNamed(pad, "at")[0]![3])).toBeCloseTo(30, 6);
+      const line = listsNamed(fp, "fp_line")[0]!;
+      const a = place(fp, listsNamed(line, "start")[0]!);
+      const b = place(fp, listsNamed(line, "end")[0]!);
+      // Local coordinates are written to the nanometre, so allow 2 nm.
+      [a.x, a.y, b.x, b.y].forEach((v, k) => expect(Math.abs(v - [9, -4, 11, -7][k]!)).toBeLessThan(2e-6));
+      expect(atom(line, "layer")).toBe(side === "top" ? "F.SilkS" : "B.SilkS");
+    });
+  }
+
+  test("a bottom part is its top-side footprint flipped the KiCad way", () => {
+    // One EW part drawing (local pad at (2, 1) mm, Y-up) placed per the C6
+    // survey: top = o + R(rot) * l, bottom = o + R(-rot) * mirrorX(l).
+    const rot = 30;
+    const at = (bottom: boolean) => {
+      const t = ((bottom ? -rot : rot) * Math.PI) / 180;
+      const [lx, ly] = [bottom ? -2_000_000 : 2_000_000, 1_000_000];
+      return { x: 10_000_000 + lx * Math.cos(t) - ly * Math.sin(t), y: 5_000_000 + lx * Math.sin(t) + ly * Math.cos(t) };
+    };
+    const parts = [false, true].map((bottom) => {
+      const c = component(bottom);
+      c.pads[0]!.at = at(bottom);
+      return c;
+    });
+    const fps = listsNamed(parseSexpr(emitKicadPcb({ ...board, components: parts }))[0] as Sexpr[], "footprint");
+    const local = (fp: Sexpr[]) => listsNamed(listsNamed(fp, "pad")[0]!, "at")[0]!.slice(1, 3).map(num);
+    const [tx, ty] = local(fps[0]!);
+    const [bx, by] = local(fps[1]!);
+    // KiCad flips a footprint by negating local Y, keeping X.
+    expect(tx).toBeCloseTo(2, 5);
+    expect(ty).toBeCloseTo(-1, 5);
+    expect(bx).toBeCloseTo(tx!, 5);
+    expect(by).toBeCloseTo(-ty!, 5);
+    expect(num(listsNamed(fps[1]!, "at")[0]![3])).toBeCloseTo(180 - rot, 6);
   });
 });
 

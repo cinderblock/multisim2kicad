@@ -2,6 +2,7 @@ import type {
   Board,
   BoardText,
   Component,
+  ComponentText,
   EwLayer,
   Hole,
   Net,
@@ -196,6 +197,35 @@ const PIN_TAGS: readonly [string, boolean][] = [
   ["NetBridge-Pin", false],
 ];
 
+/** Attribute elements owned directly by a component or pin (see ownAttributes). */
+function ownAttributeElements(node: EwElement): EwElement[] {
+  const container = node.at("ExtentableObject", "AttributeInterface", "Containers", "AttributeContainer");
+  return container?.at("Store", "DataTreeContainer")?.childrenNamed("Attribute") ?? [];
+}
+
+/**
+ * Bookkeeping attributes (library ids, schematic links, variants): never
+ * shown as text in KiCad. Anything else visible in EW becomes footprint text.
+ */
+const INTERNAL_ATTRS = new Set([
+  "GUID", "LIBRARYTREEID", "SCHEMATICSECTIONS", "SCHEMATICVARIANTS", "DONOTANNOTATE", "NETBRIDGE",
+  "SHAPE", "PACKAGE", "DEVICE",
+]);
+
+/** EW `Visibility`: 0 shown, 2 hidden. */
+const shown = (attr: EwElement) => attr.numOr("Visibility", 0) === 0;
+
+function componentTexts(comp: EwElement): ComponentText[] {
+  const out: ComponentText[] = [];
+  for (const a of ownAttributeElements(comp)) {
+    const tag = a.str("Tag");
+    const keep = tag === "REFDES" || tag === "VALUE" || (shown(a) && !INTERNAL_ATTRS.has(tag));
+    const t = keep ? toText(a) : undefined;
+    if (t) out.push({ ...t, tag, visible: shown(a) });
+  }
+  return out;
+}
+
 function parseComponent(comp: EwElement): Component {
   const attrs = ownAttributes(comp);
   const name = displayText(comp.str("Name"));
@@ -219,6 +249,8 @@ function parseComponent(comp: EwElement): Component {
     rotation: Number(comp.get("Rotation") ?? 0),
     bottom,
     pads,
+    graphics: [],
+    texts: componentTexts(comp),
   };
 }
 
@@ -244,6 +276,10 @@ interface Collected {
   texts: BoardText[];
   ruleAreas: RuleArea[];
 }
+
+const emptyCollected = (): Collected => ({
+  shapes: [], tracks: [], components: [], holes: [], vias: [], zones: [], texts: [], ruleAreas: [],
+});
 
 /** Copper pour settings shared by power planes and copper areas. */
 function toZone(kind: Zone["kind"], item: EwElement, outline: Point[]): Zone {
@@ -283,10 +319,15 @@ function toText(item: EwElement): BoardText | undefined {
   const fmt = item.child("TXTFormat");
   if (!text || !fmt) return undefined;
   // The Object points are the text's bounding box; its centre is where the
-  // text sits whatever the alignment code.
+  // text sits whatever the alignment code. Hidden attributes carry a
+  // collapsed (single point) box that is not near the part; use the
+  // reference point for those.
   const box = points(item);
-  const at = box.length >= 4
-    ? { x: (Math.min(...box.map((p) => p.x)) + Math.max(...box.map((p) => p.x))) / 2, y: (Math.min(...box.map((p) => p.y)) + Math.max(...box.map((p) => p.y))) / 2 }
+  const xs = box.map((p) => p.x);
+  const ys = box.map((p) => p.y);
+  const real = box.length >= 4 && Math.max(...xs) > Math.min(...xs) && Math.max(...ys) > Math.min(...ys);
+  const at = real
+    ? { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
     : { x: fmt.numOr("RefPointX", 0), y: fmt.numOr("RefPointY", 0) };
   return {
     layer: item.numOr("Layer", -1),
@@ -345,8 +386,17 @@ function walkGeometry(node: EwElement, out: Collected, inComponent = false): voi
       const t = toTrack(item);
       if (t) out.tracks.push(t);
     } else if (key === "UBComponent") {
-      out.components.push(parseComponent(item));
-      walkGeometry(item, out, true); // still collect silk shapes inside the component
+      // The part's own drawings belong to its footprint; anything else found
+      // inside (tracks, vias, drills, planes) stays board-level.
+      const comp = parseComponent(item);
+      const inner = emptyCollected();
+      walkGeometry(item, inner, true);
+      comp.graphics = inner.shapes;
+      out.components.push(comp, ...inner.components);
+      out.tracks.push(...inner.tracks);
+      out.holes.push(...inner.holes);
+      out.vias.push(...inner.vias);
+      out.zones.push(...inner.zones);
     } else if (key === "RegularVia") {
       const v = parseVia(item);
       if (v) out.vias.push(v);
@@ -409,7 +459,7 @@ export function parsePcbXml(input: XmlInput): Board {
     rgb: Number(node.get("RGB") ?? 0),
   }));
 
-  const collected: Collected = { shapes: [], tracks: [], components: [], holes: [], vias: [], zones: [], texts: [], ruleAreas: [] };
+  const collected = emptyCollected();
   walkGeometry(designSheet, collected);
 
   return {

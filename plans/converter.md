@@ -413,6 +413,24 @@ hierarchy, connectors), since those are what make an output useless today.
     IC pad rows (pad long axis perpendicular to the row) fit +theta for 3452
     pads vs 512 for -theta; and a KiCad SVG export of `(at 0 0 30)` shows the
     pad turned 30 deg CCW on screen. The old emitter negated it (wrong).
+  - **Component placement (C6 survey, 2026-11-13, every corpus board):**
+    `UBComponent@Rotation` (millionths of a degree) and `@Bottom`; pads and
+    drawings are stored already placed (absolute). Instances of one
+    footprint de-rotate to identical local pads with top = origin +
+    R(rot) * local (4475 instance pairs agree, 21 same-name parts differ).
+    Bottom = origin + R(-rot) * mirrorX(local) (all ~1400 top/bottom
+    pairs; a few symmetric parts also fit other conventions). Bottom parts
+    carry `Mirrored=1`. KiCad stores a flipped footprint as local Y-mirror
+    at orientation phi, so EW bottom parts become phi = 180 - rot.
+  - KiCad's file stores pad and text angles **absolute** (footprint
+    rotation included), drawings in footprint-local coordinates (checked on
+    KiCad 10's bundled demo boards).
+  - Component drawings: silk 66/67, fab 76/77, 3D outline 68/69, paste,
+    mask; **courtyard is layer 92 on both sides** (bottom parts get
+    B.CrtYd). Attributes (`CDrawAttribute`): `Visibility` 0 = shown,
+    2 = hidden; hidden ones carry a collapsed (single point) text box far
+    from the part, so use `TXTFormat@RefPointX/Y` for them. Text `Angle`
+    is millionths of a degree (REFDES of a part at 90 deg has 90000000).
   - Vias: `RegularVia[CLayoutViaStandard]` = point + plated
     `LayoutDrillObject` + round `Pad`; `Lamination-Active` all-ones or
     Top|Bottom in the corpus (no blind/buried).
@@ -676,12 +694,28 @@ hierarchy, connectors), since those are what make an output useless today.
       `--refill-zones`. **24 corpus boards: DRC unconnected items 3894 ->
       239, violations 17918 -> 17294; pins on pads unchanged.** Renders of
       Althea Main (F.Cu, In2.Cu) look right.
-- [ ] Remaining C work: C6 (footprint-local graphics, rotation, REF/VALUE
-      placement), padstacks, unverified EW units (`RemoveIslandSize`, text
-      `Angle`), boards still unconnected: Distribution (52),
-      1-Wire-HV-AC (50, unchanged by C3-C5), Althea.old Buttons (52), Brain
-      Adapter (18); one track-net short on Althea Main (net propagation).
-- [ ] **Next (approved order):** C6, D4-D5, E (project linking), F (EW
+- [x] (2026-11-13) **C6 real footprints.** Footprints carry the part's
+      rotation and side (bottom: phi = 180 - rot, local Y-mirrored as
+      KiCad stores flips); the part's silk / fab / courtyard / 3D drawings
+      move into the footprint as `fp_*` in local coordinates; Reference /
+      Value at EW's position, size, angle and visibility; other visible EW
+      labels -> `fp_text user`. Bottom courtyards (EW 92) -> B.CrtYd. Unit
+      tests check placement against KiCad's transform on both sides.
+      **24 baseline boards: unconnected 239 -> 228, violations 17294 ->
+      15760 (silk_over_copper 3002 -> 1925, silk_overlap 2207 -> 1194),
+      pins on pads unchanged (5963).** New, expected now courtyards are
+      real: courtyards_overlap 497, malformed_courtyard 22 (open EW
+      courtyards), text_thickness 140 (thin EW text). Full run now covers
+      182 PCBs (all GitHub history): 52014/52156 net pins on a pad; old
+      revisions with 100+ unconnected are boards mid-routing. Renders of
+      Althea Main (front) and Sleepy Control (mirrored back) look right.
+- [ ] Remaining C work: padstacks, unverified EW unit
+      (`RemoveIslandSize`), footprint names from the EW package attribute,
+      boards still unconnected: Distribution (50), 1-Wire-HV-AC (50),
+      Althea.old Buttons (52), Brain Adapter (18); one track-net short on
+      Althea Main (net propagation). Corpus baseline for later PCB work:
+      `out/corpus-pcb-c6/report.json`.
+- [ ] **Next (approved order):** D4-D5, E (project linking), F (EW
       database), G. Also: diagnose the NI sample designs' 71% (drive
       corpus).
 

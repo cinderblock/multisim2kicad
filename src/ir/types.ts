@@ -61,9 +61,25 @@ export interface Component {
   value: string;
   name: string;
   origin: Point; // RefPoint, absolute nm — becomes the footprint anchor
-  rotation: number; // millionths of a degree (metadata; pads are stored pre-placed)
+  /**
+   * Millionths of a degree, CCW. Pads and graphics are stored already placed
+   * (absolute). Top: placed = origin + R(rotation) * local. Bottom: placed =
+   * origin + R(-rotation) * mirrorX(local), from a corpus survey of parts
+   * used on both sides (plans/converter.md, C6).
+   */
+  rotation: number;
   bottom: boolean;
   pads: Pad[];
+  /** Silk / fab / courtyard / 3D outline graphics owned by the part, absolute. */
+  graphics: Shape[];
+  /** The part's text attributes that KiCad can show (REFDES, VALUE, visible labels). */
+  texts: ComponentText[];
+}
+
+/** A component text attribute; `tag` is EW's attribute name (REFDES, VALUE, ...). */
+export interface ComponentText extends BoardText {
+  tag: string;
+  visible: boolean;
 }
 
 // A via (EW RegularVia): plated drill + round copper ring through the board.

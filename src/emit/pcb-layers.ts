@@ -60,6 +60,8 @@ const FIXED: Record<number, string> = {
   92: "F.CrtYd",
 };
 
+const COURTYARD = 92;
+
 /** EW-internal layers: never emitted. */
 const DROPPED = new Set([64, 78, 79, 80, 511]);
 
@@ -87,7 +89,11 @@ export class LayerMap {
     for (const [ew, name] of Object.entries(FIXED)) this.map.set(Number(ew), name);
 
     // User layers for drawing layers without a KiCad equivalent, by EW number.
-    const used = new Set<number>([...board.shapes.map((s) => s.layer), ...board.texts.map((t) => t.layer)]);
+    const used = new Set<number>([
+      ...board.shapes.map((s) => s.layer),
+      ...board.texts.map((t) => t.layer),
+      ...board.components.flatMap((c) => [...c.graphics.map((g) => g.layer), ...c.texts.map((t) => t.layer)]),
+    ]);
     const ewName = new Map(board.layers.map((l) => [l.number, l.name]));
     const wanted = [...used]
       .filter((l) => !this.map.has(l) && !DROPPED.has(l) && !(l >= 0 && l <= 63))
@@ -111,6 +117,15 @@ export class LayerMap {
     const k = this.map.get(ew);
     if (k === undefined) this.dropped.set(ew, (this.dropped.get(ew) ?? 0) + 1);
     return k;
+  }
+
+  /**
+   * KiCad layer for a drawing inside a part. EW draws courtyards of both
+   * sides on its one courtyard layer (92); bottom parts get B.CrtYd.
+   */
+  kicadInPart(ew: number, bottom: boolean): string | undefined {
+    if (bottom && ew === COURTYARD) return "B.CrtYd";
+    return this.kicad(ew);
   }
 
   isCopper(name: string | undefined): boolean {
