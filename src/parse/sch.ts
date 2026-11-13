@@ -650,8 +650,16 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
   // Bus lines live in their own namespace in Multisim: line "SCLK" is not
   // the global net "SCLK". KiCad joins same-named labels and power ports, so
   // a line whose name is already taken on the sheet gets a distinct label.
-  const taken = new Set([...labels.map((l) => l.name), ...symbols.filter((x) => x.kind === "power").map((x) => x.value)]);
-  const lineLabel = (line: string) => (taken.has(line) ? `${line}_BUS` : line);
+  // Buses continued on other pages (CBusOffpageConn) join the pages of one
+  // sheet instance, like off-page connectors: global labels in KiCad. Their
+  // names can't be checked against the other pages here, so they always get
+  // the suffix. Net names compare case-insensitively downstream (Ultiboard
+  // upper-cases them), so collisions do too.
+  const busKind = wrapped(designSheet, "CBusOffpageConn", SYMBOLISH).length ? "global" : "local";
+  const taken = new Set(
+    [...labels.map((l) => l.name), ...symbols.filter((x) => x.kind === "power").map((x) => x.value)].map((n) => n.toUpperCase()),
+  );
+  const lineLabel = (line: string) => (busKind === "global" || taken.has(line.toUpperCase()) ? `${line}_BUS` : line);
   const buses: SchematicBus[] = [];
   for (const [b] of wrapped(designSheet, "CIITBusCompV8", SYMBOLISH)) {
     const bt = affineOf(b);
@@ -676,7 +684,7 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
     const d = (p: SchPoint) => (conn ? Math.hypot(p.x - conn.x, p.y - conn.y) : 0);
     const [wire, bus] = d(line[0]) <= d(line[1]) ? line : [line[1], line[0]];
     busEntries.push({ wire, bus, member: lineLabel(member) });
-    labels.push({ name: lineLabel(member), at: wire, kind: "local", dir: { x: wire.x < bus.x ? -1 : 1, y: 0 }, netId: nets.netOf(id) });
+    labels.push({ name: lineLabel(member), at: wire, kind: busKind, dir: { x: wire.x < bus.x ? -1 : 1, y: 0 }, netId: nets.netOf(id) });
   }
 
   // Free text on the sheet (not inside symbols / the title block).
