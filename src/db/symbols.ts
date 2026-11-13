@@ -218,8 +218,23 @@ export function databaseSymbols(db: EwDatabase, footprintFor: (pkg: string) => s
     const pads = pkg ? lines(pkg.Pinout).map((l) => l.split(",").map((s) => s.trim()).filter(Boolean)) : [];
     const sections = (sectionsOf.get(c.Component_ID) ?? []).sort((a, b) => Number(a.Sec_Order) - Number(b.Sec_Order));
 
+    // A section names its pins; the component's `Pinout` lists every pin in
+    // package order (the package `Pinout` has the same order), including
+    // pins no section draws (a 7400's GND / VCC). So section pins are
+    // matched to component pins by name: the first not yet taken, else the
+    // first (a supply pin drawn on every section), else by position.
     const units: LibrarySymbolSpec["units"] = [];
     const placedPads = new Set<string>();
+    const claimed = new Set<number>();
+    const pinIndex = (name: string, fallback: number): number => {
+      let first = -1;
+      for (let i = 0; i < pinNames.length; i++) {
+        if (pinNames[i] !== name) continue;
+        if (!claimed.has(i)) return i;
+        if (first < 0) first = i;
+      }
+      return first >= 0 ? first : fallback;
+    };
     let offset = 0;
     let showPinNames = false;
     for (const sec of sections) {
@@ -233,10 +248,12 @@ export function databaseSymbols(db: EwDatabase, footprintFor: (pkg: string) => s
       showPinNames ||= pic.showPinNames;
       const pins: SymbolPin[] = [];
       const stems: SymbolPin[] = [];
-      for (const p of pic.pins) {
-        const k = offset + p.index - 1;
-        const name = secNames[p.index - 1] ?? pinNames[k] ?? String(p.index);
-        if (pinNames[k] !== undefined && pinNames[k] !== name) warnings.push(`${compName}: pin ${k + 1} is ${pinNames[k]} in Pinout, ${name} in section ${sec.Sec_Order}`);
+      for (const p of [...pic.pins].sort((a, b) => a.index - b.index)) {
+        const secName = secNames[p.index - 1];
+        const k = secName === undefined ? offset + p.index - 1 : pinIndex(secName, offset + p.index - 1);
+        claimed.add(k);
+        const name = secName ?? pinNames[k] ?? String(p.index);
+        if (secName !== undefined && pinNames.length && pinNames[k] !== secName) warnings.push(`${compName}: section ${sec.Sec_Order} pin ${secName} is not in the component's Pinout`);
         const numbers = pads[k]?.length ? pads[k]! : [name];
         const base = { name, at: p.at, dir: p.dir, length: p.length, electrical: pinTypes[k] ?? "unspecified" } as const;
         // A pad already on an earlier section (shared supply pins) stays
@@ -250,6 +267,22 @@ export function databaseSymbols(db: EwDatabase, footprintFor: (pkg: string) => s
       }
       units.push({ graphics: pic.graphics, pins, stems });
       offset += secNames.length;
+    }
+    // Pins no section draws (Multisim's hidden power pins) go on one more
+    // unit, so they still reach the netlist and the footprint.
+    if (units.length) {
+      const hidden: SymbolPin[] = [];
+      pinNames.forEach((name, k) => {
+        // A hidden pin the package gives no pad (a crystal's case ground)
+        // would only dangle.
+        if (claimed.has(k) || (pkg && !pads[k]?.length)) return;
+        const numbers = (pads[k]?.length ? pads[k]! : [name]).filter((n) => !placedPads.has(n));
+        for (const n of numbers) {
+          placedPads.add(n);
+          hidden.push({ name, number: n, at: { x: 0, y: 0 }, dir: { x: 1, y: 0 }, length: PIN, electrical: pinTypes[k] ?? "power_in" });
+        }
+      });
+      if (hidden.length) units.push(pinBlock(hidden));
     }
     if (units.length === 0) {
       warnings.push(`${compName}: no symbol`);
@@ -279,6 +312,29 @@ export function databaseSymbols(db: EwDatabase, footprintFor: (pkg: string) => s
     });
   }
   return { specs, warnings };
+}
+
+/** Multisim's pin pitch and length, in schematic units. */
+const PIN = 9;
+
+/**
+ * A plain box with the given pins down its left side. Pin names are
+ * written as text in the box, since KiCad hides pin names symbol-wide and
+ * the other units usually hide them.
+ */
+function pinBlock(pins: SymbolPin[]): LibrarySymbolSpec["units"][number] {
+  const TEXT = 5;
+  const longest = Math.max(...pins.map((p) => p.name.length));
+  const width = Math.max(4, Math.ceil((longest * TEXT + 2 * TEXT) / PIN)) * PIN;
+  const height = (pins.length + 1) * PIN;
+  const y = (i: number) => (i + 1) * PIN;
+  return {
+    graphics: [
+      { kind: "rect", a: { x: PIN, y: 0 }, b: { x: PIN + width, y: height }, width: 1, fill: false },
+      ...pins.map((p, i): SchGraphic => ({ kind: "text", at: { x: PIN + 2, y: y(i) - 3 }, text: p.name, size: TEXT })),
+    ],
+    pins: pins.map((p, i) => ({ ...p, at: { x: 0, y: y(i) }, dir: { x: 1, y: 0 }, length: PIN })),
+  };
 }
 
 const sanitize = (s: string) => s.replace(/[^A-Za-z0-9_.+-]+/g, "_").replace(/^_+|_+$/g, "");

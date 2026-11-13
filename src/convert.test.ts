@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { encodeBuffer, formatForExtension, parseEwXml } from "electronics-workbench-decoder";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseSymbolPicture, symbolPictureXml } from "./db/symbols.ts";
+import { databaseSymbols, parseSymbolPicture, symbolPictureXml } from "./db/symbols.ts";
+import type { EwDatabase } from "./db/ewdb.ts";
 import { harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
 import { boardCustomRules, boardProjectSettings, netClassName } from "./emit/kicad-pro.ts";
@@ -143,6 +144,35 @@ describe("EW database symbols (F)", () => {
     const enc = encodeBuffer(Buffer.from(doc), formatForExtension(".ms14")!);
     const image = Buffer.concat([Buffer.alloc(5), enc.subarray(52)]);
     expect(symbolPictureXml(image, doc.length)).toBe(doc);
+  });
+
+  test("section pins match the component's package-order Pinout by name; undrawn pins get a power unit", () => {
+    const enc = encodeBuffer(Buffer.from(doc), formatForExtension(".ms14")!);
+    const image = { value: Buffer.concat([Buffer.alloc(5), enc.subarray(52)]).toString("base64") };
+    const t = (rows: Record<string, unknown>[]) => ({ rows });
+    const db = {
+      source: "",
+      tables: {
+        SYS_SYMBOL_PICTURE: t([{ Symbol_ID: 7, Size: doc.length, Image: image }]),
+        SYS_CONFIGURATION: t([{ Family_ID: 1, Family_Name: "Gates", Template: "U%d" }]),
+        SYS_PCB_PACKAGE: t([{ Package_ID: 3, Package_Type: "DIP6" }]),
+        // Package order, as in NI's master database: GND / VCC belong to no section.
+        SYS_COMPONENT: t([{ Component_ID: 9, Family_ID: 1, Component_Name: "GATE2", Pinout: "A1\r\nGND\r\nB1\r\nA2\r\nB2\r\nVCC\r\n", Pin_Type: "A:INPUT\r\nA:GND\r\nA:INPUT\r\nA:INPUT\r\nA:INPUT\r\nA:VCC\r\n" }]),
+        SYS_MAPPING_COMP_SYMBOL: t([
+          { Component_ID: 9, Sec_Order: 2, Symbol_ID_ANSI: 7, Pinout_ANSI: "A2\r\nB2\r\n" },
+          { Component_ID: 9, Sec_Order: 1, Symbol_ID_ANSI: 7, Pinout_ANSI: "A1\r\nB1\r\n" },
+        ]),
+        SYS_MAPPING_COMP_PACKAGE: t([{ Component_ID: 9, Package_ID: 3, Pinout: "1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n" }]),
+      },
+    } as unknown as EwDatabase;
+    const r = databaseSymbols(db, () => undefined);
+    expect(r.warnings).toEqual([]);
+    const pins = r.specs[0]!.units.map((u) => u.pins.map((p) => `${p.name}=${p.number}:${p.electrical}`).sort());
+    expect(pins).toEqual([
+      ["A1=1:input", "B1=3:input"],
+      ["A2=4:input", "B2=5:input"],
+      ["GND=2:power_in", "VCC=6:power_in"],
+    ]);
   });
 });
 

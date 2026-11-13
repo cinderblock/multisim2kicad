@@ -234,7 +234,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<void
   for (const p of await groupProjects(designs)) await convertProject(p, outDir);
 }
 
-const DATABASE_FILE = /\.(prj|usr)$/i;
+const DATABASE_FILE = /\.(prj|usr|prd)$/i;
 
 /**
  * An EW component database (`.prj` / `.usr`) -> KiCad libraries named after
