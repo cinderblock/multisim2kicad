@@ -286,6 +286,23 @@ only; work from a copy in the scratchpad.
 CLI UX + README, `bun test` in CI, decide whether ew-conv is published to
 npm. Altium export (old Phase 5, below) stays a future/private item.
 
+**Decided (user, 2026-11-13): publish the project, keep the corpus
+private.** Public repo https://github.com/cinderblock/ew-conv (created
+2026-11-13, `e91ad11`); CI `test.yml` (Ubuntu + Windows x Node 20 + 24:
+typecheck, test, build, Node run of the CLI on the samples) is green.
+npm: `publish.yml` publishes on `v*` tags via trusted publishing with
+provenance; `scripts/guard-publish.ts` refuses local publishes except the
+`0.0.0` name claim. Remaining: claim `ew-conv` on npm with the `0.0.0`
+placeholder (needs the user's npm auth; placeholder package prepared in
+the session scratchpad), the user configures the trusted publisher, then
+bump to `0.1.0` and push the tag.
+
+What is public: code, plans, and `samples/Design1*` / `Temp` (the user's
+own toy designs, committed by the user at scaffold time; they contain
+the path `C:\Users\camer\Documents\National Instruments\...`). The plans
+name corpus projects (Althea, Nook, ...) and the `\\uberfall.tsl` share
+but contain no design data. `corpus/` and `out/` stay gitignored.
+
 ### Proposed order
 
 A4-A5 -> B1 -> C1-C2 -> D1-D3 -> B2 -> C3-C6 -> D4-D5 -> E -> B3 cleanup -> C7/D6 -> G.
@@ -921,18 +938,55 @@ hierarchy, connectors), since those are what make an output useless today.
       units, all plot in kicad-cli; 128 linked to a footprint in the same
       DB.** Design conversion output unchanged (byte-identical apart from
       UUIDs on Althea). Optional: move `symbolPictureXml` into ewd.
-- [ ] **Next (approved order):** B3 cleanup (typed EW models in ewd;
-      ew-conv's parsers shrink to mappers), then G (ship). G needs the
-      user's calls: see Open questions. Drive-corpus leftovers (11 nets:
-      ground-symbol pin naming) are optional.
+- [x] (2026-11-13) **G: packaged and published to GitHub** (`e91ad11`).
+      Node-runnable CLI (`src/cli.ts`, `main(args)`), library entry
+      `src/index.ts`, `build.ts` (ESM bundles, ewd external) + d.ts, ISC
+      LICENSE, CI test + publish workflows, publish guard. CI green.
+- [x] (2026-11-13) **NI master database** (`7c79709`). Multisim 14.2
+      installs it at `C:\ProgramData\National Instruments\Circuit Design
+      Suite\14.2\database\MSCOMP_S.PRD` (241 MB, same Jet schema as the
+      user's `.prj`; also `CPCOMP_S.PRJ` corporate template and
+      `Program Files (x86)\...\database\UsrCompTemplate_S.usr`). ewd
+      decodes it in 5 s: 57,162 components, 3,551 symbol pictures, 7,405
+      library objects. The CLI now takes `.prd`. **Bug found and fixed:**
+      `SYS_COMPONENT.Pinout` is the full pin list in *package order*,
+      including pins no section draws (a 7400's GND / VCC), not the
+      sections concatenated; the user's DB happened to be in section
+      order. Section pins are now matched by name; undrawn pins go on an
+      extra labelled power unit (skipped when the package has no pad for
+      them). Warnings 88,251 -> 167. **KiCad 10 loads all of it:**
+      `fp upgrade` on all 7,353 footprints (after skipping zero-size,
+      no-drill pads: NI's DPAK `TO228P991X238-3_4N` stores its cut middle
+      lead that way and one such pad made KiCad reject the whole library,
+      "Unable to load library"; no corpus board has one), and `sym
+      upgrade` re-saves all 57,101 symbols (25 s). Checked 74ALS00M, TLC27L7ID,
+      LTC1050CJ8, MAX3212 against datasheet pinouts and rendered them
+      with kicad-cli. Output must never be committed or redistributed
+      (NI content).
+- [ ] Master-DB leftovers: 29 symbol pictures embed a bitmap
+      (`<Bmap Type="AdvancedBitmap">` with base64 *text content*, which
+      ewd's `parseEwXml` rejects: "unexpected text content"; needs text
+      support in ewd); 4 pictures fail to decompress ("Decoder returned
+      wrong length"); 73 sections have no picture and 61 parts no symbol.
+      DIN symbol variants (`Symbol_ID_DIN`) are not emitted (ANSI only).
+- [ ] **Next:** npm 0.1.0 release (waiting on the user: name claim +
+      trusted publisher), then B3 cleanup (typed EW models in ewd;
+      ew-conv's parsers shrink to mappers). Drive-corpus leftovers (11
+      nets: ground-symbol pin naming) are optional.
+- [ ] Not translated at all yet (candidates, user to prioritise):
+      SPICE simulation models (`SYS_MODEL` 45k rows in the master DB;
+      designs embed models too) -> KiCad ngspice fields; 3D models;
+      linking design symbols to a converted DB library instead of
+      per-project copies; designs older than Multisim 10 / EWB 5
+      (`.msm`, `.ewb`; none in the corpus).
 
 ## Open questions for the user
 
-1. (2026-11-13, Phase G) Where should ew-conv live and ship? It has no
-   remote. Options: a public `cinderblock/ew-conv` GitHub repo (free CI:
-   `bun test` + typecheck on push), published to npm as a CLI
-   (`bunx ew-conv ...`), or keep it local. Recommendation: public repo +
-   npm, matching ewd; the corpus stays private and out of the repo.
+1. ~~Phase G: where ew-conv lives~~ answered 2026-11-13: public repo +
+   npm, corpus private.
+2. (2026-11-13) Which of the untranslated areas matter to you: SPICE
+   simulation models, 3D models, pre-Multisim-10 formats? Recommendation:
+   SPICE models first if you simulate in KiCad, else none.
 
 ## Earlier phase notes (historical, 2026-05)
 

@@ -84,13 +84,19 @@ Shared supply pins of multi-section parts (an op-amp's V+/V- on every
 section) stay connected the way Multisim wires them. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
-An EW component database (a Multisim database project, `.prj` / `.usr`)
-becomes KiCad libraries named after it:
+An EW component database becomes KiCad libraries named after it. That is
+a Multisim database project (`.prj` / `.usr`), or NI's master database
+`MSCOMP_S.PRD` that Multisim installs under
+`C:\ProgramData\National Instruments\Circuit Design Suite\<version>\database\`
+(about 57,000 parts and 7,000 footprints; around two minutes). Convert
+NI's database for your own use only: it is NI's content, so don't
+redistribute the output.
 
 - `<name>.pretty/`: every Ultiboard footprint stored in it
 - `<name>.kicad_sym`: every component, drawn from its Multisim symbol
   (sections as units, pin numbers from its package, pin electrical types,
-  reference prefix from its family), with its Footprint pointing into
+  reference prefix from its family; pins Multisim hides, like a logic
+  chip's GND / VCC, on an extra power unit), with its Footprint pointing into
   `<name>.pretty` when the database holds the package (otherwise the
   package name is kept as an `EW_Package` field)
 
