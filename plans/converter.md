@@ -751,6 +751,23 @@ hierarchy, connectors), since those are what make an output useless today.
       exact.** Reports `out/corpus-sch-f/`, `out/corpus-drives-f/`. Left in
       the drive corpus: ground-symbol pin naming (`0.0`, `0.GND` vs `0_n`
       parts), a few single nets in Controller.ms11 / DIGITAL / Power board.
+- [x] (2026-11-13) **E2 + E4: linked projects.** `ew-conv <folder | X.ms14
+      X.ewprj>` pairs a schematic and board by folder + base name into one
+      KiCad project. Footprints carry their symbol's `path` (sheet-symbol
+      UUIDs without the root + symbol UUID, as KiCad writes it), `sheetname`,
+      `sheetfile`; symbols get `Footprint` = `<project>:<EW footprint>`;
+      linked footprints take the symbol's value (blank values keep the
+      board's); parts with no symbol are `board_only`; mounting holes get
+      MH<n> references. Board net names adopt the schematic's spelling up to
+      case (Ultiboard upper-cases). New `scripts/parity.ts` compares the
+      schematic's KiCad netlist with the board's pad nets as groupings (the
+      KiCad parity report is name-based and capped at 199 per category).
+      **Althea (Trove): Heater 82/82, Main 95/97 (extra shield pads on the
+      board only), Buttons 14/23 (J1/J2 pin order differs between the
+      user's Multisim and Ultiboard files; each converter matches its own
+      source exactly).**
+- [ ] E3: project-local libraries (`<project>.pretty`, `.kicad_sym`,
+      fp-lib-table / sym-lib-table) so the Footprint fields resolve.
 - [ ] **Next (approved order):** D4-D5, E (project linking), F (EW
       database), G. Also: diagnose the NI sample designs' 71% (drive
       corpus).

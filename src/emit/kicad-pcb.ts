@@ -513,17 +513,47 @@ function footprintFrame(c: Component): { phi: number; frame: Frame } {
   return { phi, frame: { kind: "fp", indent: "\t\t", xy } };
 }
 
-function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap): string {
+/** Footprint name for a part: EW's footprint (shape) name, file-name safe. */
+export function footprintName(c: Component): string {
+  return (c.name || c.value || "UNKNOWN").replace(/[\\/:*?"<>|]+/g, "_");
+}
+
+/** Schematic link fields for a footprint (KiCad's path / sheetname / sheetfile). */
+export interface FootprintLink {
+  path: string;
+  sheetname: string;
+  sheetfile: string;
+  /** The symbol's value; KiCad treats the schematic as the master copy. */
+  value: string;
+}
+
+export interface PcbOptions {
+  /** Footprint library nickname for the footprints' lib ids (default "ew"). */
+  footprintLib?: string;
+  /** Reference -> schematic symbol, to link the board to its schematic. */
+  links?: ReadonlyMap<string, FootprintLink>;
+}
+
+function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap, opts: PcbOptions): string {
   const cu = c.bottom ? "B.Cu" : "F.Cu";
   const silk = c.bottom ? "B.SilkS" : "F.SilkS";
   const fab = c.bottom ? "B.Fab" : "F.Fab";
   const { phi, frame } = footprintFrame(c);
+  const link = opts.links?.get(c.reference);
   const lines: string[] = [
-    `\t(footprint ${q("ew:" + (c.name || c.value || "UNKNOWN"))}`,
+    `\t(footprint ${q(`${opts.footprintLib ?? "ew"}:${footprintName(c)}`)}`,
     `\t\t(layer ${q(cu)})`,
     `\t\t(uuid ${q(uuid())})`,
     `\t\t(at ${fx(c.origin.x)} ${fy(c.origin.y)}${phi ? ` ${+phi.toFixed(6)}` : ""})`,
+    ...(link
+      ? [`\t\t(path ${q(link.path)})`, `\t\t(sheetname ${q(link.sheetname)})`, `\t\t(sheetfile ${q(link.sheetfile)})`]
+      : []),
+    // A board linked to a schematic: parts with no symbol (mounting
+    // hardware, fiducials, test points drawn only on the board) are
+    // board-only, so "Update PCB from Schematic" keeps them.
+    ...(opts.links && !link ? [`\t\t(attr board_only)`] : []),
   ];
+  const value = link?.value || c.value;
 
   // Reference and Value are footprint properties; other visible EW labels
   // become footprint text.
@@ -537,7 +567,7 @@ function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap): string
     return `\t\t(property ${q(name)} ${q(value)} ${parts.at} (layer ${q(layer)})${hide} (uuid ${q(uuid())}) ${parts.effects})`;
   };
   lines.push(field("Reference", c.reference, "REFDES", silk));
-  lines.push(field("Value", c.value, "VALUE", fab));
+  lines.push(field("Value", value, "VALUE", fab));
   for (const t of c.texts) {
     if (t.tag === "REFDES" || t.tag === "VALUE" || !t.visible) continue;
     const layer = lm.kicadInPart(t.layer, c.bottom);
@@ -551,7 +581,7 @@ function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap): string
   return lines.join("\n");
 }
 
-function emitHole(h: Hole): string {
+function emitHole(h: Hole, n: number): string {
   if (h.plated) {
     // Plated standalone drill -> via. No copper pad diameter in EW, so give a
     // 0.25 mm annular ring. net 0 (KiCad recomputes from connectivity).
@@ -566,12 +596,15 @@ function emitHole(h: Hole): string {
     `\t\t(layer "F.Cu")`,
     `\t\t(uuid ${q(uuid())})`,
     `\t\t(at ${fx(h.at.x)} ${fy(h.at.y)})`,
+    `\t\t(property "Reference" ${q(`MH${n}`)} (at 0 0 0) (layer "F.Fab") (hide yes) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
+    `\t\t(property "Value" "MountingHole" (at 0 0 0) (layer "F.Fab") (hide yes) (uuid ${q(uuid())}) (effects (font (size 1 1) (thickness 0.15))))`,
+    `\t\t(attr board_only exclude_from_pos_files exclude_from_bom)`,
     `\t\t(pad "" np_thru_hole circle (at 0 0) (size ${d} ${d}) (drill ${d}) (layers "*.Cu" "*.Mask") (uuid ${q(uuid())}))`,
     `\t)`,
   ].join("\n");
 }
 
-export function emitKicadPcb(board: Board): string {
+export function emitKicadPcb(board: Board, opts: PcbOptions = {}): string {
   const lm = new LayerMap(board);
   const layerLines = lm.table
     .map((l) => (l.userName ? `\t\t(${l.id} ${q(l.name)} ${l.type} ${q(l.userName)})` : `\t\t(${l.id} ${q(l.name)} ${l.type})`))
@@ -591,8 +624,8 @@ export function emitKicadPcb(board: Board): string {
     .join("\n");
   const textLines = board.texts.map((t) => emitText(t, lm)).filter((x): x is string => x !== undefined).join("\n");
   const ruleLines = board.ruleAreas.map((r, i) => emitRuleArea(r, i, lm)).join("\n");
-  const footprintLines = board.components.map((c) => emitFootprint(c, resolve, lm)).join("\n");
-  const holeLines = board.holes.map(emitHole).join("\n");
+  const footprintLines = board.components.map((c) => emitFootprint(c, resolve, lm, opts)).join("\n");
+  const holeLines = board.holes.map((h, i) => emitHole(h, i + 1)).join("\n");
 
   const placed: PlacedPad[] = [];
   for (const c of board.components) {

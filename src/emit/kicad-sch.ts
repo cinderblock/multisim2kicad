@@ -174,6 +174,7 @@ function emitInstance(
   refs: InstanceRef[],
   projectName: string,
   dropped: ReadonlySet<string> = new Set(),
+  footprint = "",
 ): string {
   const s = sym.floating ? { ...sym, at: { x: sym.at.x + NUDGE, y: sym.at.y + NUDGE } } : sym;
   const reference = refs[0]?.reference ?? s.reference;
@@ -194,7 +195,7 @@ function emitInstance(
     `\t\t(uuid ${q(uuidStr)})`,
     property("Reference", reference, refAt, power || !!s.refText?.hidden),
     property("Value", s.value, valAt, !power && !!s.valueText?.hidden),
-    property("Footprint", "", s.at, true),
+    property("Footprint", footprint, s.at, true),
     property("Datasheet", "", s.at, true),
     ...[...new Set(uniquePins(s.pins).filter((p) => !dropped.has(p.number)).flatMap((p) => [...unitsOf(refs).values()].map((m) => m?.[p.number] ?? p.number)))].map(
       (n) => `\t\t(pin ${q(n)} (uuid ${q(uuid())}))`,
@@ -455,7 +456,7 @@ function resolveContacts(
   return { symbols, segments, labels };
 }
 
-function renderPage(f: PageFile, sch: Schematic, isRoot: boolean): string {
+function renderPage(f: PageFile, sch: Schematic, isRoot: boolean, footprints?: ReadonlyMap<string, string>): string {
   const importNote = `Imported from ${sch.source.application} ${sch.source.versionMajor}.${sch.source.versionMinor} via ew-conv`;
 
   const rawSegments: Segment[] = [];
@@ -506,7 +507,9 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean): string {
     ...sheet.buses.flatMap(emitBus),
     ...sheet.busEntries.map(emitBusEntry),
     ...sheet.texts.map((t) => `\t(text ${q(t.text)} (exclude_from_sim no) (at ${u(t.at.x)} ${u(t.at.y)} 0) (effects (font (size ${u(t.size)} ${u(t.size)})) (justify left top)) (uuid ${q(uuid())}))`),
-    ...sheet.symbols.map((s, i) => emitInstance(s, f.libNames[i]!, f.symbolUuids[i]!, f.symbolRefs[i]!, sch.projectName, f.droppedPins[i])),
+    ...sheet.symbols.map((s, i) =>
+      emitInstance(s, f.libNames[i]!, f.symbolUuids[i]!, f.symbolRefs[i]!, sch.projectName, f.droppedPins[i], footprints?.get(f.symbolRefs[i]![0]?.reference ?? "")),
+    ),
     ...sheetSymbols,
     ...(isRoot ? [`\t(sheet_instances (path "/" (page "1")))`] : []),
     `\t(embedded_fonts no)`,
@@ -520,7 +523,25 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean): string {
  * to `<baseName>.kicad_sch`; every other Multisim page gets its own file,
  * shared by all instances of its sheet, with per-instance references.
  */
-export function emitKicadSchProject(sch: Schematic, baseName: string): Map<string, string> {
+/** Where a schematic part lives, for the matching PCB footprint's link fields. */
+export interface SymbolLink {
+  path: string;      // board-style path: sheet symbol UUIDs (no root) + symbol UUID
+  sheetname: string; // "/" or "/Child/Grandchild/"
+  sheetfile: string;
+  value: string;
+  unit: number;
+}
+
+export interface SchProjectOptions {
+  /** Reference -> "lib:footprint" for the symbols' Footprint field. */
+  footprints?: ReadonlyMap<string, string>;
+}
+
+export function emitKicadSchProject(
+  sch: Schematic,
+  baseName: string,
+  opts: SchProjectOptions = {},
+): { files: Map<string, string>; links: Map<string, SymbolLink> } {
   const pagesOf = (title: string) => sch.sheets.filter((s) => s.title === title);
   const rootPages = pagesOf(sch.rootSheet);
   const rootFirst = rootPages[0] ?? sch.sheets[0];
@@ -565,7 +586,9 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
   // Walk the hierarchy: assign page numbers and per-instance references.
   let pageNo = 0;
   let pwr = 0;
-  const visit = (inst: SchInstance, sheet: SchematicSheet, path: string): number => {
+  type Sub = PageFile["sub"][number];
+  const placements: { f: PageFile; i: number; ref: InstanceRef; chain: Sub[] }[] = [];
+  const visit = (inst: SchInstance, sheet: SchematicSheet, path: string, chain: Sub[] = []): number => {
     const f = files.get(sheet)!;
     const myPage = ++pageNo;
     const seen = new Map<string, number>();
@@ -583,18 +606,20 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
         }
       }
       const k = s.drawnKey ? `${sheet.page}|${s.drawnKey}` : "";
-      f.symbolRefs[i]!.push({ path, reference: ref, unit: (k && inst.units[k]) || 1, pinMap: k ? inst.pinRemaps[k] : undefined });
+      const r: InstanceRef = { path, reference: ref, unit: (k && inst.units[k]) || 1, pinMap: k ? inst.pinRemaps[k] : undefined };
+      f.symbolRefs[i]!.push(r);
+      placements.push({ f, i, ref: r, chain });
     });
     for (const sub of f.sub) {
       if (sub.key.startsWith("page:")) {
         const other = pagesOf(sheet.title).find((p) => `page:${p.page}` === sub.key)!;
-        sub.refs.push({ path, page: visit(inst, other, `${path}/${sub.uuid}`) });
+        sub.refs.push({ path, page: visit(inst, other, `${path}/${sub.uuid}`, [...chain, sub]) });
       } else {
         const child = inst.children.find((c) => c.parentPage === sheet.page && `block:${c.blockId}` === sub.key);
         if (!child) continue;
         if (child.name) sub.name = child.name;
         const childFirst = pagesOf(child.sheet)[0]!;
-        sub.refs.push({ path, page: visit(child, childFirst, `${path}/${sub.uuid}`) });
+        sub.refs.push({ path, page: visit(child, childFirst, `${path}/${sub.uuid}`, [...chain, sub]) });
       }
     }
     return myPage;
@@ -621,16 +646,26 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
   }
   dropSharedPins([...files.values()]);
 
-  const out = new Map<string, string>();
-  for (const f of files.values()) {
-    // Unreferenced pages (not reachable from the root) are still written,
-    // so nothing in the source is silently dropped.
-    if (f.symbolRefs.some((r) => r.length === 0) && f !== rootFile) {
-      f.symbolRefs.forEach((r, i) => r.length || r.push({ path: `/${f.uuid}`, reference: f.sheet.symbols[i]!.reference || "U?", unit: 1 }));
-    }
-    out.set(f.fileName, renderPage(f, sch, f === rootFile));
+  // Board links: one per reference (the lowest unit when a part has several).
+  const links = new Map<string, SymbolLink>();
+  for (const { f, i, ref, chain } of placements) {
+    const s = f.sheet.symbols[i]!;
+    if (s.kind === "power") continue;
+    const cur = links.get(ref.reference);
+    if (cur && cur.unit <= ref.unit) continue;
+    links.set(ref.reference, {
+      // Board paths leave out the root sheet's UUID.
+      path: `${ref.path.split("/").slice(2).map((x) => `/${x}`).join("")}/${f.symbolUuids[i]}`,
+      sheetname: `/${chain.map((c) => `${c.name}/`).join("")}`,
+      sheetfile: f.fileName,
+      value: s.value,
+      unit: ref.unit,
+    });
   }
-  return out;
+
+  const out = new Map<string, string>();
+  for (const f of files.values()) out.set(f.fileName, renderPage(f, sch, f === rootFile, opts.footprints));
+  return { files: out, links };
 }
 
 /**
@@ -663,7 +698,7 @@ function dropSharedPins(files: PageFile[]): void {
 
 /** Single-file convenience (tests): the root page's contents. */
 export function emitKicadSch(sch: Schematic): string {
-  return [...emitKicadSchProject(sch, "out").values()][0]!;
+  return [...emitKicadSchProject(sch, "out").files.values()][0]!;
 }
 
 /**
