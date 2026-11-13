@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Board, Schematic } from "./ir/types.ts";
@@ -214,8 +213,8 @@ export async function convertFile(input: string, outDir = "out"): Promise<string
     : convertPcb(input, design.xml, outDir);
 }
 
-async function main() {
-  const args = Bun.argv.slice(2);
+/** The command line: `ew-conv [-o <outDir>] <inputs...>`. */
+export async function main(args: string[] = process.argv.slice(2)): Promise<void> {
   let outDir = "out";
   const inputs: string[] = [];
   for (let i = 0; i < args.length; i++) {
@@ -223,7 +222,7 @@ async function main() {
     else inputs.push(args[i]!);
   }
   if (inputs.length === 0) {
-    console.error("usage: bun run dev [-o <outDir>] <design.ms14 | design.ewprj | folder | database.prj> [...]");
+    console.error("usage: ew-conv [-o <outDir>] <design.ms14 | design.ewprj | folder | database.prj> [...]");
     console.error("  A schematic and board with the same name in the same folder become one linked KiCad project.");
     process.exit(2);
   }
@@ -268,11 +267,4 @@ export async function convertDatabase(input: string, outDir: string): Promise<vo
   for (const w of syms.warnings.slice(0, 20)) console.log(`  warning: ${w}`);
   if (syms.warnings.length > 20) console.log(`  ... ${syms.warnings.length - 20} more warnings`);
   if (reasons.size) console.log(`  skipped:    ${[...reasons].map(([r, n]) => `${n} ${r}`).join(", ")}`);
-}
-
-if (import.meta.main) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
 }

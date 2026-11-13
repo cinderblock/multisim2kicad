@@ -4,13 +4,53 @@
   "description": "Convert Electronics Workbench (NI Ultiboard / Multisim) projects to KiCad",
   "author": "Cameron Tacklind <cameron@tacklind.com>",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cinderblock/ew-conv.git"
+  },
+  "homepage": "https://github.com/cinderblock/ew-conv#readme",
+  "bugs": {
+    "url": "https://github.com/cinderblock/ew-conv/issues"
+  },
+  "keywords": [
+    "kicad",
+    "electronics-workbench",
+    "multisim",
+    "ultiboard",
+    "ewprj",
+    "ms14",
+    "converter",
+    "national-instruments",
+    "eda",
+    "cli"
+  ],
   "type": "module",
+  "bin": {
+    "ew-conv": "dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "bun run src/main.ts",
-    "start": "bun run src/main.ts",
+    "dev": "bun run src/cli.ts",
+    "start": "bun run src/cli.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit -p .",
-    "corpus": "bun run scripts/corpus.ts"
+    "corpus": "bun run scripts/corpus.ts",
+    "build": "bun run build.ts && tsc -p tsconfig.build.json",
+    "prepublishOnly": "bun run scripts/guard-publish.ts && bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
     "electronics-workbench-decoder": "^0.4.1"

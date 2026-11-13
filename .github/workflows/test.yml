@@ -1,0 +1,36 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 24]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+
+      # The published CLI runs on Node: convert the sample project with it.
+      - run: node dist/cli.js -o out samples/Design1.ms14.xml samples/Design1.ewprj.xml

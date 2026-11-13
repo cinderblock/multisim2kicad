@@ -13,14 +13,28 @@ Reading the proprietary containers is done by
 
 ## Usage
 
-Requires [bun](https://bun.sh).
+Needs Node 20+ (or [Bun](https://bun.sh)).
+
+```bash
+npx ew-conv path/to/Design.ms14 path/to/Design.ewprj        # writes ./out/
+npx ew-conv -o converted/ path/to/project-folder/            # every design in a folder
+npx ew-conv -o libs/ "path/to/Stocked Components.prj"        # an EW component database
+```
+
+As a library, `import { convertProject, convertDatabase, parsePcbXml, ... } from "ew-conv"`
+gives the converters, the parsers into a format-neutral IR, and the KiCad emitters.
+
+### From a checkout
 
 ```bash
 bun install
-bun run dev path/to/Design.ms14 path/to/Design.ewprj        # writes ./out/
-bun run dev -o converted/ path/to/project-folder/            # every design in a folder
-bun run dev -o libs/ "path/to/Stocked Components.prj"        # an EW component database
+bun run dev -o out/ path/to/Design.ms14   # same arguments as the CLI
+bun test && bun run typecheck
+bun run build                             # dist/ (what npm ships)
 ```
+
+Releases are published to npm by CI (`.github/workflows/publish.yml`) when a
+`v<version>` tag matching `package.json` is pushed.
 
 Inputs can be the binary EW files or XML already decoded by `ewd`; the
 design type comes from the file's contents, not its extension. A schematic
