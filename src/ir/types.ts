@@ -265,6 +265,23 @@ export interface SchematicLabel {
   floating?: boolean;
 }
 
+/**
+ * A Multisim bus line. Drawing only: bus members connect by name, through
+ * the labels placed at each bus entry's wire end.
+ */
+export interface SchematicBus {
+  points: SchPoint[];
+  name: string;            // Multisim's bus name (may be empty)
+  members: string[];       // bus line names
+}
+
+/** A bus entry stub: `wire` is where the member's wire attaches, `bus` lies on the bus. */
+export interface SchematicBusEntry {
+  wire: SchPoint;
+  bus: SchPoint;
+  member: string;
+}
+
 export interface SchematicText {
   text: string;
   at: SchPoint;
@@ -290,6 +307,8 @@ export interface SchematicSheet {
   wires: SchematicWire[];
   labels: SchematicLabel[];
   texts: SchematicText[];
+  buses: SchematicBus[];
+  busEntries: SchematicBusEntry[];
 }
 
 /** One instantiation of a unique sheet in the design hierarchy. */

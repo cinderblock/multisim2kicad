@@ -3,6 +3,8 @@ import type {
   SchInstance,
   SheetBlock,
   Schematic,
+  SchematicBus,
+  SchematicBusEntry,
   SchematicLabel,
   SchematicSheet,
   SchematicSymbol,
@@ -210,6 +212,31 @@ function labelAngle(dir: SchPoint): number {
   if (dir.y < 0) return 90;
   if (dir.y > 0) return 270;
   return 0;
+}
+
+/**
+ * A Multisim bus as KiCad bus segments, its entries, and an unnamed bus-group
+ * label `{a b ...}` so the members keep their plain net names (the wires at
+ * each entry carry member-name labels, which is what actually connects them).
+ */
+function emitBus(bus: SchematicBus): string[] {
+  const out: string[] = [];
+  for (let i = 0; i + 1 < bus.points.length; i++) {
+    const [a, b] = [bus.points[i]!, bus.points[i + 1]!];
+    if (a.x === b.x && a.y === b.y) continue;
+    out.push(`\t(bus (pts (xy ${u(a.x)} ${u(a.y)}) (xy ${u(b.x)} ${u(b.y)})) (stroke (width 0) (type default)) (uuid ${q(uuid())}))`);
+  }
+  const members = [...new Set(bus.members)];
+  // KiCad bus member names can't contain spaces or braces.
+  if (members.length && members.every((m) => /^[^\s{}\[\]]+$/.test(m))) {
+    const at = bus.points[0]!;
+    out.push(`\t(label ${q(`{${members.join(" ")}}`)} (at ${u(at.x)} ${u(at.y)} 0) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid ${q(uuid())}))`);
+  }
+  return out;
+}
+
+function emitBusEntry(e: SchematicBusEntry): string {
+  return `\t(bus_entry (at ${u(e.wire.x)} ${u(e.wire.y)}) (size ${u(e.bus.x - e.wire.x)} ${u(e.bus.y - e.wire.y)}) (stroke (width 0) (type default)) (uuid ${q(uuid())}))`;
 }
 
 // Items Multisim leaves unconnected but which touch other geometry are moved
@@ -468,6 +495,8 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean): string {
     ...junctions(segments, pinPoints).map((p) => `\t(junction (at ${u(p.x)} ${u(p.y)}) (diameter 0) (color 0 0 0 0) (uuid ${q(uuid())}))`),
     ...segments.filter(([a, b]) => a.x !== b.x || a.y !== b.y).map(([a, b]) => emitWire(a, b)),
     ...labels.map(emitLabel),
+    ...sheet.buses.flatMap(emitBus),
+    ...sheet.busEntries.map(emitBusEntry),
     ...sheet.texts.map((t) => `\t(text ${q(t.text)} (exclude_from_sim no) (at ${u(t.at.x)} ${u(t.at.y)} 0) (effects (font (size ${u(t.size)} ${u(t.size)})) (justify left top)) (uuid ${q(uuid())}))`),
     ...sheet.symbols.map((s, i) => emitInstance(s, f.libNames[i]!, f.symbolUuids[i]!, f.symbolRefs[i]!, sch.projectName)),
     ...sheetSymbols,

@@ -26,6 +26,8 @@ import type {
   SchInstance,
   SheetBlock,
   Schematic,
+  SchematicBus,
+  SchematicBusEntry,
   SchematicLabel,
   SchematicSheet,
   SchematicSymbol,
@@ -641,6 +643,42 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
     }
   }
 
+  // Buses. Multisim joins a bus entry's wire to the other wires carrying the
+  // same bus line name (NI_EWB_NET_BUS_ENTRY) on the sheet; KiCad does the
+  // same with a local label of that name at the entry's wire end.
+  const modValue = (n: EwElement, mod: string) => pinMods(n).find((m) => m.mod === mod)?.value ?? "";
+  // Bus lines live in their own namespace in Multisim: line "SCLK" is not
+  // the global net "SCLK". KiCad joins same-named labels and power ports, so
+  // a line whose name is already taken on the sheet gets a distinct label.
+  const taken = new Set([...labels.map((l) => l.name), ...symbols.filter((x) => x.kind === "power").map((x) => x.value)]);
+  const lineLabel = (line: string) => (taken.has(line) ? `${line}_BUS` : line);
+  const buses: SchematicBus[] = [];
+  for (const [b] of wrapped(designSheet, "CIITBusCompV8", SYMBOLISH)) {
+    const bt = affineOf(b);
+    const points = items(b, "Points").map((p) => apply(bt, pt(p.get("X"), p.get("Y"))));
+    if (points.length < 2) continue;
+    const members = (b.child("MapBusLine2NetName")?.childrenNamed("Element") ?? []).map((e) => e.str("Key")).filter(Boolean);
+    buses.push({ points, name: modValue(b, "NI_EWB_NET_VIRTUAL"), members: members.map(lineLabel) });
+  }
+  const busEntries: SchematicBusEntry[] = [];
+  for (const [e, id] of wrapped(designSheet, "CIITBusEntry", SYMBOLISH)) {
+    const et = affineOf(e);
+    let conn: SchPoint | undefined;
+    let line: [SchPoint, SchPoint] | undefined;
+    for (const [cls, n] of children(e)) {
+      const t = composeAffine(affineOf(n), et);
+      if (cls === "CIITPinConnectorComp") conn = apply(t, pt(n.get("ptCenterX"), n.get("ptCenterY")));
+      else if (cls === "CODLineComp") line = [apply(t, pt(n.get("pt0X"), n.get("pt0Y"))), apply(t, pt(n.get("pt1X"), n.get("pt1Y")))];
+    }
+    const member = modValue(e, "NI_EWB_NET_BUS_ENTRY");
+    if (!line || !member) continue;
+    // The wire end is the stub end at the entry's connector.
+    const d = (p: SchPoint) => (conn ? Math.hypot(p.x - conn.x, p.y - conn.y) : 0);
+    const [wire, bus] = d(line[0]) <= d(line[1]) ? line : [line[1], line[0]];
+    busEntries.push({ wire, bus, member: lineLabel(member) });
+    labels.push({ name: lineLabel(member), at: wire, kind: "local", dir: { x: wire.x < bus.x ? -1 : 1, y: 0 }, netId: nets.netOf(id) });
+  }
+
   // Free text on the sheet (not inside symbols / the title block).
   const texts: SchematicText[] = [];
   for (const t of collect(designSheet, "CODTextComp", SYMBOLISH)) {
@@ -671,6 +709,8 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
     wires,
     labels,
     texts,
+    buses,
+    busEntries,
   };
 }
 

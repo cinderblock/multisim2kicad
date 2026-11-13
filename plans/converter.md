@@ -466,6 +466,23 @@ hierarchy, connectors), since those are what make an output useless today.
   then fit the dihedral + translation that lands the most pins on their
   `CODPinComp`s. Result on first sheets of the corpus: 98.74% of pins exact;
   the rest are real attach drift, bridged with a wire stub.
+- **Buses (2026-11-13).** `CIITBusCompV8` = polyline `Points`, bus name in
+  its `NI_EWB_NET_VIRTUAL` modifier, member lines as `MapBusLine2NetName`
+  keys (values were empty in every file looked at). Each `CIITBusEntry` is a
+  diagonal `CODLineComp` stub plus a `CIITPinConnectorComp` at the wire end
+  (wires attach there via its `CODPinComp`); its `NI_EWB_NET_BUS_ENTRY`
+  modifier names the line. Multisim joins entries by line name per sheet;
+  **line names are their own namespace**: iCue-to-1-Wire has bus lines
+  `SCLK`/`MOSI` next to unrelated global nets `SCLK`/`MOSI`. KiCad joins a
+  local label to a same-named global label, so the emitter labels such a
+  line `<line>_BUS`. Emitted as KiCad `bus` + `bus_entry` + member labels on
+  the entry wires + an unnamed group label `{a b ...}` on the bus.
+- **Unnumbered pins (2026-11-13).** Simulation-only parts (sources,
+  switches, meters, controllers in the NI samples) have pins with no number
+  anywhere. The emitter already fell back to the pin name; the reference
+  flattener used "", collapsing all of a part's pins into one key and
+  scoring whole designs wrong (the NI SMPS "Basso" set went 0 -> 401/401
+  exact once both sides used the same fallback).
 - **Connectors.** `CVirtualConnector` types: `NI_EWB_VIRTUAL_GLOBAL` (7911)
   and `_LOCAL` (233) -> global / local labels, named by their
   `CIITSymTextCompName`. Child transforms there are template frames
@@ -652,8 +669,9 @@ hierarchy, connectors), since those are what make an output useless today.
       **Schematic nets exact: 1765/1790 (98.6%); 33/39 designs exact;
       all 39 load in KiCad 10.**
 - [ ] Remaining schematic residuals (all small, logged here):
-  - Buses (`CIITBusCompV8`, bus entries, `CIITBusHierConnector`): both
-    iCue designs (22/26, 29/36). Not emitted yet (D3 leftover).
+  - ~~Buses~~ done 2026-11-13 (see the D bus entry below). Still open:
+    bus ports across hierarchy / pages (`CIITBusHierConnector`,
+    `CBusOffpageConn`), not seen failing yet.
   - Shared supply pins of multi-unit parts (op-amp V+/V-) appear per unit
     in KiCad, wired on one unit and dangling on another. Proper fix: one lib
     symbol per physical part with shared pins in the common body (D4).
@@ -715,6 +733,12 @@ hierarchy, connectors), since those are what make an output useless today.
       Althea.old Buttons (52), Brain Adapter (18); one track-net short on
       Althea Main (net propagation). Corpus baseline for later PCB work:
       `out/corpus-pcb-c6/report.json`.
+- [x] (2026-11-13) **Buses + unnumbered pins.** Buses emitted (bus,
+      bus entries, member labels; colliding line names relabelled). The
+      reference flattener now numbers unnumbered pins like the emitter.
+      **Main schematics 1591 -> 1602/1615 (37 designs, 34 exact); drive
+      corpus 1642/2300 (71%) -> 2473/2600 (95%), 212/212 load.** Reports:
+      `out/corpus-sch-bus/`, `out/corpus-drives-bus/`.
 - [ ] **Next (approved order):** D4-D5, E (project linking), F (EW
       database), G. Also: diagnose the NI sample designs' 71% (drive
       corpus).

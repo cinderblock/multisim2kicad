@@ -29,7 +29,7 @@
  * hierarchical-block files (Subcircuit="0"), NI_EWB_NET_HIDDEN pins.
  */
 import { ciCollStrings, collValues } from "../ref/ci-netlist.ts";
-import { docOf, type EwElement, type XmlInput } from "./doc.ts";
+import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 
 export interface NetPin {
   refdes: string;
@@ -330,7 +330,12 @@ export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): 
         const remap = design.pinRemap(inst, pg.page, key);
         const nums = portPins(p.portId);
         const list = pinsAt.get(pk) ?? [];
-        for (const n of nums.length ? nums : [p.pinNumber]) list.push({ refdes: final, pin: remap?.get(n) ?? n });
+        // Same numbering as the schematic emitter (sch.ts parsePins): netlist
+        // port numbers, else the drawn pin number(s), else the pin name.
+        // Simulation-only parts (sources, switches, meters) have no numbers.
+        const drawnNums = p.pinNumber.split(",").map((x) => x.trim()).filter(Boolean);
+        const own = nums.length ? nums : drawnNums.length ? drawnNums : [displayText(p.pinName) || "?"];
+        for (const n of own) list.push({ refdes: final, pin: remap?.get(n) ?? n });
         pinsAt.set(pk, list);
       }
       for (const child of inst.children.filter((c) => c.parentPage === pg.page)) {

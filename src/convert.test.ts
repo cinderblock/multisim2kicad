@@ -229,7 +229,7 @@ describe("orientation", () => {
     for (let f of [0, 1, 2, 3, 0x100, 0x101, 0x102, 0x103, 0x1000, 0x1001, 0x1100]) {
       const sch = { source: { application: "t", versionMajor: 0, versionMinor: 0, schema: 0 }, projectName: "t", rootSheet: "t",
         root: { sheet: "t", name: "", refdes: {}, pinRemaps: {}, units: {}, children: [] }, sheets: [{
-        name: "t", title: "t", page: "1", blocks: [], size: { width: 100, height: 100 }, wires: [], labels: [], texts: [],
+        name: "t", title: "t", page: "1", blocks: [], size: { width: 100, height: 100 }, wires: [], labels: [], texts: [], buses: [], busEntries: [],
         symbols: [{ reference: "R1", value: "", kind: "part" as const, at: { x: 10, y: 10 }, transform: flipToDihedral(f), graphics: [], pins: [], showPinNames: false, showPinNumbers: false }],
       }] };
       expect(() => emitKicadSch(sch)).not.toThrow();
