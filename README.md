@@ -19,6 +19,7 @@ Requires [bun](https://bun.sh).
 bun install
 bun run dev path/to/Design.ms14 path/to/Design.ewprj        # writes ./out/
 bun run dev -o converted/ path/to/project-folder/            # every design in a folder
+bun run dev -o libs/ "path/to/Stocked Components.prj"        # an EW component database
 ```
 
 Inputs can be the binary EW files or XML already decoded by `ewd`; the
@@ -69,7 +70,11 @@ Shared supply pins of multi-section parts (an op-amp's V+/V- on every
 section) stay connected the way Multisim wires them. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
-Not yet: parts pulled straight from the EW database.
+An EW component database (a Multisim database project, `.prj` / `.usr`)
+becomes KiCad libraries named after it: `<name>.pretty/` with every
+Ultiboard footprint stored in it, registered in `fp-lib-table`.
+
+Not yet: symbols from the EW database (footprints are done).
 `plans/converter.md` tracks these.
 
 ## Checking results

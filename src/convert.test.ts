@@ -6,7 +6,7 @@ import { harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
 import { boardCustomRules, boardProjectSettings, netClassName } from "./emit/kicad-pro.ts";
 import { emitKicadSch, emitKicadSchProject } from "./emit/kicad-sch.ts";
-import { parsePcbXml } from "./parse/pcb.ts";
+import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
@@ -96,6 +96,19 @@ describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
     const segs = out.match(/\(segment [^\n]*/g) ?? [];
     expect(segs.length).toBe(6);
     expect(segs.every((s) => !s.includes("(net 0)"))).toBe(true);
+  });
+});
+
+describe("EW database footprints (F)", () => {
+  test("a library object's UBComponent parses like a placed one", () => {
+    const xml = sample("Design1.ewprj.xml");
+    const start = xml.indexOf("<UBComponent ");
+    const end = xml.indexOf("</UBComponent>", start) + "</UBComponent>".length;
+    const lib = `<?xml version="1.0" encoding="ASCII"?>\n<LibraryObject Schema="66">\n<LibraryObject Class="CLibraryObject" RefPointX="0" RefPointY="0">\n<List Class="CDrwObList">\n${xml.slice(start, end)}\n</List>\n</LibraryObject>\n</LibraryObject>\n`;
+    const c = parseUbLibraryXml(lib)!;
+    const placed = parsePcbXml(xml).components[0]!;
+    expect(c.pads.map((p) => [p.number, p.at])).toEqual(placed.pads.map((p) => [p.number, p.at]));
+    expect(c.graphics.length).toBe(placed.graphics.length);
   });
 });
 

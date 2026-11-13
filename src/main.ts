@@ -9,6 +9,7 @@ import { emitKicadPcb, footprintName } from "./emit/kicad-pcb.ts";
 import { emitKicadSchProject, kicadProSchematicSettings } from "./emit/kicad-sch.ts";
 import { emitFootprintLibrary, harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { boardCustomRules, boardProjectSettings } from "./emit/kicad-pro.ts";
+import { databaseFootprints, footprintBoard, readEwDatabase } from "./db/ewdb.ts";
 
 const NM_PER_MM = 1_000_000;
 
@@ -221,11 +222,39 @@ async function main() {
     else inputs.push(args[i]!);
   }
   if (inputs.length === 0) {
-    console.error("usage: bun run dev [-o <outDir>] <design.ms14 | design.ewprj | folder> [...]");
+    console.error("usage: bun run dev [-o <outDir>] <design.ms14 | design.ewprj | folder | database.prj> [...]");
     console.error("  A schematic and board with the same name in the same folder become one linked KiCad project.");
     process.exit(2);
   }
-  for (const p of await groupProjects(inputs)) await convertProject(p, outDir);
+  const designs: string[] = [];
+  for (const i of inputs) {
+    if (DATABASE_FILE.test(i)) await convertDatabase(i, outDir);
+    else designs.push(i);
+  }
+  for (const p of await groupProjects(designs)) await convertProject(p, outDir);
+}
+
+const DATABASE_FILE = /\.(prj|usr)$/i;
+
+/**
+ * An EW component database (`.prj` / `.usr`) -> KiCad libraries named after
+ * it: `<name>.pretty/` (+ fp-lib-table). Phase F.
+ */
+export async function convertDatabase(input: string, outDir: string): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const db = readEwDatabase(await readFile(input), input);
+  const lib = libNickname(basename(input).replace(DATABASE_FILE, ""));
+  const fps = databaseFootprints(db);
+  const h = harmonizeFootprints(footprintBoard(fps.components, lib));
+  const pretty = join(outDir, `${lib}.pretty`);
+  await mkdir(pretty, { recursive: true });
+  for (const [name, text] of emitFootprintLibrary(h.board, h.library)) await writeFile(join(pretty, name), text, "utf8");
+  await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, `Footprints from the EW database ${basename(input)} (ew-conv)`);
+  const reasons = new Map<string, number>();
+  for (const s of fps.skipped) reasons.set(s.reason, (reasons.get(s.reason) ?? 0) + 1);
+  console.log(`${input}`);
+  console.log(`  footprints: ${h.library.size} -> ${pretty}`);
+  if (reasons.size) console.log(`  skipped:    ${[...reasons].map(([r, n]) => `${n} ${r}`).join(", ")}`);
 }
 
 if (import.meta.main) {

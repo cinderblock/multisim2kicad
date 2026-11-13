@@ -457,6 +457,17 @@ function parseStackup(designSheet: EwElement): Stackup {
   return { copper: [0, ...inner, 63], thickness: bs?.numOr("BoardThickness", 1_600_000) ?? 1_600_000 };
 }
 
+/**
+ * The footprint in an Ultiboard library object (an EW database `UBLIB`
+ * blob: `<LibraryObject>` holding one `UBComponent` in its own frame, origin
+ * at the library RefPoint). Undefined when the object holds no component.
+ */
+export function parseUbLibraryXml(input: XmlInput): Component | undefined {
+  const collected = emptyCollected();
+  walkGeometry(docOf(input).root, collected);
+  return collected.components[0];
+}
+
 export function parsePcbXml(input: XmlInput): Board {
   const doc = docOf(input);
   if (doc.application === "multisim") {

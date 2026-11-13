@@ -886,6 +886,19 @@ hierarchy, connectors), since those are what make an output useless today.
       edge: source-faithful), courtyard overlaps, solder_mask_bridge, the
       tracks below their board's own minimum width. Report
       `out/corpus-pcb-c7c/`.
+- [x] (2026-11-13) **F footprints.** `ew-conv <db.prj>` writes
+      `<db>.pretty/` + fp-lib-table from every `UBLIB` object
+      (`src/db/ewdb.ts`, `parseUbLibraryXml`). Stocked Electronic
+      Components v14.2: 395 footprints, all load and plot in kicad-cli
+      (`fp export svg`); 46 PADLIB + 5 NETBRIDGELIB objects skipped (custom
+      pads are embedded in the footprints that use them). Checked against
+      the Althea boards' own libraries: same pads and drawings; the only
+      differences are text the user placed on a board's copy and 1-4 nm
+      rounding in placed copies (plus genuinely older revisions, e.g.
+      D0603).
+- [ ] F symbols: `SYS_SYMBOL_PICTURE` (`BaseSymbolDocument` XML) ->
+      `<db>.kicad_sym`, sections from `SYS_MAPPING_COMP_SYMBOL`, Footprint
+      property from `SYS_MAPPING_COMP_PACKAGE`; picture unwrap into ewd.
 - [ ] **Next (approved order):** B3 cleanup, D6, F (EW database), G. Drive-corpus
       leftovers (11 nets: ground-symbol pin naming) are optional.
 
