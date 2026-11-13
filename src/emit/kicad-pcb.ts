@@ -472,6 +472,18 @@ function emitPrimitive(pr: PadPrimitive, at: Point, f: Frame): string {
   }
 }
 
+/**
+ * False for a zero-size pad with no hole: EW's placeholder for a lead the
+ * package leaves out (the cut middle lead of NI's DPAK `TO228P991X238-3_4N`).
+ * It has no copper in EW, and KiCad refuses to load a library holding a
+ * zero-size pad, so it is not emitted.
+ */
+function hasCopper(pad: Pad): boolean {
+  if (pad.drillDiameter > 0) return true;
+  const s = pad.shape;
+  return s.kind === "custom" || (s.kind === "circle" ? s.diameter > 0 : s.width > 0 && s.height > 0);
+}
+
 function emitPad(pad: Pad, f: Frame, net: NetRef | undefined): string {
   const thru = pad.drillDiameter > 0;
   const type = thru ? "thru_hole" : "smd";
@@ -616,7 +628,7 @@ function emitFootprint(c: Component, resolve: NetResolver, lm: LayerMap, opts: P
     lines.push(`\t\t(fp_text user ${q(t.text)} ${at} (layer ${q(layer)}) (uuid ${q(uuid())}) ${effects})`);
   }
   for (const g of c.graphics) lines.push(...emitShape(g, lm.kicadInPart(g.layer, c.bottom), frame));
-  for (const pad of c.pads) lines.push(emitPad(pad, frame, resolve(c.reference, pad.number)));
+  for (const pad of c.pads) if (hasCopper(pad)) lines.push(emitPad(pad, frame, resolve(c.reference, pad.number)));
   lines.push(`\t)`);
   return lines.join("\n");
 }
