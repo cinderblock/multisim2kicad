@@ -239,6 +239,47 @@ wants it supported too (2026-11-11): pull a part's symbol/footprint straight
 from the EW database. The DB share is mounted as `W:\` (=
 `\uberfall.tsl\Electronics Workbench Database`).
 
+**Findings (2026-11-13, read-only look at the share):** `W:\` holds no
+`.prt` files any more; it holds the user's Multisim **database projects**
+`Stocked Electronic Components v14.0 / v14.1 / v14.2*.prj` (Jet 4, header
+"Standard Jet DB", 3-9 MB; v14.2 is the newest, 2022-04-04) plus unrelated
+Altium files (`TWILL.PcbLib/SchLib/LibPkg`, `History/`). ewd's
+`decodeMdbBuffer` reads every table. In v14.2:
+
+- `SYS_COMPONENT` (241 parts: `Component_ID`, `Family_ID`,
+  `Component_Name`, `Manufacturer`, `Description`, `Pin_Number`, ...),
+  `SYS_CONFIGURATION` (72 families), `SYS_CONFIGURATION_GROUPS` (20 groups).
+- `SYS_SYMBOL_PICTURE` (413: `Symbol_ID`, `Pin_Number`, `Layer_Number`,
+  `Size`, `Image`). `Image` = 5-byte prefix + EW's usual compressed stream;
+  wrapping bytes [5..] in a `CompressedElectronicsWorkbenchXML` header
+  (total = `Size`) decodes with ewd's `decodeBuffer` to an XML
+  `<DrDoc Type="BaseSymbolDocument">` with `LayerInfo`, `BoundaryBox`,
+  `Pin` (+ `Line`, `PinNameText`, `PinNumberText`, `WireConnectionPoint`),
+  `Rectangle`, ... A different schema from symbols placed in a `.ms14`.
+- `SYS_MAPPING_COMP_SYMBOL` (406: component -> symbol per section, ANSI /
+  DIN, `Pinout_*`, `Sec_Name`), `SYS_MAPPING_COMP_PACKAGE` (319: component
+  -> package + pinout).
+- `SYS_PCB_PACKAGE` (515: `Package_ID`, `Package_Type` = footprint name,
+  `Pin_Number`, `Std_Pinout`, `PCB_Technology` TH/SMT).
+- `tObjects` (446: `strObjectName` = footprint name, `lBlobID`,
+  `lObjectTreeID`, `lObjectTypeID`) / `tObjectTree` (19 folders: Hardware,
+  Cameron's, Connectors, ...) / `tObjectTypes` (UBLIB = PCB part, PADLIB =
+  custom pad shape, CADDESIGN, NETBRIDGELIB) / `tBlobs` (1067). A blob is a
+  complete `CompressedElectronicsWorkbenchXML` file: `<CommonLibraryObject>`
+  holding a `UBComponent` with the same structure as in `.ewprj`
+  (`SMT-Pin` / `Pad` / `LayoutPadRoundedRectangle`, silk `Rectangle`s,
+  `TXTFormat`, `RefPoint`).
+
+**Design:** `ew-conv db <file.prj> [-o dir]` writes `<db>.kicad_sym` +
+`<db>.pretty/` (+ lib tables). Footprints: decode each UBLIB blob, run it
+through the existing UBComponent parser and footprint-library emitter.
+Symbols: new parser for `BaseSymbolDocument` -> `SchematicSymbol` IR, then
+the existing `SymbolLibrary`; multi-section parts from
+`SYS_MAPPING_COMP_SYMBOL` as units; each symbol's `Footprint` property from
+`SYS_MAPPING_COMP_PACKAGE`. The symbol-picture unwrap belongs in ewd
+(release allowed). Order: footprints, symbols, mapping. Read the share
+only; work from a copy in the scratchpad.
+
 ### Phase G - Ship
 
 CLI UX + README, `bun test` in CI, decide whether ew-conv is published to
