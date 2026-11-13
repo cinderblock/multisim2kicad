@@ -39,7 +39,7 @@ import type {
   SymbolText,
 } from "../ir/types.ts";
 import { type CiNetlist, parseCiNetlist } from "../ref/ci-netlist.ts";
-import { portPinNumbers } from "../ref/ci-netlist.ts";
+import { drawnPinNumbers, portPinNumbers } from "../ref/ci-netlist.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 import { type PageIndex, parseMultisimDesign, type SheetInstance } from "./ms-hierarchy.ts";
 
@@ -273,7 +273,7 @@ function parsePins(pinComp: EwElement, parent: Affine, extraGraphics: SchGraphic
   const fromNetlist = portPins(pinComp.get("PortID"));
   const numbers = fromNetlist.length
     ? fromNetlist
-    : pinComp.str("PinNumber").split(",").map((s) => s.trim()).filter(Boolean);
+    : drawnPinNumbers(pinComp.str("PinNumber"));
   if (numbers.length === 0) numbers.push(name || "?");
   return {
     pins: numbers.map((number) => ({ pin: { name, number, at: conn!, dir, length, netId: sourceId || undefined }, attachIds })),
@@ -546,7 +546,10 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
         connectorModValue(comp, "NI_EWB_NET_GLOBAL_GROUND") || connectorModValue(comp, "NI_EWB_NET_GLOBAL") || ciComp.refdes;
     }
     if (!placed.symbol.reference && ciComp) placed.symbol.reference = ciComp.refdes;
-    for (const pin of placed.symbol.pins) pin.netId = nets.netOf(pin.netId);
+    for (const pin of placed.symbol.pins) {
+      pin.connected = !nets.isolated(pin.netId);
+      pin.netId = nets.netOf(pin.netId);
+    }
     if (placed.symbol.kind === "power" && placed.symbol.pins[0] && nets.isolated(placed.symbol.pins[0].netId)) {
       placed.symbol.floating = true;
     }

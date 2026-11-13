@@ -96,9 +96,17 @@ function uniquePins(pins: SymbolPin[]): SymbolPin[] {
   return pins.filter((p) => p.number && !seen.has(p.number) && seen.add(p.number));
 }
 
-function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] = []): string {
+/** A pin drawn as plain lines (its stem), for pins that must not be KiCad pins. */
+const pinStem = (p: SymbolPin): SchGraphic => ({
+  kind: "polyline",
+  points: [p.at, { x: p.at.x + p.dir.x * p.length, y: p.at.y + p.dir.y * p.length }],
+  width: 0,
+  fill: false,
+});
+
+function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] = [], dropped: ReadonlySet<string> = new Set()): string {
   const local = libName.split(":").pop()!;
-  const pins = uniquePins(s.pins);
+  const pins = uniquePins(s.pins).filter((p) => !dropped.has(p.number));
   const units = [...unitsOf(refs)].sort((a, b) => a[0] - b[0]);
   const power = s.kind === "power";
   const pinLine = (p: SymbolPin, number: string) => {
@@ -107,16 +115,7 @@ function emitLibSymbol(s: SchematicSymbol, libName: string, refs: InstanceRef[] 
     const length = power ? 0 : p.length;
     return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(number)} ${FONT}))`;
   };
-  const stems: SchGraphic[] = power
-    ? s.pins
-        .filter((p) => p.length > 0)
-        .map((p) => ({
-          kind: "polyline" as const,
-          points: [p.at, { x: p.at.x + p.dir.x * p.length, y: p.at.y + p.dir.y * p.length }],
-          width: 0,
-          fill: false,
-        }))
-    : [];
+  const stems: SchGraphic[] = s.pins.filter((p) => p.length > 0 && (power || dropped.has(p.number))).map(pinStem);
   const lines = [
     `\t\t(symbol ${q(libName)}`,
     power ? `\t\t\t(power global)` : "",
@@ -168,7 +167,14 @@ function unitsOf(refs: InstanceRef[]): Map<number, Record<string, string> | unde
   return m;
 }
 
-function emitInstance(sym: SchematicSymbol, libName: string, uuidStr: string, refs: InstanceRef[], projectName: string): string {
+function emitInstance(
+  sym: SchematicSymbol,
+  libName: string,
+  uuidStr: string,
+  refs: InstanceRef[],
+  projectName: string,
+  dropped: ReadonlySet<string> = new Set(),
+): string {
   const s = sym.floating ? { ...sym, at: { x: sym.at.x + NUDGE, y: sym.at.y + NUDGE } } : sym;
   const reference = refs[0]?.reference ?? s.reference;
   const { angle, mirror } = kicadOrient(s.transform);
@@ -190,7 +196,7 @@ function emitInstance(sym: SchematicSymbol, libName: string, uuidStr: string, re
     property("Value", s.value, valAt, !power && !!s.valueText?.hidden),
     property("Footprint", "", s.at, true),
     property("Datasheet", "", s.at, true),
-    ...[...new Set(uniquePins(s.pins).flatMap((p) => [...unitsOf(refs).values()].map((m) => m?.[p.number] ?? p.number)))].map(
+    ...[...new Set(uniquePins(s.pins).filter((p) => !dropped.has(p.number)).flatMap((p) => [...unitsOf(refs).values()].map((m) => m?.[p.number] ?? p.number)))].map(
       (n) => `\t\t(pin ${q(n)} (uuid ${q(uuid())}))`,
     ),
     `\t\t(instances (project ${q(projectName)} ${refs.map((r) => `(path ${q(r.path)} (reference ${q(r.reference)}) (unit ${r.unit}))`).join(" ")}))`,
@@ -318,6 +324,8 @@ interface PageFile {
   symbolUuids: string[];
   libNames: string[];
   symbolRefs: InstanceRef[][];
+  /** Per symbol: drawn pin numbers emitted as plain lines (shared pins kept on another section). */
+  droppedPins: Set<string>[];
   /** Sheet symbols on this page: hierarchical blocks and (first page only) the sheet's other pages. */
   sub: { key: string; uuid: string; name: string; file: string; block?: SheetBlock; refs: SheetSymbolRef[] }[];
 }
@@ -490,7 +498,7 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean): string {
     `\t\t(comment 1 ${q(importNote)})`,
     `\t)`,
     `\t(lib_symbols`,
-    ...sheet.symbols.map((s, i) => emitLibSymbol(s, f.libNames[i]!, f.symbolRefs[i]!)),
+    ...sheet.symbols.map((s, i) => emitLibSymbol(s, f.libNames[i]!, f.symbolRefs[i]!, f.droppedPins[i])),
     `\t)`,
     ...junctions(segments, pinPoints).map((p) => `\t(junction (at ${u(p.x)} ${u(p.y)}) (diameter 0) (color 0 0 0 0) (uuid ${q(uuid())}))`),
     ...segments.filter(([a, b]) => a.x !== b.x || a.y !== b.y).map(([a, b]) => emitWire(a, b)),
@@ -498,7 +506,7 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean): string {
     ...sheet.buses.flatMap(emitBus),
     ...sheet.busEntries.map(emitBusEntry),
     ...sheet.texts.map((t) => `\t(text ${q(t.text)} (exclude_from_sim no) (at ${u(t.at.x)} ${u(t.at.y)} 0) (effects (font (size ${u(t.size)} ${u(t.size)})) (justify left top)) (uuid ${q(uuid())}))`),
-    ...sheet.symbols.map((s, i) => emitInstance(s, f.libNames[i]!, f.symbolUuids[i]!, f.symbolRefs[i]!, sch.projectName)),
+    ...sheet.symbols.map((s, i) => emitInstance(s, f.libNames[i]!, f.symbolUuids[i]!, f.symbolRefs[i]!, sch.projectName, f.droppedPins[i])),
     ...sheetSymbols,
     ...(isRoot ? [`\t(sheet_instances (path "/" (page "1")))`] : []),
     `\t(embedded_fonts no)`,
@@ -534,6 +542,7 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
         (s, i) => `ew:${slug(sheet.title)}_${slug(sheet.page)}_${(s.kind === "power" ? `PWR_${s.value}` : s.reference || "U").replace(/[^A-Za-z0-9_.+-]/g, "_")}__${i}`,
       ),
       symbolRefs: sheet.symbols.map(() => []),
+      droppedPins: sheet.symbols.map(() => new Set<string>()),
       sub: [],
     });
   }
@@ -603,6 +612,15 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
     }
   }
 
+  for (const f of files.values()) {
+    // Unreferenced pages (not reachable from the root) are still written,
+    // so nothing in the source is silently dropped.
+    if (f.symbolRefs.some((r) => r.length === 0) && f !== rootFile) {
+      f.symbolRefs.forEach((r, i) => r.length || r.push({ path: `/${f.uuid}`, reference: f.sheet.symbols[i]!.reference || "U?", unit: 1 }));
+    }
+  }
+  dropSharedPins([...files.values()]);
+
   const out = new Map<string, string>();
   for (const f of files.values()) {
     // Unreferenced pages (not reachable from the root) are still written,
@@ -613,6 +631,34 @@ export function emitKicadSchProject(sch: Schematic, baseName: string): Map<strin
     out.set(f.fileName, renderPage(f, sch, f === rootFile));
   }
   return out;
+}
+
+/**
+ * Multisim draws a multi-section part's shared pins (an op-amp's V+/V-) on
+ * every section. KiCad keeps one pin per number per part, and a copy left
+ * dangling on another section takes the pin off its net. Keep the pin on the
+ * section where Multisim wires it (else the first) and draw the other copies
+ * as plain lines. Decided on each symbol's first instance.
+ */
+function dropSharedPins(files: PageFile[]): void {
+  const owners = new Map<string, { f: PageFile; i: number; drawn: string; connected: boolean }[]>();
+  for (const f of files) {
+    f.sheet.symbols.forEach((s, i) => {
+      const r = f.symbolRefs[i]![0];
+      if (s.kind === "power" || !r) return;
+      for (const p of uniquePins(s.pins)) {
+        const k = JSON.stringify([r.reference, r.pinMap?.[p.number] ?? p.number]);
+        const list = owners.get(k) ?? [];
+        list.push({ f, i, drawn: p.number, connected: !!p.connected });
+        owners.set(k, list);
+      }
+    });
+  }
+  for (const list of owners.values()) {
+    if (list.length < 2) continue;
+    const keep = list.find((o) => o.connected) ?? list[0]!;
+    for (const o of list) if (o !== keep) o.f.droppedPins[o.i]!.add(o.drawn);
+  }
 }
 
 /** Single-file convenience (tests): the root page's contents. */

@@ -28,7 +28,7 @@
  * Known gaps: bus ports across hierarchy (CIITBusHierConnector), external
  * hierarchical-block files (Subcircuit="0"), NI_EWB_NET_HIDDEN pins.
  */
-import { ciCollStrings, collValues } from "../ref/ci-netlist.ts";
+import { ciCollStrings, collValues, drawnPinNumbers } from "../ref/ci-netlist.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 
 export interface NetPin {
@@ -125,6 +125,10 @@ function indexPage(ds: EwElement, sheetComp: Map<string, string>, warnings: stri
   // Drawing objects are `<Item Class=X ID=..><X ...>` wrappers; an owner
   // (symbol, connector, macro, pin) scopes the pins drawn inside it.
   const visit = (node: EwElement, owner: { id: string; kind: string } | null): void => {
+    // Interactive parts (CIITAnimationSymbolComp: push-buttons, switches)
+    // keep extra copies of their pins per animation state, never wired; the
+    // real pins are the symbol's own Objects.
+    if (node.name === "AnimationLayers") return;
     const cls = node.cls;
     const sid = node.get("ID");
     const o = cls ? node.child(cls) : undefined;
@@ -333,7 +337,7 @@ export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): 
         // Same numbering as the schematic emitter (sch.ts parsePins): netlist
         // port numbers, else the drawn pin number(s), else the pin name.
         // Simulation-only parts (sources, switches, meters) have no numbers.
-        const drawnNums = p.pinNumber.split(",").map((x) => x.trim()).filter(Boolean);
+        const drawnNums = drawnPinNumbers(p.pinNumber);
         const own = nums.length ? nums : drawnNums.length ? drawnNums : [displayText(p.pinName) || "?"];
         for (const n of own) list.push({ refdes: final, pin: remap?.get(n) ?? n });
         pinsAt.set(pk, list);
@@ -349,6 +353,20 @@ export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): 
     }
   };
   expand(design.root, new Map(), 0);
+
+  // One physical pin is one node: a pin number drawn on several sections of
+  // a part (an op-amp's V+/V- on every section) joins all their nets, as in
+  // the part itself.
+  const pinHome = new Map<string, string>();
+  for (const [k, ps] of pinsAt) {
+    for (const p of ps) {
+      if (p.pin === "?") continue;
+      const id = JSON.stringify([p.refdes, p.pin]);
+      const home = pinHome.get(id);
+      if (home === undefined) pinHome.set(id, k);
+      else union(k, home);
+    }
+  }
 
   const nets = new Map<string, NetPin[]>();
   for (const [k, ps] of pinsAt) {

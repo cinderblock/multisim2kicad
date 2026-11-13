@@ -672,12 +672,14 @@ hierarchy, connectors), since those are what make an output useless today.
   - ~~Buses~~ done 2026-11-13 (see the D bus entry below). Still open:
     bus ports across hierarchy / pages (`CIITBusHierConnector`,
     `CBusOffpageConn`), not seen failing yet.
-  - Shared supply pins of multi-unit parts (op-amp V+/V-) appear per unit
-    in KiCad, wired on one unit and dangling on another. Proper fix: one lib
-    symbol per physical part with shared pins in the common body (D4).
-  - Multi-contact switches (Materna Control Board SW1-SW3, pins A/A'/B/B'):
-    KiCad joins a switch contact pair to the wire the reference keeps apart.
-    Not investigated.
+  - ~~Shared supply pins~~ done 2026-11-13: a pin number drawn on several
+    sections of one part stays a KiCad pin only on the section Multisim
+    wires (others drawn as plain lines); the reference flattener now joins
+    all nets holding the same (refdes, pin).
+  - ~~Multi-contact switches~~ done 2026-11-13: the KiCad output was right
+    all along (matches the Ultiboard netlist); the reference flattener was
+    reading the never-wired pin copies interactive parts
+    (`CIITAnimationSymbolComp`) keep under `AnimationLayers`. Skipped now.
   - `NI_EWB_NET_HIDDEN` pins (CAN Main, 1 net) ignored.
   - Twillbot Distribution: 164/165, not investigated.
 - [x] (2026-11-11) Drive corpus scorecard (`--corpus corpus/drives`, 238
@@ -739,6 +741,16 @@ hierarchy, connectors), since those are what make an output useless today.
       **Main schematics 1591 -> 1602/1615 (37 designs, 34 exact); drive
       corpus 1642/2300 (71%) -> 2473/2600 (95%), 212/212 load.** Reports:
       `out/corpus-sch-bus/`, `out/corpus-drives-bus/`.
+- [x] (2026-11-13) **Instrument pins, interactive parts, shared pins.**
+      `##` pin numbers (instruments) fall back to the pin name like blank
+      ones; the reference flattener skips `AnimationLayers` pin copies and
+      joins nets holding the same physical pin; shared pins of
+      multi-section parts stay pins only on the wired section.
+      **Main schematics 1608/1609 (36/37 designs exact; the one miss is
+      Distribution's Y1.2/Y1.4). Drive corpus 2624/2635 (99.6%), 203/212
+      exact.** Reports `out/corpus-sch-f/`, `out/corpus-drives-f/`. Left in
+      the drive corpus: ground-symbol pin naming (`0.0`, `0.GND` vs `0_n`
+      parts), a few single nets in Controller.ms11 / DIGITAL / Power board.
 - [ ] **Next (approved order):** D4-D5, E (project linking), F (EW
       database), G. Also: diagnose the NI sample designs' 71% (drive
       corpus).

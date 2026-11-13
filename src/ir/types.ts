@@ -218,6 +218,8 @@ export interface SymbolPin {
   // drawing are only connected in Multisim if they share a netId; the
   // emitter uses this to avoid geometric joins Multisim doesn't make.
   netId?: string;
+  // Multisim connects something to this pin (false: dangling in the source).
+  connected?: boolean;
 }
 
 export interface SymbolText {

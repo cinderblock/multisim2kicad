@@ -7,7 +7,7 @@ import { emitKicadSch } from "./emit/kicad-sch.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
-import { parseCiNetlist } from "./ref/ci-netlist.ts";
+import { drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
@@ -94,6 +94,15 @@ describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
     const segs = out.match(/\(segment [^\n]*/g) ?? [];
     expect(segs.length).toBe(6);
     expect(segs.every((s) => !s.includes("(net 0)"))).toBe(true);
+  });
+});
+
+describe("schematic pin numbers", () => {
+  test("instrument placeholders and blanks fall back to the pin name", () => {
+    expect(drawnPinNumbers("##")).toEqual([]);
+    expect(drawnPinNumbers("")).toEqual([]);
+    expect(drawnPinNumbers("4, 8")).toEqual(["4", "8"]);
+    expect(drawnPinNumbers("A#")).toEqual(["A#"]);
   });
 });
 

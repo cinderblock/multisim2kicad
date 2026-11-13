@@ -90,6 +90,15 @@ export function portPinNumbers(port: EwElement): string[] {
   return csv.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * A pin's drawn number(s) (`CIITPinSymbolComp@PinNumber`). Instruments
+ * (multimeters, scopes, analyzers) show "##" as a placeholder; like an empty
+ * number, it means "use the pin name".
+ */
+export function drawnPinNumbers(raw: string): string[] {
+  return raw.split(",").map((s) => s.trim()).filter((s) => s && !/^#+$/.test(s));
+}
+
 export function parseCiNetlist(input: XmlInput): CiNetlist {
   const items = collectCiItems(docOf(input).root);
 
