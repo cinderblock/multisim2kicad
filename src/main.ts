@@ -46,7 +46,7 @@ export async function convertProject(p: ProjectInput, outDir: string): Promise<s
     for (const [name, text] of out.files) await writeFile(join(outDir, name), text, "utf8");
     // Project-local symbol library the symbols' lib ids point at.
     await writeFile(join(outDir, `${lib}.kicad_sym`), out.symbolLibrary, "utf8");
-    await addLibTableEntry(join(outDir, "sym-lib-table"), "sym_lib_table", lib, `\${KIPRJMOD}/${lib}.kicad_sym`, "Symbols from the Multisim design (ew-conv)");
+    await addLibTableEntry(join(outDir, "sym-lib-table"), "sym_lib_table", lib, `\${KIPRJMOD}/${lib}.kicad_sym`, "Symbols from the Multisim design (multisim2kicad)");
     links = out.links;
     written.push(join(outDir, `${p.base}.kicad_sch`));
     reportSch(p.sch!.input, sch, out.files.size);
@@ -59,7 +59,7 @@ export async function convertProject(p: ProjectInput, outDir: string): Promise<s
     const pretty = join(outDir, `${lib}.pretty`);
     await mkdir(pretty, { recursive: true });
     for (const [name, text] of emitFootprintLibrary(board, parsed!.library)) await writeFile(join(pretty, name), text, "utf8");
-    await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, "Footprints from the Ultiboard design (ew-conv)");
+    await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, "Footprints from the Ultiboard design (multisim2kicad)");
     reportPcb(p.pcb!.input, board, links);
   }
   if (board) {
@@ -141,7 +141,7 @@ const countInstances = (i: { children: any[] }): number => 1 + i.children.reduce
 
 /**
  * Minimal .kicad_pro: KiCad fills in defaults for everything not given. The
- * schematic needs a 10 mil connection grid to match ew-conv's unit scale.
+ * schematic needs a 10 mil connection grid to match multisim2kicad's unit scale.
  * Existing files are merged, not replaced.
  */
 async function writeProjectFile(path: string, schematic: boolean, board?: Board): Promise<void> {
@@ -213,7 +213,7 @@ export async function convertFile(input: string, outDir = "out"): Promise<string
     : convertPcb(input, design.xml, outDir);
 }
 
-/** The command line: `ew-conv [-o <outDir>] <inputs...>`. */
+/** The command line: `multisim2kicad [-o <outDir>] <inputs...>`. */
 export async function main(args: string[] = process.argv.slice(2)): Promise<void> {
   let outDir = "out";
   const inputs: string[] = [];
@@ -222,7 +222,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<void
     else inputs.push(args[i]!);
   }
   if (inputs.length === 0) {
-    console.error("usage: ew-conv [-o <outDir>] <design.ms14 | design.ewprj | folder | database.prj> [...]");
+    console.error("usage: multisim2kicad [-o <outDir>] <design.ms14 | design.ewprj | folder | database.prj> [...]");
     console.error("  A schematic and board with the same name in the same folder become one linked KiCad project.");
     process.exit(2);
   }
@@ -251,14 +251,14 @@ export async function convertDatabase(input: string, outDir: string): Promise<vo
   const pretty = join(outDir, `${lib}.pretty`);
   await mkdir(pretty, { recursive: true });
   for (const [name, text] of emitFootprintLibrary(h.board, h.library)) await writeFile(join(pretty, name), text, "utf8");
-  await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, `Footprints from the EW database ${basename(input)} (ew-conv)`);
+  await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, `Footprints from the EW database ${basename(input)} (multisim2kicad)`);
   const syms = databaseSymbols(db, (pkg) => {
     const name = footprintName({ name: pkg } as Board["components"][number]);
     return h.library.has(name) ? `${lib}:${name}` : undefined;
   });
   const symPath = join(outDir, `${lib}.kicad_sym`);
   await writeFile(symPath, librarySymbolsFile(syms.specs), "utf8");
-  await addLibTableEntry(join(outDir, "sym-lib-table"), "sym_lib_table", lib, `\${KIPRJMOD}/${lib}.kicad_sym`, `Symbols from the EW database ${basename(input)} (ew-conv)`);
+  await addLibTableEntry(join(outDir, "sym-lib-table"), "sym_lib_table", lib, `\${KIPRJMOD}/${lib}.kicad_sym`, `Symbols from the EW database ${basename(input)} (multisim2kicad)`);
   const reasons = new Map<string, number>();
   for (const s of fps.skipped) reasons.set(s.reason, (reasons.get(s.reason) ?? 0) + 1);
   console.log(`${input}`);

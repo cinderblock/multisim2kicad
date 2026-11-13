@@ -710,12 +710,12 @@ export function emitKicadPcb(board: Board, opts: PcbOptions = {}): string {
 
   const importNote =
     `Imported from ${board.source.application} ` +
-    `${board.source.versionMajor}.${board.source.versionMinor} via ew-conv`;
+    `${board.source.versionMajor}.${board.source.versionMinor} via multisim2kicad`;
 
   return [
     `(kicad_pcb`,
     `\t(version ${KICAD_VERSION})`,
-    `\t(generator ${q("ew-conv")})`,
+    `\t(generator ${q("multisim2kicad")})`,
     ``,
     `\t(general`,
     `\t\t(thickness ${mm(board.stackup.thickness)})`,

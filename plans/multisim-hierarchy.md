@@ -1,6 +1,6 @@
 # Multisim 14 hierarchy encoding: findings
 
-Research notes for ew-conv (Multisim to KiCad). All claims below were checked against the decoded corpus XML of the local corpus (decoded XML). The prototype it describes is now `src/parse/ms-hierarchy.ts` (drawing-graph flattener). Original research scripts (not kept) were:
+Research notes for multisim2kicad (Multisim to KiCad). All claims below were checked against the decoded corpus XML of the local corpus (decoded XML). The prototype it describes is now `src/parse/ms-hierarchy.ts` (drawing-graph flattener). Original research scripts (not kept) were:
 
 - `drawflat.ts`: the drawing-based flattener (recommended).
 - `flatten.ts`: a Ci-based flattener, kept to show why it is not enough.

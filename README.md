@@ -1,4 +1,4 @@
-# ew-conv
+# multisim2kicad
 
 Convert NI Electronics Workbench designs — **Multisim** schematics (`.ms14`,
 `.ms13`, …) and **Ultiboard** PCBs (`.ewprj`) — to modern **KiCad**
@@ -16,12 +16,12 @@ Reading the proprietary containers is done by
 Needs Node 20+ (or [Bun](https://bun.sh)).
 
 ```bash
-npx ew-conv path/to/Design.ms14 path/to/Design.ewprj        # writes ./out/
-npx ew-conv -o converted/ path/to/project-folder/            # every design in a folder
-npx ew-conv -o libs/ "path/to/Stocked Components.prj"        # an EW component database
+npx multisim2kicad path/to/Design.ms14 path/to/Design.ewprj        # writes ./out/
+npx multisim2kicad -o converted/ path/to/project-folder/            # every design in a folder
+npx multisim2kicad -o libs/ "path/to/Stocked Components.prj"        # an EW component database
 ```
 
-As a library, `import { convertProject, convertDatabase, parsePcbXml, ... } from "ew-conv"`
+As a library, `import { convertProject, convertDatabase, parsePcbXml, ... } from "multisim2kicad"`
 gives the converters, the parsers into a format-neutral IR, and the KiCad emitters.
 
 ### From a checkout

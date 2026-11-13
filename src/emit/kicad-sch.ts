@@ -308,7 +308,7 @@ const libraryFileText = (entries: LibEntry[]) =>
   [
     `(kicad_symbol_lib`,
     `\t(version ${KICAD_SYM_VERSION})`,
-    `\t(generator "ew-conv")`,
+    `\t(generator "multisim2kicad")`,
     `\t(generator_version "0.1")`,
     ...[...entries].sort((a, b) => a.name.localeCompare(b.name)).map((e) => renderLibSymbol(e, e.name, 1)),
     `)`,
@@ -676,7 +676,7 @@ function resolveContacts(
 }
 
 function renderPage(f: PageFile, sch: Schematic, isRoot: boolean, footprints?: ReadonlyMap<string, string>): string {
-  const importNote = `Imported from ${sch.source.application} ${sch.source.versionMajor}.${sch.source.versionMinor} via ew-conv`;
+  const importNote = `Imported from ${sch.source.application} ${sch.source.versionMajor}.${sch.source.versionMinor} via multisim2kicad`;
 
   const rawSegments: Segment[] = [];
   for (const w of f.sheet.wires) for (let i = 0; i + 1 < w.points.length; i++) rawSegments.push([w.points[i]!, w.points[i + 1]!, w.netId]);
@@ -709,7 +709,7 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean, footprints?: R
   return [
     `(kicad_sch`,
     `\t(version ${KICAD_SCH_VERSION})`,
-    `\t(generator "ew-conv")`,
+    `\t(generator "multisim2kicad")`,
     `\t(generator_version "0.1")`,
     `\t(uuid ${q(f.uuid)})`,
     `\t(paper "User" ${u(sheet.size.width)} ${u(sheet.size.height)})`,

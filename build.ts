@@ -1,11 +1,11 @@
 /**
  * Builds what ships in the npm package:
  *
- * - `dist/cli.js`: the `ew-conv` command, an ESM bundle with a node shebang.
+ * - `dist/cli.js`: the `multisim2kicad` command, an ESM bundle with a node shebang.
  * - `dist/index.js`: the library API (ESM).
  *
  * `electronics-workbench-decoder` stays a runtime dependency (not inlined),
- * so fixes there reach ew-conv users without a new ew-conv release. Type
+ * so fixes there reach multisim2kicad users without a new multisim2kicad release. Type
  * declarations come from `tsc -p tsconfig.build.json` in the `build` script.
  */
 

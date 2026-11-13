@@ -1,5 +1,5 @@
 /**
- * ew-conv as a library: Electronics Workbench (Multisim / Ultiboard) designs
+ * multisim2kicad as a library: Electronics Workbench (Multisim / Ultiboard) designs
  * and component databases -> KiCad.
  *
  * The high-level entry points write a KiCad project or library to a folder;

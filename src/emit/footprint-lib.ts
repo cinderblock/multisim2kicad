@@ -226,7 +226,7 @@ export function harmonizeFootprints(board: Board): { board: Board; library: Map<
 
 /** A board-style footprint block as a `.kicad_mod` file. */
 const asLibraryFile = (body: string, name: string) =>
-  body.replace(/^\t\(footprint [^\n]*\n/, `(footprint ${JSON.stringify(name)}\n\t(version ${KICAD_MOD_VERSION})\n\t(generator "ew-conv")\n`);
+  body.replace(/^\t\(footprint [^\n]*\n/, `(footprint ${JSON.stringify(name)}\n\t(version ${KICAD_MOD_VERSION})\n\t(generator "multisim2kicad")\n`);
 
 /** `<name>.kicad_mod` files for a harmonized board's library. */
 export function emitFootprintLibrary(board: Board, library: ReadonlyMap<string, Component>): Map<string, string> {

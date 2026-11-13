@@ -1,9 +1,9 @@
-# EW -> KiCad converter (`ew-conv`)
+# EW -> KiCad converter (`multisim2kicad`)
 
 ## Goal
 
 A **full translator** from NI's old Electronics Workbench formats to modern
-KiCad: point `ew-conv` at a Multisim `.ms14` + Ultiboard `.ewprj` design (the
+KiCad: point `multisim2kicad` at a Multisim `.ms14` + Ultiboard `.ewprj` design (the
 binaries, not hand-decoded XML) and get a KiCad project (`.kicad_pro`,
 hierarchical `.kicad_sch` sheets, `.kicad_pcb`, project-local symbol and
 footprint libraries) that opens cleanly, whose schematic netlist matches the
@@ -13,7 +13,11 @@ Schematic" is a no-op.
 
 ## Environment / context
 
-- Repo: `C:\Users\camer\git\Personal Projects\ew-conv` (Bun + TypeScript, Windows).
+- Repo: `C:\Users\camer\git\Personal Projects\ew-conv` (Bun + TypeScript,
+  Windows). Project renamed **multisim2kicad** (user, 2026-11-13): GitHub
+  https://github.com/cinderblock/multisim2kicad, npm `multisim2kicad`. The
+  local folder keeps the old name for now (renaming it under a running
+  session breaks the session and its memory path).
 - Decoder library: `..\ewd` = npm `electronics-workbench-decoder`
   (github.com/cinderblock/electronics-workbench-decoder). **Now a real
   dependency** (`^0.2.0`): `src/load.ts` uses `decodeBuffer` /
@@ -35,13 +39,19 @@ Schematic" is a no-op.
 
 ## Decisions already made (don't re-ask)
 
+- **Name: `multisim2kicad`** (user, 2026-11-13). Follows the
+  `<source>2kicad` convention (altium2kicad, eagle2kicad, easyeda2kicad);
+  "Multisim" is the name users search for and covers Ultiboard too. Not
+  "ewb" (that is EWB 5's `.ewb` format, which is not supported) and not
+  "sch" (boards are half the job). Renamed before anything reached npm.
+
 - **Library / converter split** (user, 2026-11-11): `ewd` reads and parses EW
-  binary formats into useful objects; `ew-conv` does EW -> KiCad. If ewd needs
+  binary formats into useful objects; `multisim2kicad` does EW -> KiCad. If ewd needs
   richer parsed objects, that work is planned in ewd, keeping the boundary.
   Rule of thumb: *what the file says* (containers, string escapes, units,
   class layouts, the `.ewnet` grammar) belongs in ewd; *what it means in
   KiCad* belongs here.
-- **ew-conv consumes ewd as a real dependency and takes binaries directly**
+- **multisim2kicad consumes ewd as a real dependency and takes binaries directly**
   (user, 2026-11-11). Done in `ed01de0`.
 - **Verify headlessly only**, through `scripts/run-hidden.ps1`.
 - **Read-only access to the archive corpus.**
@@ -116,7 +126,7 @@ until now) is a toy:
 - [x] B1. **`.ewnet` reader** in ewd, released as ewd 0.3.0 (ewd `66ec466`, `169f5c1`): UTF-16LE S-expression -> typed
   `{ toolInfo, nets[{name, rules}], components[{refdes, device, value,
   package, pins[{number, net, pintype, label}]}], layers }`. Small, pure
-  format knowledge. It gives ew-conv an authoritative netlist, pin electrical
+  format knowledge. It gives multisim2kicad an authoritative netlist, pin electrical
   types, and package names.
 - [x] B2. **EW XML document model** in ewd (ewd `67524e0`): `parseEwXml()`
   -> `{ declaration, root: EwElement, application }`, `ewXmlText()` back.
@@ -125,18 +135,18 @@ until now) is a toy:
   has `cls`, `str` (`&ASC`/`&UNI` decoding), `num`, `bigint`, `bool`,
   `child`, `childrenNamed`, `at(...)`, `find`, `findAll`, `findByClass`,
   `closest`, `descendants()`. Also `decodeEwString` / `encodeEwString` and
-  nm unit helpers. ew-conv's parsers all take `XmlInput` (text or a parsed
+  nm unit helpers. multisim2kicad's parsers all take `XmlInput` (text or a parsed
   `EwDocument`, via `src/parse/doc.ts`), the schematic path parses once
   instead of three times, and fast-xml-parser is gone (the KiCad netlist is
   now read as `kicadsexpr` through `src/util/sexpr.ts`).
-- B3. **Typed design models** in ewd, grown incrementally as ew-conv's
+- B3. **Typed design models** in ewd, grown incrementally as multisim2kicad's
   parsers prove out: `UltiboardDesign` (layers, components + pads in
   footprint-local coords, tracks, vias, planes, nets, rules) and
   `MultisimDesign` (sheets/hierarchy, symbols, wires, connectors, labels,
   `Ci*` netlist). EW-native units and names, no KiCad-isms. As each lands,
-  ew-conv's `src/parse/*` shrinks to a mapper `EW model -> IR`.
+  multisim2kicad's `src/parse/*` shrinks to a mapper `EW model -> IR`.
 - Publishing: ewd 0.3.0 via its existing trusted-publishing CI. Needs an
-  explicit OK first. Until then ew-conv links the local checkout
+  explicit OK first. Until then multisim2kicad links the local checkout
   (`file:../ewd`) for development.
 
 ### Phase C - PCB fidelity on real boards
@@ -227,7 +237,7 @@ until now) is a toy:
 - E3. Project-local libraries extracted from the design itself:
   `<proj>.kicad_sym`, `<proj>.pretty/*.kicad_mod`, `sym-lib-table`,
   `fp-lib-table`.
-- E4. Folder mode: `ew-conv <dir>` pairs `X.ms14` / `X.ewprj` / `X.ewnet`
+- E4. Folder mode: `multisim2kicad <dir>` pairs `X.ms14` / `X.ewprj` / `X.ewnet`
   automatically and handles multi-design folders (Althea: Main / Heater /
   Buttons + `.mp14`).
 
@@ -271,7 +281,7 @@ Altium files (`TWILL.PcbLib/SchLib/LibPkg`, `History/`). ewd's
   (`SMT-Pin` / `Pad` / `LayoutPadRoundedRectangle`, silk `Rectangle`s,
   `TXTFormat`, `RefPoint`).
 
-**Design:** `ew-conv db <file.prj> [-o dir]` writes `<db>.kicad_sym` +
+**Design:** `multisim2kicad db <file.prj> [-o dir]` writes `<db>.kicad_sym` +
 `<db>.pretty/` (+ lib tables). Footprints: decode each UBLIB blob, run it
 through the existing UBComponent parser and footprint-library emitter.
 Symbols: new parser for `BaseSymbolDocument` -> `SchematicSymbol` IR, then
@@ -283,16 +293,16 @@ only; work from a copy in the scratchpad.
 
 ### Phase G - Ship
 
-CLI UX + README, `bun test` in CI, decide whether ew-conv is published to
+CLI UX + README, `bun test` in CI, decide whether multisim2kicad is published to
 npm. Altium export (old Phase 5, below) stays a future/private item.
 
 **Decided (user, 2026-11-13): publish the project, keep the corpus
-private.** Public repo https://github.com/cinderblock/ew-conv (created
+private.** Public repo https://github.com/cinderblock/multisim2kicad (created
 2026-11-13, `e91ad11`); CI `test.yml` (Ubuntu + Windows x Node 20 + 24:
 typecheck, test, build, Node run of the CLI on the samples) is green.
 npm: `publish.yml` publishes on `v*` tags via trusted publishing with
 provenance; `scripts/guard-publish.ts` refuses local publishes except the
-`0.0.0` name claim. Remaining: claim `ew-conv` on npm with the `0.0.0`
+`0.0.0` name claim. Remaining: claim `multisim2kicad` on npm with the `0.0.0`
 placeholder (needs the user's npm auth; placeholder package prepared in
 the session scratchpad), the user configures the trusted publisher, then
 bump to `0.1.0` and push the tag.
@@ -347,7 +357,7 @@ hierarchy, connectors), since those are what make an output useless today.
   `<?xml version="1.0" encoding="ASCII"?>`. Attribute values hold raw CR/LF
   (318k occurrences) and, in 45 files, NUL/0x01 bytes (RTF/base64 blobs
   in `.ms13` samples). EW writes one element per line, `/>` for empty
-  elements. ewd's `parseEwXml` relies on exactly this. (ew-conv used
+  elements. ewd's `parseEwXml` relies on exactly this. (multisim2kicad used
   fast-xml-parser until B2; it groups same-named children per parent, so
   its traversal order was not document order.)
 - **Refactor guard:** `scripts/ir-hashes.ts` hashes canonical parser output
@@ -751,7 +761,7 @@ hierarchy, connectors), since those are what make an output useless today.
 - [x] (2026-11-11) **B2 done.** ewd `parseEwXml` (ewd `67524e0`, released
       as ewd **0.4.1**; the v0.4.0 tag exists but its publish run failed on
       a test that needs the gitignored `samples/`, fixed in `eda2e41`).
-      ew-conv migrated off fast-xml-parser. Verified with
+      multisim2kicad migrated off fast-xml-parser. Verified with
       `scripts/ir-hashes.ts` against a baseline over all 592 corpus designs:
       every output difference was traced and all are improvements:
       `&UNI` strings now decoded in PCB values (`200Ω 5%`), `&UNI`
@@ -810,7 +820,7 @@ hierarchy, connectors), since those are what make an output useless today.
       exact.** Reports `out/corpus-sch-f/`, `out/corpus-drives-f/`. Left in
       the drive corpus: ground-symbol pin naming (`0.0`, `0.GND` vs `0_n`
       parts), a few single nets in Controller.ms11 / DIGITAL / Power board.
-- [x] (2026-11-13) **E2 + E4: linked projects.** `ew-conv <folder | X.ms14
+- [x] (2026-11-13) **E2 + E4: linked projects.** `multisim2kicad <folder | X.ms14
       X.ewprj>` pairs a schematic and board by folder + base name into one
       KiCad project. Footprints carry their symbol's `path` (sheet-symbol
       UUIDs without the root + symbol UUID, as KiCad writes it), `sheetname`,
@@ -904,7 +914,7 @@ hierarchy, connectors), since those are what make an output useless today.
       edge: source-faithful), courtyard overlaps, solder_mask_bridge, the
       tracks below their board's own minimum width. Report
       `out/corpus-pcb-c7c/`.
-- [x] (2026-11-13) **F footprints.** `ew-conv <db.prj>` writes
+- [x] (2026-11-13) **F footprints.** `multisim2kicad <db.prj>` writes
       `<db>.pretty/` + fp-lib-table from every `UBLIB` object
       (`src/db/ewdb.ts`, `parseUbLibraryXml`). Stocked Electronic
       Components v14.2: 395 footprints, all load and plot in kicad-cli
@@ -971,7 +981,7 @@ hierarchy, connectors), since those are what make an output useless today.
       DIN symbol variants (`Symbol_ID_DIN`) are not emitted (ANSI only).
 - [ ] **Next:** npm 0.1.0 release (waiting on the user: name claim +
       trusted publisher), then B3 cleanup (typed EW models in ewd;
-      ew-conv's parsers shrink to mappers). Drive-corpus leftovers (11
+      multisim2kicad's parsers shrink to mappers). Drive-corpus leftovers (11
       nets: ground-symbol pin naming) are optional.
 - [ ] Not translated at all yet (candidates, user to prioritise):
       SPICE simulation models (`SYS_MODEL` 45k rows in the master DB;
@@ -982,7 +992,7 @@ hierarchy, connectors), since those are what make an output useless today.
 
 ## Open questions for the user
 
-1. ~~Phase G: where ew-conv lives~~ answered 2026-11-13: public repo +
+1. ~~Phase G: where multisim2kicad lives~~ answered 2026-11-13: public repo +
    npm, corpus private.
 2. (2026-11-13) Which of the untranslated areas matter to you: SPICE
    simulation models, 3D models, pre-Multisim-10 formats? Recommendation:

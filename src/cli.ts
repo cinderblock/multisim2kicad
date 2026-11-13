@@ -1,4 +1,4 @@
-/** `ew-conv` command-line entry point (the published bin). */
+/** `multisim2kicad` command-line entry point (the published bin). */
 import { main } from "./main.ts";
 
 main().catch((err) => {

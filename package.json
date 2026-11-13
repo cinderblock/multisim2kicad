@@ -1,16 +1,16 @@
 {
-  "name": "ew-conv",
+  "name": "multisim2kicad",
   "version": "0.0.0",
-  "description": "Convert Electronics Workbench (NI Ultiboard / Multisim) projects to KiCad",
+  "description": "Convert NI Multisim schematics, Ultiboard boards and component databases (Electronics Workbench) to KiCad",
   "author": "Cameron Tacklind <cameron@tacklind.com>",
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cinderblock/ew-conv.git"
+    "url": "git+https://github.com/cinderblock/multisim2kicad.git"
   },
-  "homepage": "https://github.com/cinderblock/ew-conv#readme",
+  "homepage": "https://github.com/cinderblock/multisim2kicad#readme",
   "bugs": {
-    "url": "https://github.com/cinderblock/ew-conv/issues"
+    "url": "https://github.com/cinderblock/multisim2kicad/issues"
   },
   "keywords": [
     "kicad",
@@ -26,7 +26,7 @@
   ],
   "type": "module",
   "bin": {
-    "ew-conv": "dist/cli.js"
+    "multisim2kicad": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

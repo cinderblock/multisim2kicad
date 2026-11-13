@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "ew-conv",
+      "name": "multisim2kicad",
       "dependencies": {
         "electronics-workbench-decoder": "^0.4.1",
       },
