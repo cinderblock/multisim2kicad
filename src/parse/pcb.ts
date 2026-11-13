@@ -5,6 +5,7 @@ import type {
   ComponentText,
   EwLayer,
   Hole,
+  DesignRules,
   Net,
   Pad,
   PadShape,
@@ -254,16 +255,47 @@ function parseComponent(comp: EwElement): Component {
   };
 }
 
+/** Ultiboard writes 2147483646 / 2147483647 for "use the board default". */
+const ruleValue = (e: EwElement, attr: string): number | undefined => {
+  const v = e.numOr(attr, -1);
+  return v > 0 && v < 2_147_483_646 ? v : undefined;
+};
+
 function parseNets(node: EwElement): Net[] {
   const netList = node.find("UbNetList");
   if (!netList) return [];
-  return netList.childrenNamed("UBNet").map((n) => ({
-    name: n.str("Name"),
-    pins: kids(n, "Pins", "UBNetPin").map((p) => ({
-      refdes: p.str("Refdes"),
-      pin: p.str("Pin"),
-    })),
-  }));
+  return netList.childrenNamed("UBNet").map((n) => {
+    const net: Net = {
+      name: n.str("Name"),
+      pins: kids(n, "Pins", "UBNetPin").map((p) => ({
+        refdes: p.str("Refdes"),
+        pin: p.str("Pin"),
+      })),
+    };
+    // The four per-net clearances (trace/pad/via/copper) agree on every
+    // corpus board; KiCad holds one per net class.
+    const clearance = ruleValue(n, "TraceClearance");
+    const trackWidth = ruleValue(n, "Width");
+    if (clearance !== undefined) net.clearance = clearance;
+    if (trackWidth !== undefined) net.trackWidth = trackWidth;
+    return net;
+  });
+}
+
+/** Board-wide rules: BoardLayerSettings + the Design-Rules via. */
+function parseRules(designSheet: EwElement): DesignRules | undefined {
+  const bs = designSheet.find("BoardLayerSettings");
+  if (!bs) return undefined;
+  const via = designSheet.find((e) => e.cls === "CLayoutDesignRuleVia");
+  const v = (attr: string, dflt: number) => ruleValue(bs, attr) ?? dflt;
+  const trace = v("ClearancetoTrace", 200_000);
+  return {
+    clearance: { trace, pad: v("ClearancetoPad", trace), via: v("ClearancetoVia", trace), area: v("ClearancetoArea", trace) },
+    trackWidth: v("NetTraceWidth", 250_000),
+    minTrackWidth: v("MinimumNetTraceWidth", 0),
+    edgeClearance: v("BoardOutlineElectricalClearance", 0),
+    via: { diameter: 2 * (via ? ruleValue(via, "PadRadius") ?? 300_000 : 300_000), drill: 2 * (via ? ruleValue(via, "DrillRadius") ?? 150_000 : 150_000) },
+  };
 }
 
 interface Collected {
@@ -474,6 +506,7 @@ export function parsePcbXml(input: XmlInput): Board {
     workArea,
     layers,
     stackup: parseStackup(designSheet),
+    rules: parseRules(designSheet),
     zones: collected.zones,
     texts: collected.texts,
     ruleAreas: collected.ruleAreas,

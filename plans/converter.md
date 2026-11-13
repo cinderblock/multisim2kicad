@@ -813,8 +813,39 @@ hierarchy, connectors), since those are what make an output useless today.
       lib_symbol_issues 4691 -> 0, missing_unit 27 -> 5;** pin_not_connected
       +5, all hierarchical labels (same reporting effect). Reports
       `out/corpus-sch-g/`, `out/corpus-drives-g/`.
-- [ ] **Next (approved order):** B3 cleanup, C7 (design rules / net
-      classes into `.kicad_pro`), D6, F (EW database), G. Drive-corpus
+- [x] (2026-11-13) **C7: design rules and net classes.** Sources:
+      `BoardLayerSettings` (`ClearancetoTrace/Pad/Via/Area`,
+      `NetTraceWidth`, `MinimumNetTraceWidth`,
+      `BoardOutlineElectricalClearance`; `UseMultipleClearances` is 0 on
+      every corpus board, so per-layer `UBLayerInfoExtension` clearances are
+      unused), `Design-Rule-Via` (`PadRadius`/`DrillRadius`; the board's
+      vias carry exactly these, nm artefacts included: 0.604798 / 0.299998),
+      and per-net `UBNet` `TraceClearance`/`PadClearance`/`ViaClearance`/
+      `CopperClearance` (always equal per net) + `Width`; 2147483646 /
+      2147483647 mean "board default". Per-net via sizes are never set.
+      Mapped to `.kicad_pro`: Default net class = board clearance / width /
+      via; one net class per distinct (clearance, width) override, assigned
+      by exact-name `netclass_patterns`; rules `min_track_width`,
+      `min_copper_edge_clearance`, `min_hole_clearance` = board clearance
+      (Ultiboard has no separate hole clearance), and `min_through_hole_
+      diameter` / `min_via_diameter` = 0 (Ultiboard has no such minimum;
+      KiCad's 0.3 / 0.5 mm defaults flagged Ultiboard's own default via).
+      `MinimumAnnularRingWidth` (0.254 mm on most boards, garbage 411 mm on
+      15) is not mapped: every default via has a 0.152 mm ring, so it can't
+      be a via rule; KiCad's 0.1 mm default stays. Board-level pad / via
+      clearances that differ from the trace clearance (5 drive boards) go
+      to `<project>.kicad_dru` custom rules. **24 boards: DRC violations
+      13853 -> 5194 (drill_out_of_range 1850 -> 0, via_diameter 208 -> 0,
+      clearance 3797 -> 128,
+      track_width 2396 -> 230 [tracks below the board's own minimum],
+      copper_edge_clearance 607 -> 21, hole_clearance 258 -> 139),
+      unconnected 229 -> 167 (zones now fill with the board's clearances
+      and reach pads: Distribution 50 -> 12, Materna Control 6 -> 0), pins
+      on pads unchanged (5963).** Left: silk (over copper / overlap /
+      edge: source-faithful), courtyard overlaps, solder_mask_bridge, the
+      tracks below their board's own minimum width. Report
+      `out/corpus-pcb-c7c/`.
+- [ ] **Next (approved order):** B3 cleanup, D6, F (EW database), G. Drive-corpus
       leftovers (11 nets: ground-symbol pin naming) are optional.
 
 ## Open questions for the user

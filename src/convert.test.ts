@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
+import { boardCustomRules, boardProjectSettings, netClassName } from "./emit/kicad-pro.ts";
 import { emitKicadSch, emitKicadSchProject } from "./emit/kicad-sch.ts";
 import { parsePcbXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
@@ -95,6 +96,50 @@ describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
     const segs = out.match(/\(segment [^\n]*/g) ?? [];
     expect(segs.length).toBe(6);
     expect(segs.every((s) => !s.includes("(net 0)"))).toBe(true);
+  });
+});
+
+describe("design rules (C7)", () => {
+  const board = parsePcbXml(sample("Design1.ewprj.xml"));
+
+  test("board defaults come from BoardLayerSettings and the Design-Rules via", () => {
+    expect(board.rules).toEqual({
+      clearance: { trace: 101_600, pad: 101_600, via: 101_600, area: 101_600 },
+      trackWidth: 101_600,
+      minTrackWidth: 101_600,
+      edgeClearance: 203_200,
+      via: { diameter: 604_798, drill: 299_998 },
+    });
+  });
+
+  test("nets that differ from the defaults get a net class per distinct rule pair", () => {
+    const nets = [
+      { name: "A", pins: [] },
+      { name: "B", pins: [], clearance: 203_200 },
+      { name: "C", pins: [], clearance: 203_200, trackWidth: 101_600 },
+      { name: "D", pins: [], trackWidth: 508_000 },
+    ];
+    const pro = boardProjectSettings({ ...board, nets })!;
+    const classes = pro.netSettings.classes as { name: string; clearance: number; track_width: number }[];
+    expect(classes.map((c) => [c.name, c.clearance, c.track_width])).toEqual([
+      ["Default", 0.1016, 0.1016],
+      [netClassName(101_600, 508_000), 0.1016, 0.508],
+      [netClassName(203_200, 101_600), 0.2032, 0.1016],
+    ]);
+    expect(pro.netSettings.netclass_patterns).toEqual([
+      { netclass: netClassName(101_600, 508_000), pattern: "D" },
+      { netclass: netClassName(203_200, 101_600), pattern: "B" },
+      { netclass: netClassName(203_200, 101_600), pattern: "C" },
+    ]);
+    expect(pro.rules).toEqual({ min_track_width: 0.1016, min_copper_edge_clearance: 0.2032, min_hole_clearance: 0.1016, min_through_hole_diameter: 0, min_via_diameter: 0 });
+  });
+
+  test("separate pad / via clearances become custom rules", () => {
+    expect(boardCustomRules(board)).toBeUndefined();
+    const dru = boardCustomRules({ ...board, rules: { ...board.rules!, clearance: { trace: 177_800, pad: 177_800, via: 254_000, area: 254_000 } } })!;
+    expect(dru).toContain(`(condition "A.Type == 'Via' || B.Type == 'Via'")`);
+    expect(dru).toContain("(constraint clearance (min 0.254mm))");
+    expect(dru).not.toContain("'Pad'");
   });
 });
 

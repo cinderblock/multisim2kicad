@@ -105,6 +105,21 @@ export interface NetPinRef {
 export interface Net {
   name: string;
   pins: NetPinRef[];
+  /** Ultiboard per-net rules (nm); absent = the board default. */
+  clearance?: number;
+  trackWidth?: number;
+}
+
+/** Ultiboard board-wide design rules (nm). */
+export interface DesignRules {
+  /** Clearance from any copper to a trace / pad / via / copper area. */
+  clearance: { trace: number; pad: number; via: number; area: number };
+  trackWidth: number;
+  minTrackWidth: number;
+  /** Copper to board outline. */
+  edgeClearance: number;
+  /** Default via. */
+  via: { diameter: number; drill: number };
 }
 
 /** Copper stack, top to bottom, as EW layer numbers (0, 1..2N-2, 63). */
@@ -173,6 +188,7 @@ export interface Board {
   holes: Hole[];
   vias: Via[];
   nets: Net[];
+  rules?: DesignRules;
 }
 
 // ---------------------------------------------------------------------------

@@ -28,7 +28,11 @@ and a board with the same name in the same folder (`Main.ms14` +
 
 Output per project `<name>`:
 
-- `<name>.kicad_pro`
+- `<name>.kicad_pro`, with the board's design rules: Ultiboard's default
+  clearance, track width and via as KiCad's Default net class, nets with
+  their own clearance or width as further net classes, and the minimum
+  track width / board-edge clearance (plus `<name>.kicad_dru` when a board
+  sets separate clearances to pads or vias)
 - `<name>.kicad_sch` (+ one file per sub-sheet / extra page) from the `.ms1x`
 - `<name>.kicad_pcb` from the `.ewprj`
 - `<name>.pretty/`: the board's footprints as a project library (one
@@ -65,8 +69,7 @@ Shared supply pins of multi-section parts (an op-amp's V+/V- on every
 section) stay connected the way Multisim wires them. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
-Not yet: parts pulled straight from the EW database, design rules / net
-classes.
+Not yet: parts pulled straight from the EW database.
 `plans/converter.md` tracks these.
 
 ## Checking results

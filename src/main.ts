@@ -8,6 +8,7 @@ import { parseSchematicXml } from "./parse/sch.ts";
 import { emitKicadPcb, footprintName } from "./emit/kicad-pcb.ts";
 import { emitKicadSchProject, kicadProSchematicSettings } from "./emit/kicad-sch.ts";
 import { emitFootprintLibrary, harmonizeFootprints } from "./emit/footprint-lib.ts";
+import { boardCustomRules, boardProjectSettings } from "./emit/kicad-pro.ts";
 
 const NM_PER_MM = 1_000_000;
 
@@ -60,7 +61,11 @@ export async function convertProject(p: ProjectInput, outDir: string): Promise<s
     await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, "Footprints from the Ultiboard design (ew-conv)");
     reportPcb(p.pcb!.input, board, links);
   }
-  await writeProjectFile(join(outDir, `${p.base}.kicad_pro`), !!sch);
+  if (board) {
+    const dru = boardCustomRules(board);
+    if (dru) await writeFile(join(outDir, `${p.base}.kicad_dru`), dru, "utf8");
+  }
+  await writeProjectFile(join(outDir, `${p.base}.kicad_pro`), !!sch, board);
   return written;
 }
 
@@ -138,13 +143,21 @@ const countInstances = (i: { children: any[] }): number => 1 + i.children.reduce
  * schematic needs a 10 mil connection grid to match ew-conv's unit scale.
  * Existing files are merged, not replaced.
  */
-async function writeProjectFile(path: string, schematic: boolean): Promise<void> {
+async function writeProjectFile(path: string, schematic: boolean, board?: Board): Promise<void> {
   let pro: any = {};
   try {
     pro = JSON.parse(await readFile(path, "utf8"));
   } catch {}
   pro.meta ??= { filename: basename(path), version: 3 };
   if (schematic) pro.schematic = { ...(pro.schematic ?? {}), ...kicadProSchematicSettings() };
+  // Design rules and net classes (C7).
+  const rules = board && boardProjectSettings(board);
+  if (rules) {
+    pro.board ??= {};
+    pro.board.design_settings ??= {};
+    pro.board.design_settings.rules = { ...(pro.board.design_settings.rules ?? {}), ...rules.rules };
+    pro.net_settings = rules.netSettings;
+  }
   await writeFile(path, `${JSON.stringify(pro, null, 2)}\n`, "utf8");
 }
 
