@@ -18,7 +18,8 @@
 // pads of each component pin ("1,2" = two pads), same order as `Pinout`.
 
 import { decodeBuffer, type EwElement, parseEwXml } from "electronics-workbench-decoder";
-import type { LibrarySymbolSpec } from "../emit/kicad-sch.ts";
+import { type LibrarySymbolSpec, simFieldList } from "../emit/kicad-sch.ts";
+import { modelDef, type SimSection, simSpec, SpiceLibrary } from "../parse/spice.ts";
 import type { PinElectrical, SchGraphic, SchPoint, SymbolPin } from "../ir/types.ts";
 import type { EwDatabase } from "./ewdb.ts";
 
@@ -179,6 +180,8 @@ const ELECTRICAL: Record<string, PinElectrical> = {
 export interface DatabaseSymbols {
   specs: LibrarySymbolSpec[];
   warnings: string[];
+  /** SPICE library text per family (only families with simulated parts). */
+  spice: Map<string, string>;
 }
 
 /**
@@ -188,7 +191,12 @@ export interface DatabaseSymbols {
  * package name to a KiCad footprint id when the footprint is in this
  * database.
  */
-export function databaseSymbols(db: EwDatabase, footprintFor: (pkg: string) => string | undefined): DatabaseSymbols {
+export function databaseSymbols(
+  db: EwDatabase,
+  footprintFor: (pkg: string) => string | undefined,
+  /** `Sim.Library` path for a family's SPICE library. */
+  spicePath: (family: string) => string = (family) => `${family}.lib`,
+): DatabaseSymbols {
   const warnings: string[] = [];
   const pictures = new Map<number, SymbolPicture>();
   for (const r of rows(db, "SYS_SYMBOL_PICTURE")) {
@@ -204,6 +212,16 @@ export function databaseSymbols(db: EwDatabase, footprintFor: (pkg: string) => s
   const packages = new Map(rows(db, "SYS_PCB_PACKAGE").map((r) => [r.Package_ID, String(r.Package_Type ?? "")]));
   const sectionsOf = groupBy(rows(db, "SYS_MAPPING_COMP_SYMBOL"), (r) => r.Component_ID);
   const packageOf = new Map(rows(db, "SYS_MAPPING_COMP_PACKAGE").map((r) => [r.Component_ID, r]));
+  const modelRowsOf = groupBy(rows(db, "SYS_MAPPING_COMP_MODEL"), (r) => r.Component_ID);
+  const modelText = new Map(rows(db, "SYS_MODEL").map((r) => [String(r.MODEL_ID ?? "").toLowerCase(), String(r.DATA ?? "")]));
+  const modelCache = new Map<string, ReturnType<typeof modelDef>>();
+  const modelFor = (id: string) => {
+    const key = id.toLowerCase();
+    if (!modelCache.has(key)) modelCache.set(key, modelText.has(key) ? modelDef(id, modelText.get(key)!) : undefined);
+    return modelCache.get(key);
+  };
+  const spiceLibs = new Map<string, SpiceLibrary>();
+  let needParams = 0;
 
   const used = new Set<string>();
   const specs: LibrarySymbolSpec[] = [];
@@ -300,18 +318,67 @@ export function databaseSymbols(db: EwDatabase, footprintFor: (pkg: string) => s
     if (c.Manufacturer) fields.push(["Manufacturer", String(c.Manufacturer)]);
     if (familyName) fields.push(["EW_Family", familyName]);
     if (pkgName && !footprint) fields.push(["EW_Package", pkgName]);
+
+    // Simulation: Multisim's per-section templates and models. Terminals
+    // are the component's pin names; each maps to its symbol pin (first pad).
+    const terminals = new Map<string, string>();
+    pinNames.forEach((n, k) => {
+      const num = pads[k]?.[0] ?? (pkg ? undefined : n);
+      if (!terminals.has(n) && num && placedPads.has(num)) terminals.set(n, num);
+    });
+    // A section can list several alternative models (TLC271H, TLC271H_2,
+    // ...; no default flag, row order varies): take the base one, i.e. the
+    // shortest name, then alphabetical.
+    const bySection = new Map<number, Row>();
+    for (const r of modelRowsOf.get(c.Component_ID) ?? []) {
+      if (!String(r.Template ?? "").trim()) continue;
+      const sec = Number(r.Sec_Order);
+      const cur = bySection.get(sec);
+      const id = String(r.Model_ID ?? "");
+      const curId = String(cur?.Model_ID ?? "");
+      if (!cur || id.length < curId.length || (id.length === curId.length && id < curId)) bySection.set(sec, r);
+    }
+    const modelRows = [...bySection].sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+    const reference = /^[A-Za-z_#]*/.exec(String(family?.Template ?? ""))![0] || "U";
+    let excludeFromSim = modelRows.length === 0;
+    if (modelRows.some((r) => /#\d|%v\d|%S\d/.test(String(r.Template)))) {
+      // Parameters come from a placed part's properties; the database has none.
+      needParams++;
+      excludeFromSim = true;
+    } else if (modelRows.length) {
+      const fam = sanitize(familyName) || "Misc";
+      const lib = spiceLibs.get(fam) ?? new SpiceLibrary();
+      spiceLibs.set(fam, lib);
+      const sections: SimSection[] = modelRows.map((r) => {
+        const id = String(r.Model_ID ?? "");
+        const model = id && id !== "DUMMY" ? modelFor(id) : undefined;
+        if (id && id !== "DUMMY" && !model && /%m/.test(String(r.Template))) lib.warnings.push(`${compName}: model ${id} not in the database`);
+        return { template: String(r.Template), params: [], model, pins: terminals };
+      });
+      const sim = simSpec(compName, sections, lib, `EW_${sanitize(compName).replace(/[^A-Za-z0-9_]/g, "_")}`);
+      if (sim.exclude) excludeFromSim = true;
+      else fields.push(...simFieldList(sim, { value: compName, prefix: reference, library: spicePath(fam) }));
+    }
     specs.push({
       name,
-      reference: /^[A-Za-z_#]*/.exec(String(family?.Template ?? ""))![0] || "U",
+      reference,
       value: compName,
       footprint,
       fields,
+      excludeFromSim,
       showPinNames,
       showPinNumbers: true,
       units,
     });
   }
-  return { specs, warnings };
+  if (needParams) warnings.push(`${needParams} parts need instance parameters for simulation (set when placed in Multisim); excluded from simulation`);
+  const spice = new Map<string, string>();
+  for (const [fam, lib] of spiceLibs) {
+    warnings.push(...lib.warnings);
+    const text = lib.text(`SPICE models for the ${fam} family (multisim2kicad)`);
+    if (text) spice.set(fam, text);
+  }
+  return { specs, warnings, spice };
 }
 
 /** Multisim's pin pitch and length, in schematic units. */

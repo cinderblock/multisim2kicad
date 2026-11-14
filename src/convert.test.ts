@@ -11,7 +11,8 @@ import { emitKicadSch, emitKicadSchProject } from "./emit/kicad-sch.ts";
 import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
-import { drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
+import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
+import { expandTemplate, modelDef, parseSpice, staticPot } from "./parse/spice.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
@@ -173,6 +174,46 @@ describe("EW database symbols (F)", () => {
       ["A2=4:input", "B2=5:input"],
       ["GND=2:power_in", "VCC=6:power_in"],
     ]);
+
+    // Simulation: one model per section (the base of the alternatives),
+    // both sections in one wrapper, nodes by pin number; a part with no
+    // template is excluded.
+    const sim = databaseSymbols(
+      {
+        source: "",
+        tables: {
+          ...db.tables,
+          SYS_COMPONENT: t([
+            ...db.tables.SYS_COMPONENT!.rows,
+            { Component_ID: 10, Family_ID: 1, Component_Name: "NOSIM", Pinout: "A1\r\nB1\r\n" },
+          ]),
+          SYS_MAPPING_COMP_SYMBOL: t([...db.tables.SYS_MAPPING_COMP_SYMBOL!.rows, { Component_ID: 10, Sec_Order: 1, Symbol_ID_ANSI: 7, Pinout_ANSI: "A1\r\nB1\r\n" }]),
+          SYS_MAPPING_COMP_MODEL: t([
+            { Component_ID: 9, Model_ID: "G_2", Sec_Order: 1, Template: "x%p_a %tA1 %tB1 %tVCC %tGND %m" },
+            { Component_ID: 9, Model_ID: "G", Sec_Order: 1, Template: "x%p_a %tA1 %tB1 %tVCC %tGND %m" },
+            { Component_ID: 9, Model_ID: "G", Sec_Order: 2, Template: "x%p_b %tA2 %tB2 %tVCC %tGND %m" },
+            { Component_ID: 10, Model_ID: "DUMMY", Sec_Order: 1, Template: "" },
+          ]),
+          SYS_MODEL: t([
+            { MODEL_ID: "G", DATA: ".SUBCKT G 1 2 3 4\r\nR1 1 2 1k\r\n.ENDS" },
+            { MODEL_ID: "G_2", DATA: ".SUBCKT G_2 1 2 3 4\r\nR1 1 2 2k\r\n.ENDS" },
+          ]),
+        },
+      } as unknown as EwDatabase,
+      () => undefined,
+      (family) => `lib/${family}.lib`,
+    );
+    const gate = sim.specs.find((s) => s.value === "GATE2")!;
+    expect(Object.fromEntries(gate.fields!.filter(([k]) => k.startsWith("Sim.")))).toEqual({
+      "Sim.Device": "SUBCKT",
+      "Sim.Library": "lib/Gates.lib",
+      "Sim.Name": "EW_GATE2",
+      "Sim.Pins": "1=p1 2=p2 3=p3 4=p4 5=p5 6=p6",
+    });
+    expect(gate.excludeFromSim).toBe(false);
+    expect(sim.specs.find((s) => s.value === "NOSIM")!.excludeFromSim).toBe(true);
+    expect(sim.spice.get("Gates")).toContain(".subckt EW_GATE2 p1 p2 p3 p4 p5 p6\nxGATE2_a p1 p3 p6 p2 G\nxGATE2_b p4 p5 p6 p2 G\n.ends EW_GATE2");
+    expect(sim.spice.get("Gates")).not.toContain("G_2");
   });
 });
 
@@ -386,8 +427,15 @@ describe("Design1 schematic (samples/Design1.ms14.xml)", () => {
   test("drawing: real wires, power ports, connectors", () => {
     const sheet = parseSchematicXml(xml).sheets[0]!;
     expect(sheet.wires.length).toBe(121); // CIITLinkComp, not border lines
-    expect(sheet.symbols.filter((s) => s.kind === "part").length).toBe(19);
-    expect(sheet.symbols.filter((s) => s.kind === "power").length).toBe(33);
+    expect(sheet.symbols.filter((s) => s.kind === "part" && !s.simOnly).length).toBe(19);
+    expect(sheet.symbols.filter((s) => s.kind === "power" && !s.simOnly).length).toBe(33);
+    // Each supply net with a model gets a simulation-only source + a power symbol copy.
+    expect(sheet.symbols.filter((s) => s.simOnly).map((s) => [s.kind, s.value, s.sim?.name])).toEqual([
+      ["power", "VCC", undefined],
+      ["part", "VCC source", "EW_VCC"],
+      ["power", "VDD", undefined],
+      ["part", "VDD source", "EW_VDD"],
+    ]);
     expect(sheet.labels.filter((l) => l.kind === "global").length).toBe(91);
     // Copy-pasted wiring only lines up once each link's own transform applies.
     const has = (x0: number, y0: number, x1: number, y1: number) =>
@@ -480,5 +528,71 @@ describe("orientation", () => {
       }] };
       expect(() => emitKicadSch(sch)).not.toThrow();
     }
+  });
+});
+
+describe("spice", () => {
+  const coll = (vals: string[]) =>
+    `<CiaCollString Class="CiaCollString"><strings>${vals.map((v) => `<Item Value="${v ? `&amp;ASC${v}` : ""}"/>`).join("")}</strings></CiaCollString>`;
+  const params = (vals: string[]) =>
+    `<CiaParamList Class="CiaParamList"><doubles/><strings/><parameters>${vals.map((v) => `<Item Value="&amp;ASC${v}"/>`).join("")}</parameters><paramindicators/></CiaParamList>`;
+  const comp = (id: string, ref: string, template: string, p: string[] = [], model = "") =>
+    `<Item CiID="${id}" Class="CiComponent"><CiComponent Class="CiComponent" LocalName="&amp;ASC${ref}"${model ? ` Model="${model}"` : ""}><Attributes><Item/><Item>${params(p)}</Item><Item>${coll(["FAM", "PART"])}</Item><Item>${coll(["1", "Product", "FAM", "", "U%d", template])}</Item></Attributes></CiComponent></Item>`;
+  const port = (id: string, compId: string, name: string, pad: string) =>
+    `<Item CiID="${id}" Class="CiPort"><CiPort Class="CiPort" LocalName="&amp;ASC${name}" Component="${compId}"><Attributes><Item>${coll(["FAM"])}</Item><Item>${coll(["", "", "", "", "", "", pad])}</Item></Attributes></CiPort></Item>`;
+  const model = (id: string, name: string, text: string) =>
+    `<Item CiID="${id}" Class="CiModel"><CiModel Class="CiModel" LocalName="&amp;ASC${name}"><Attributes><Item/><Item><CiaCString Class="CiaCString" String="&amp;ASC${text}"/></Item></Attributes></CiModel></Item>`;
+  const items = (xml: string) => collectCiItems(parseEwXml(`<Root>${xml}</Root>`).root);
+
+  test("templates: parameters, conditionals, nodes, model", () => {
+    const r = "r%p %t1 %t2 #1 vres%p %v4?TEMP=#5%v:%v; \n.model vres%p r(%v6?TC1=#7%v:%v;)";
+    const out = expandTemplate(r, { ref: "R2", params: ["0", "10k", "0", "0", "1", "50", "0", "0"], node: (t) => `n${t}` });
+    expect(out).toBe("rR2 n1 n2 10k vresR2 TEMP=50 \n.model vresR2 r()");
+  });
+
+  test("models: renamed SPICE-safe, nodes read, Multisim dialect rewritten", () => {
+    const def = modelDef("2N7002/NXP__MOS__1", ".SUBCKT 2N7002/NXP__MOS__1 DRAIN GATE\n+ SOURCE PARAMS: X=1\nG1 1 0 TABLE {V(1)} ((0,0)(1,1)) USELIM\n.mergenodes 1 0\n.ENDS 2N7002/NXP__MOS__1");
+    expect(def?.name).toBe("2N7002_NXP__MOS__1");
+    expect(def?.nodes).toEqual(["DRAIN", "GATE", "SOURCE"]);
+    expect(def?.text).toContain(".SUBCKT 2N7002_NXP__MOS__1 DRAIN GATE");
+    expect(def?.text).toContain(".ENDS 2N7002_NXP__MOS__1");
+    expect(def?.text).toContain("((0,0)(1,1))\n");
+    expect(def?.text).toContain("Rmerge_1_0 1 0 1u");
+  });
+
+  test("a subcircuit's inner .MODEL of the same name keeps its name; VT is renamed", () => {
+    const def = modelDef("MDA980-3", ".SUBCKT MDA980-3 1 2\nD1 1 2 MDA980-3\nVT 2 3 0\nB1 3 0 I=I(VT)\n.MODEL MDA980-3 D(IS=1n)\n.ENDS MDA980-3");
+    expect(def?.text).toBe(".SUBCKT MDA980_3 1 2\nD1 1 2 MDA980-3\nVTx 2 3 0\nB1 3 0 I=I(VTx)\n.MODEL MDA980-3 D(IS=1n)\n.ENDS MDA980_3");
+  });
+
+  test("interactive potentiometer gets its saved setting", () => {
+    const pot = "*  2000.0 constant potvalue\n*  25.0 VARIABLE setting\nR1 1 2  1e-3\nR2 2 3  1e-3\n* !!!BEGIN-INTERACT";
+    expect(staticPot(pot)).toContain("R1 1 2  500\nR2 2 3  1500");
+  });
+
+  test("components: built-in R, vendor subcircuit by pin order, wrapper, exclusion", () => {
+    const xml = [
+      comp("1", "R1", "r%p %t1 %t2 #1 vres%p %v4?TEMP=#5%v:%v; \n.model vres%p r()", ["0", "4.7k", "0", "0", "0", "27", "0", "0", "0", "0", "0", "27"]),
+      port("11", "1", "1", "1"),
+      port("12", "1", "2", "2"),
+      model("9", "FET/X__1", ".SUBCKT FET/X__1 DRAIN GATE SOURCE\nR1 DRAIN SOURCE 1\n.ENDS"),
+      comp("2", "Q1", "x%p %tD %tG %tS %m", [], "9"),
+      port("21", "2", "D", "3"),
+      port("22", "2", "G", "1"),
+      port("23", "2", "S", "2"),
+      comp("3", "VCC", "VCC%p  %tVCC 0 dc #0", ["5"]),
+      port("31", "3", "VCC", "1"),
+      comp("4", "U1", ""),
+      comp("5", "V2", "V%p %t1 %t2 chirp(#1)", ["1"]),
+    ].join("");
+    const s = parseSpice(items(xml));
+    expect(s.byComponent.get("1")).toEqual({ device: "R", params: "r=4.7k", value: "4.7k", pins: [["1", "+"], ["2", "-"]] });
+    expect(s.byComponent.get("2")).toEqual({ device: "SUBCKT", name: "FET_X__1", library: true, pins: [["3", "DRAIN"], ["1", "GATE"], ["2", "SOURCE"]] });
+    expect(s.byComponent.get("3")).toMatchObject({ device: "SUBCKT", name: "EW_VCC", pins: [["1", "VCC"]] });
+    expect(s.byComponent.get("4")).toEqual({ exclude: true });
+    expect(s.byComponent.get("5")).toEqual({ exclude: true });
+    expect(s.library).toContain(".SUBCKT FET_X__1 DRAIN GATE SOURCE");
+    expect(s.library).toContain(".subckt EW_VCC VCC\nVCCVCC  VCC 0 dc 5\n.ends EW_VCC");
+    expect(s.warnings.some((w) => w.includes("chirp"))).toBe(true);
   });
 });

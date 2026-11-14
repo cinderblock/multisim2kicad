@@ -281,6 +281,28 @@ export interface SchematicSymbol {
   floating?: boolean;
   /** The part's name in the EW database (e.g. "BAV23C"), when known. */
   partName?: string;
+  /** How KiCad's simulator should model it (from Multisim's netlist template). */
+  sim?: SimSpec;
+  /** Added for the simulator only (a supply source): not in the BOM or on the board. */
+  simOnly?: boolean;
+}
+
+/**
+ * KiCad simulator (ngspice) settings for one part, as `Sim.*` fields.
+ * `exclude`: Multisim has no model for it. Otherwise `device` is a KiCad
+ * device (`R`, `C`, `L`, `SUBCKT`), with `params` for the built-in models,
+ * `name` the model in the design's SPICE library (`library: true`), and
+ * `pins` symbol pin number -> model pin.
+ */
+export interface SimSpec {
+  exclude?: boolean;
+  device?: string;
+  params?: string;
+  /** Built-in R/C/L: the value KiCad would infer the same model from. */
+  value?: string;
+  name?: string;
+  library?: boolean;
+  pins?: [string, string][];
 }
 
 // A wire as a polyline in sheet coords.
@@ -367,4 +389,7 @@ export interface Schematic {
   rootSheet: string;       // unique sheet title of the root
   sheets: SchematicSheet[]; // every page of every unique sheet
   root: SchInstance;
+  /** SPICE model library for the simulator (models + wrappers); "" when none. */
+  spiceLibrary?: string;
+  warnings?: string[];
 }

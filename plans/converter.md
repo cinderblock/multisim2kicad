@@ -991,24 +991,69 @@ hierarchy, connectors), since those are what make an output useless today.
       wrong length"); 73 sections have no picture and 61 parts no symbol.
       DIN symbol variants (`Symbol_ID_DIN`) are not emitted (ANSI only).
 - [x] npm 0.1.0 released from CI with provenance (2026-11-13 10:27 PM PST).
-- [ ] **Next:**
-      B3 cleanup (typed EW models in ewd;
-      multisim2kicad's parsers shrink to mappers). Drive-corpus leftovers (11
-      nets: ground-symbol pin naming) are optional.
-- [ ] Not translated at all yet (candidates, user to prioritise):
-      SPICE simulation models (`SYS_MODEL` 45k rows in the master DB;
-      designs embed models too) -> KiCad ngspice fields; 3D models;
-      linking design symbols to a converted DB library instead of
-      per-project copies; designs older than Multisim 10 / EWB 5
-      (`.msm`, `.ewb`; none in the corpus).
+- [x] (2026-11-14) **SPICE, designs** (`src/parse/spice.ts`). Facts:
+      a `CiComponent`'s netlist template is attribute strings[1][5]
+      (`x%p %tD %tG %tS %m`: `%p` refdes, `%tX` node on terminal X, `%m`
+      model, `#N` param N of its `CiaParamList`, `%vN?A%v:B%v;` A if param N
+      non-zero). `CiComponent@Model` -> `CiModel` (scoped name
+      `2N7002PW/NXP__MOS_ENH_N__1`, SPICE text in its `CiaCString`).
+      `CiPort` = terminal name + pad. Mapping: plain R/C/L -> KiCad
+      built-ins (no fields when the Value already says it); `x... %m` with a
+      `.SUBCKT` -> `Sim.Device=SUBCKT`, `Sim.Library=<design>.lib`,
+      `Sim.Pins` pad=model node in template order; everything else -> a
+      wrapper subcircuit with the expanded template; no template ->
+      `exclude_from_sim`. KiCad skips `#PWR` symbols, so each supply net
+      with a model gets a simulation-only `SUPn` source (one pin, touching a
+      copy of the net's power symbol, right of the root page). ngspice
+      dialect fixes: `.mergenodes` -> 1 uOhm, `) USELIM` dropped, interactive
+      pot fixed at its saved setting; `chirp()` excluded. **Verified with
+      KiCad's own ngspice** (`ngspice.dll` via ctypes + KiCad's `.cm` code
+      models, PSpice-compat mode `psa`, on `kicad-cli sch export netlist
+      --format spice` output): HV-TPI-ISP solves sensibly (VCC 5 V, VPROG
+      12 V, Reset pulled up, Q3 on, FB 1.25 V); Fan Control and Heater
+      solve (floating MCU nets warn); OpAmp - Single stops on "shorted
+      VSRC": its VDD symbol really is on node 0 in Multisim's own netlist
+      (design error, faithfully kept); Main parses but its op does not
+      converge (big board, unmodelled ICs).
+- [x] (2026-11-14) **SPICE, database libraries.** `SYS_MAPPING_COMP_MODEL`
+      (Component_ID, Model_ID, Sec_Order, Template, Instance_Parameters) +
+      `SYS_MODEL` (MODEL_ID, DATA = SPICE text). A section may list several
+      alternative models (TLC274CD: TLC271H, TLC271H_2.._5; no default flag,
+      row order varies): take the shortest name, then alphabetical.
+      Multi-section templates name per-section terminals (`%t1IN+`,
+      `%t2IN+`, shared `%tVS+`); KiCad simulates one element per reference
+      across units, so all sections go into one wrapper with nodes `p<pin>`
+      (same for designs: `CiComponent`s grouped by circuit + refdes when
+      the template has `%p_x`). One `.lib` per family in `<db>.spice/`,
+      `Sim.Library` = `${KIPRJMOD}/<db>.spice/<family>.lib` (verified: KiCad
+      expands `${KIPRJMOD}` there). 377 master-DB templates use `#N` /
+      `%S0` parameters that only a placed part has -> excluded, counted.
+      Master DB: 125,936 model rows.
+- [x] (2026-11-14) **ngspice compatibility.** Multisim vendor models need
+      PSpice mode (`IF()` in B expressions, `R ... TC a b`); plain ngspice
+      rejects them. PSpice mode breaks a source named exactly `VT`
+      (`I(VT)` -> "no such function v.x1.v_"; `VX`/`VTT` fine) -> renamed
+      `VTx`. Converted projects set `.kicad_pro` `schematic.ngspice.model_mode
+      = 2` (PSpice; KiCad's default 0 = user config / plain). A subcircuit's
+      inner `.MODEL` can share its name (MDA980-3): rename only the head of
+      the model's own kind. Verified: all 11 simulated v14.2 DB symbols
+      placed in a generated schematic, KiCad netlist, ngspice `ps` mode:
+      parses (op of the unconnected bench doesn't converge, as expected).
+      Test harness note: a hand-made instance must carry the lib's fields
+      (KiCad reads Sim.* from the instance, as the GUI copies them).
+- [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
+      to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
+      naming) are optional.
+- [ ] Not translated at all yet: 3D models; linking design symbols to a
+      converted DB library instead of per-project copies; designs older
+      than Multisim 10 / EWB 5 (`.msm`, `.ewb`; none in the corpus).
 
 ## Open questions for the user
 
 1. ~~Phase G: where multisim2kicad lives~~ answered 2026-11-13: public repo +
    npm, corpus private.
-2. (2026-11-13) Which of the untranslated areas matter to you: SPICE
-   simulation models, 3D models, pre-Multisim-10 formats? Recommendation:
-   SPICE models first if you simulate in KiCad, else none.
+2. ~~Which untranslated areas matter~~ answered 2026-11-14 ("Keep
+   translating"): went with the recommendation, SPICE first.
 
 ## Earlier phase notes (historical, 2026-05)
 

@@ -84,6 +84,34 @@ Shared supply pins of multi-section parts (an op-amp's V+/V- on every
 section) stay connected the way Multisim wires them. One schematic unit maps to 10 mil so everything sits on a
 KiCad grid.
 
+Simulation: the converted schematic runs in KiCad's simulator (ngspice).
+Each part's SPICE model from the design goes into `<design>.lib` next to
+the schematic. The part points at it through KiCad's `Sim.*` fields, which
+map its pins to the model's nodes in Multisim's order.
+
+- Resistors, capacitors and inductors use KiCad's built-in models.
+- Sources, diode models and other one-off cases get a small wrapper
+  subcircuit holding exactly the lines Multisim would netlist.
+- KiCad leaves power symbols out of simulation, but Multisim's VCC / VDD
+  symbols are real sources. Each supply net therefore gets a
+  simulation-only source symbol (`SUP1`, ...; not in the BOM, not on the
+  board), parked to the right of the root sheet.
+- Parts Multisim has no model for (most ICs and connectors) are marked
+  "exclude from simulation".
+- A few Multisim-only SPICE constructs are rewritten for ngspice:
+  `.mergenodes`, `TABLE ... USELIM`, and the interactive potentiometer
+  (fixed at its saved setting).
+- `chirp()` sources have no ngspice equivalent; they are excluded, with a
+  warning.
+
+The project's simulator compatibility is set to PSpice, because Multisim's
+vendor models use PSpice syntax (`IF()`, `R ... TC a b`).
+
+A board whose ICs have no model leaves those nets floating. Small and
+analog designs simulate as they are; a large digital board may need
+`.options rshunt=1e9` or models for its ICs before its operating point
+converges.
+
 An EW component database becomes KiCad libraries named after it. That is
 a Multisim database project (`.prj` / `.usr`), or NI's master database
 `MSCOMP_S.PRD` that Multisim installs under
@@ -99,8 +127,17 @@ redistribute the output.
   chip's GND / VCC, on an extra power unit), with its Footprint pointing into
   `<name>.pretty` when the database holds the package (otherwise the
   package name is kept as an `EW_Package` field)
+- `<name>.spice/<family>.lib`: the SPICE models of the database's
+  simulated parts, one file per family. Each symbol's `Sim.*` fields point
+  into it through `${KIPRJMOD}`. That works when the libraries sit in the
+  project folder; if you install them globally, fix the path. A part
+  with several sections (a quad op-amp) is one subcircuit across all its
+  units. Parts without a model, and the few whose template needs values
+  Multisim only sets on a placed part, are excluded from simulation. Set
+  the project's simulator compatibility to PSpice (Simulator > Settings).
 
-both registered in the project's lib tables.
+The symbol and footprint libraries are registered in the project's lib
+tables.
 `plans/converter.md` tracks these.
 
 ## Checking results

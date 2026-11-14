@@ -135,6 +135,12 @@ function reportSch(input: string, sch: Schematic, fileCount: number): void {
     console.log(`  wires:      ${sheet.wires.length}  labels: ${sheet.labels.length}  buses: ${sheet.buses.length}`);
   }
   console.log(`  instances:  ${countInstances(sch.root)} sheet instance(s), ${fileCount} file(s)`);
+  const parts = sch.sheets.flatMap((sh) => sh.symbols).filter((s) => s.kind === "part");
+  const modelled = parts.filter((s) => s.sim?.device && !s.simOnly).length;
+  const excluded = parts.filter((s) => s.sim?.exclude).length;
+  const supplies = parts.filter((s) => s.simOnly).length;
+  console.log(`  simulation: ${modelled} parts modelled, ${excluded} without a model (excluded), ${supplies} supply source(s)`);
+  for (const w of sch.warnings ?? []) console.log(`  warning:    ${w}`);
 }
 
 const countInstances = (i: { children: any[] }): number => 1 + i.children.reduce((n: number, c: any) => n + countInstances(c), 0);
@@ -252,18 +258,29 @@ export async function convertDatabase(input: string, outDir: string): Promise<vo
   await mkdir(pretty, { recursive: true });
   for (const [name, text] of emitFootprintLibrary(h.board, h.library)) await writeFile(join(pretty, name), text, "utf8");
   await addLibTableEntry(join(outDir, "fp-lib-table"), "fp_lib_table", lib, `\${KIPRJMOD}/${lib}.pretty`, `Footprints from the EW database ${basename(input)} (multisim2kicad)`);
-  const syms = databaseSymbols(db, (pkg) => {
-    const name = footprintName({ name: pkg } as Board["components"][number]);
-    return h.library.has(name) ? `${lib}:${name}` : undefined;
-  });
+  const syms = databaseSymbols(
+    db,
+    (pkg) => {
+      const name = footprintName({ name: pkg } as Board["components"][number]);
+      return h.library.has(name) ? `${lib}:${name}` : undefined;
+    },
+    // One SPICE library per family, beside the symbol library.
+    (family) => `\${KIPRJMOD}/${lib}.spice/${family}.lib`,
+  );
   const symPath = join(outDir, `${lib}.kicad_sym`);
   await writeFile(symPath, librarySymbolsFile(syms.specs), "utf8");
+  if (syms.spice.size) {
+    await mkdir(join(outDir, `${lib}.spice`), { recursive: true });
+    for (const [family, text] of syms.spice) await writeFile(join(outDir, `${lib}.spice`, `${family}.lib`), text, "utf8");
+  }
   await addLibTableEntry(join(outDir, "sym-lib-table"), "sym_lib_table", lib, `\${KIPRJMOD}/${lib}.kicad_sym`, `Symbols from the EW database ${basename(input)} (multisim2kicad)`);
   const reasons = new Map<string, number>();
   for (const s of fps.skipped) reasons.set(s.reason, (reasons.get(s.reason) ?? 0) + 1);
   console.log(`${input}`);
   console.log(`  footprints: ${h.library.size} -> ${pretty}`);
   console.log(`  symbols:    ${syms.specs.length} -> ${symPath} (${syms.specs.filter((x) => x.footprint).length} with a footprint here)`);
+  const simulated = syms.specs.filter((x) => x.fields?.some(([k]) => k === "Sim.Device")).length;
+  console.log(`  simulation: ${simulated} symbols with a SPICE model (${syms.spice.size} family libraries in ${lib}.spice/), ${syms.specs.filter((x) => x.excludeFromSim).length} excluded`);
   for (const w of syms.warnings.slice(0, 20)) console.log(`  warning: ${w}`);
   if (syms.warnings.length > 20) console.log(`  ... ${syms.warnings.length - 20} more warnings`);
   if (reasons.size) console.log(`  skipped:    ${[...reasons].map(([r, n]) => `${n} ${r}`).join(", ")}`);

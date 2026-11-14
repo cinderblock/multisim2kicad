@@ -38,7 +38,8 @@ import type {
   SymbolPin,
   SymbolText,
 } from "../ir/types.ts";
-import { type CiNetlist, parseCiNetlist } from "../ref/ci-netlist.ts";
+import { type CiNetlist, collectCiItems, parseCiNetlist } from "../ref/ci-netlist.ts";
+import { parseSpice, type SpiceDesign, supplySymbols } from "./spice.ts";
 import { drawnPinNumbers, portPinNumbers } from "../ref/ci-netlist.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 import { type PageIndex, parseMultisimDesign, type SheetInstance } from "./ms-hierarchy.ts";
@@ -510,7 +511,7 @@ function pageNets(edges: [string, string][], linkIds: string[], pinIds: string[]
   };
 }
 
-function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex): SchematicSheet {
+function parseSheet(designSheet: EwElement, ci: CiNetlist, spice: SpiceDesign, pageIndex?: PageIndex): SchematicSheet {
   const nets = pageNets(pageIndex?.edges ?? [], pageIndex?.links.map((l) => l.id) ?? [], pageIndex?.pins.map((p) => p.id) ?? []);
   // Sheet-level pin attachment points.
   const pinPts = new Map<string, SchPoint>();
@@ -538,7 +539,8 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
   ];
   for (const comp of comps) {
     const placed = parsePlaced(comp, pinPts);
-    const ciComp = ci.componentsById.get(String(comp.get("CiComponent") ?? ""));
+    const ciId = String(comp.get("CiComponent") ?? "");
+    const ciComp = ci.componentsById.get(ciId);
     if (ciComp?.kind === "power" && placed.symbol.pins.length === 1) {
       placed.symbol.kind = "power";
       // The net it drives: the pin's global modifier (what Multisim joins on).
@@ -555,6 +557,8 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, pageIndex?: PageIndex
     }
     if (ciComp) placed.symbol.drawnKey = ciComp.refdes + comp.str("DBComponentSectionName");
     if (ciComp?.part) placed.symbol.partName = ciComp.part;
+    const sim = spice.byComponent.get(ciId);
+    if (sim) placed.symbol.sim = sim;
     symbols.push(placed.symbol);
   }
 
@@ -769,6 +773,7 @@ export function parseSchematicXml(input: XmlInput): Schematic {
   if (designSheets.length === 0) throw new Error("no DesignSheet element found");
 
   const ci = parseCiNetlist(doc);
+  const spice = parseSpice(collectCiItems(root));
   const design = parseMultisimDesign(doc);
   portPins = (portId) => {
     const port = portId ? design.ci.get(portId) : undefined;
@@ -777,9 +782,12 @@ export function parseSchematicXml(input: XmlInput): Schematic {
   const sheets = designSheets.map((ds) => {
     const title = ds.str("Title");
     const page = ds.str("PageName") || "1";
-    return parseSheet(ds, ci, design.pages.find((p) => p.title === title && p.page === page));
+    return parseSheet(ds, ci, spice, design.pages.find((p) => p.title === title && p.page === page));
   });
   const rootSheet = design.rootTitle || sheets[0]!.title;
+  const rootPage = sheets.find((sh) => sh.title === rootSheet) ?? sheets[0]!;
+  const supplies = supplySymbols(sheets, rootPage);
+  rootPage.symbols.push(...supplies.symbols);
 
   return {
     source: {
@@ -792,5 +800,7 @@ export function parseSchematicXml(input: XmlInput): Schematic {
     rootSheet,
     sheets,
     root: toSchInstance(design.root, sheets, design),
+    spiceLibrary: spice.library,
+    warnings: [...spice.warnings, ...supplies.warnings],
   };
 }

@@ -10,6 +10,7 @@ import type {
   SchematicSymbol,
   SchGraphic,
   SchPoint,
+  SimSpec,
   SymbolPin,
   SymbolText,
 } from "../ir/types.ts";
@@ -143,8 +144,8 @@ function libParts(s: SchematicSymbol, refs: InstanceRef[], dropped: ReadonlySet<
     `\t\t\t(pin_numbers${s.showPinNumbers && !power ? "" : " (hide yes)"})`,
     `\t\t\t(pin_names (offset 0.254)${s.showPinNames && !power ? "" : " (hide yes)"})`,
     `\t\t\t(exclude_from_sim no)`,
-    `\t\t\t(in_bom ${power ? "no" : "yes"})`,
-    `\t\t\t(on_board ${power ? "no" : "yes"})`,
+    `\t\t\t(in_bom ${power || s.simOnly ? "no" : "yes"})`,
+    `\t\t\t(on_board ${power || s.simOnly ? "no" : "yes"})`,
     `\t\t\t(duplicate_pin_numbers_are_jumpers no)`,
     `\t\t\t(property "Reference" ${q(power ? "#PWR" : refPrefix(s))} (at 0 0 0) ${FONT})`,
   ].filter(Boolean);
@@ -266,6 +267,8 @@ export interface LibrarySymbolSpec {
   value: string;
   footprint?: string;
   fields?: [string, string][];
+  /** Multisim has no simulation model for it. */
+  excludeFromSim?: boolean;
   showPinNames: boolean;
   showPinNumbers: boolean;
   /** Unit 1..n: its drawing, its pins, and pins drawn as plain stems (kept on another unit). */
@@ -290,7 +293,7 @@ export function librarySymbolsFile(specs: LibrarySymbolSpec[]): string {
         if (pts.length) box = { x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)), x1: Math.max(...pts.map((p) => p.x)), y1: Math.max(...pts.map((p) => p.y)) };
       }
       const parts = libParts(centred, [{ path: "", reference: spec.reference, unit: i + 1 }], new Set());
-      head = parts.head;
+      head = spec.excludeFromSim ? parts.head.map((l) => l.replace("(exclude_from_sim no)", "(exclude_from_sim yes)")) : parts.head;
       for (const [u, lines] of parts.units) units.set(u, lines);
     });
     // Reference above the first unit, Value below it (text is 5 units tall).
@@ -384,6 +387,29 @@ function unitsOf(refs: InstanceRef[]): Map<number, Record<string, string> | unde
   return m;
 }
 
+/**
+ * KiCad simulator fields for a placed part. Built-in R / C / L whose value
+ * KiCad would read the same way get none, so editing the value keeps
+ * working; everything else names its device, model and pin map.
+ */
+function simFields(s: SchematicSymbol, simLibrary: string): [string, string][] {
+  return s.sim ? simFieldList(s.sim, { value: s.value, prefix: refPrefix(s), library: simLibrary }) : [];
+}
+
+/** `Sim.*` fields for a spec; `library` is the path `Sim.Library` gets. */
+export function simFieldList(sim: SimSpec, o: { value: string; prefix: string; library: string }): [string, string][] {
+  if (sim.exclude || !sim.device) return [];
+  const simLibrary = o.library;
+  const standardPins = !sim.pins || sim.pins.map(([n, m]) => `${n}=${m}`).join(" ") === "1=+ 2=-";
+  if (sim.value !== undefined && sim.value === o.value && standardPins && o.prefix === sim.device) return [];
+  const fields: [string, string][] = [["Sim.Device", sim.device]];
+  if (sim.library && simLibrary) fields.push(["Sim.Library", simLibrary]);
+  if (sim.name) fields.push(["Sim.Name", sim.name]);
+  if (sim.params) fields.push(["Sim.Params", sim.params]);
+  if (sim.pins?.length) fields.push(["Sim.Pins", sim.pins.map(([n, m]) => `${n}=${m}`).join(" ")]);
+  return fields;
+}
+
 function emitInstance(
   sym: SchematicSymbol,
   libName: string,
@@ -392,6 +418,7 @@ function emitInstance(
   projectName: string,
   dropped: ReadonlySet<string> = new Set(),
   footprint = "",
+  simLibrary = "",
 ): string {
   const s = sym.floating ? { ...sym, at: { x: sym.at.x + NUDGE, y: sym.at.y + NUDGE } } : sym;
   const reference = refs[0]?.reference ?? s.reference;
@@ -405,15 +432,16 @@ function emitInstance(
     `\t\t(lib_id ${q(libName)})`,
     `\t\t(at ${u(s.at.x)} ${u(s.at.y)} ${angle})${mirror ? ` (mirror ${mirror})` : ""}`,
     `\t\t(unit ${refs[0]?.unit ?? 1})`,
-    `\t\t(exclude_from_sim no)`,
-    `\t\t(in_bom ${power ? "no" : "yes"})`,
-    `\t\t(on_board ${power ? "no" : "yes"})`,
+    `\t\t(exclude_from_sim ${s.sim?.exclude ? "yes" : "no"})`,
+    `\t\t(in_bom ${power || s.simOnly ? "no" : "yes"})`,
+    `\t\t(on_board ${power || s.simOnly ? "no" : "yes"})`,
     `\t\t(dnp no)`,
     `\t\t(uuid ${q(uuidStr)})`,
     property("Reference", reference, refAt, power || !!s.refText?.hidden),
     property("Value", s.value, valAt, !power && !!s.valueText?.hidden),
     property("Footprint", footprint, s.at, true),
     property("Datasheet", "", s.at, true),
+    ...simFields(s, simLibrary).map(([k, v]) => property(k, v, s.at, true)),
     ...[...new Set(uniquePins(s.pins).filter((p) => !dropped.has(p.number)).flatMap((p) => [...unitsOf(refs).values()].map((m) => m?.[p.number] ?? p.number)))].map(
       (n) => `\t\t(pin ${q(n)} (uuid ${q(uuid())}))`,
     ),
@@ -675,7 +703,7 @@ function resolveContacts(
   return { symbols, segments, labels };
 }
 
-function renderPage(f: PageFile, sch: Schematic, isRoot: boolean, footprints?: ReadonlyMap<string, string>): string {
+function renderPage(f: PageFile, sch: Schematic, isRoot: boolean, footprints?: ReadonlyMap<string, string>, simLibrary = ""): string {
   const importNote = `Imported from ${sch.source.application} ${sch.source.versionMajor}.${sch.source.versionMinor} via multisim2kicad`;
 
   const rawSegments: Segment[] = [];
@@ -727,7 +755,7 @@ function renderPage(f: PageFile, sch: Schematic, isRoot: boolean, footprints?: R
     ...sheet.busEntries.map(emitBusEntry),
     ...sheet.texts.map((t) => `\t(text ${q(t.text)} (exclude_from_sim no) (at ${u(t.at.x)} ${u(t.at.y)} 0) (effects (font (size ${u(t.size)} ${u(t.size)})) (justify left top)) (uuid ${q(uuid())}))`),
     ...sheet.symbols.map((s, i) =>
-      emitInstance(s, f.libNames[i]!, f.symbolUuids[i]!, f.symbolRefs[i]!, sch.projectName, f.droppedPins[i], footprints?.get(f.symbolRefs[i]![0]?.reference ?? "")),
+      emitInstance(s, f.libNames[i]!, f.symbolUuids[i]!, f.symbolRefs[i]!, sch.projectName, f.droppedPins[i], footprints?.get(f.symbolRefs[i]![0]?.reference ?? ""), simLibrary),
     ),
     ...sheetSymbols,
     ...(isRoot ? [`\t(sheet_instances (path "/" (page "1")))`] : []),
@@ -897,7 +925,11 @@ export function emitKicadSchProject(
   }
 
   const out = new Map<string, string>();
-  for (const f of files.values()) out.set(f.fileName, renderPage(f, sch, f === rootFile, opts.footprints));
+  // The design's SPICE models, beside the schematic (Sim.Library paths are
+  // relative to the project).
+  const simLibrary = sch.spiceLibrary ? `${baseName}.lib` : "";
+  for (const f of files.values()) out.set(f.fileName, renderPage(f, sch, f === rootFile, opts.footprints, simLibrary));
+  if (simLibrary) out.set(simLibrary, sch.spiceLibrary!);
   return { files: out, links, symbolLibrary: library.file() };
 }
 
@@ -939,5 +971,11 @@ export function emitKicadSch(sch: Schematic): string {
  * integer Multisim grid is on-grid for ERC.
  */
 export function kicadProSchematicSettings() {
-  return { connection_grid_size: 10.0 };
+  return {
+    connection_grid_size: 10.0,
+    // Simulator compatibility "PSpice" (ngspice `ngbehavior=ps` for model
+    // files): Multisim's vendor models use PSpice syntax (`IF()` in
+    // expressions, `R ... TC a b`) that plain ngspice rejects.
+    ngspice: { fix_include_paths: true, fix_passive_vals: false, meta: { version: 0 }, model_mode: 2, workbook_filename: "" },
+  };
 }
