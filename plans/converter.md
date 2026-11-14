@@ -1153,10 +1153,34 @@ hierarchy, connectors), since those are what make an output useless today.
       unknown**; the only differences from `2b85e68` are those two.
       Harness gotcha: `${KIPRJMOD}` in `Sim.Library` needs a `.kicad_pro`
       beside the schematic, or every model is "not found".
-- [ ] Tri-state digital pins: export each Z-capable `d_chip` output's
-      enable as an extra subcircuit port and drive the pin model's switch
-      from it (replacing `dac_hiz`), so 74xx bus buffers (244, 245, 373,
-      ...) simulate. Needs the pin-model instance rewritten per pin.
+- [x] (2026-11-14) **Tri-state / bidirectional digital pins.** 598
+      master-DB parts have a pin model with `dac_hiz`/`vhdl2hiz`; nearly
+      all are `d_chip` (74xx125/240/244/245, 4043/4044, 40245, ...), plus
+      `d_vhdl` (still excluded) and a few memories. Z only ever appears in
+      `/table` rows (222 models) and in asynchronous `/clock` rows (4043 /
+      4044: 6 models); never clocked. Translation: each table output that
+      can be Z gets an enable `d_lut` (Z row -> 0, a row passing a flag on
+      -> that flag's enable, else 1); a flag set to Z asynchronously keeps
+      its value and gets an enable instead. Enables leave the chip as extra
+      ports after the outputs (`DChip.enables`). The instance call appends
+      `<output node>_en`. The pin model gets an `_EN` variant
+      (`enablePinModel`): an extra last node `en`, its `dac_hiz` instance
+      reads `en`, and `dac_hiz(out_enabled, out_disabled)` becomes
+      `dac_bridge(out_low=disabled, out_high=enabled)`. A tri-state pin
+      whose logic is never Z gets a `d_pullup` on its enable (always
+      drives). Delays: Z events (`ZH/ZL` turn on, `HZ/LZ` turn off) go on
+      the enable, `LH/HL` on the data; before the split a 74LS245 passed
+      data with its 40 ns enable delay instead of 12 ns. **Verified in
+      ngspice** with master-DB output: two 74LS125s on one bus take turns,
+      with no contention, and the bus floats to its 2.5 V pull ~25 ns after
+      both disable; 74LS245 passes A->B and B->A by DIR in ~12 ns.
+      Also found: a bidirectional pin template's `~%t2` (the model wants
+      the inverted drive) made a separate, unconnected node `~d_A1` on the
+      subcircuit call; now an inverter makes `d_A1_n`. A template with no
+      space in `]%m` (40244) slipped past the instance rewrite. 573
+      74LS/74/74F/74ALS/74S/74HC/4000/40xxx chips from the converted
+      library load through KiCad into ngspice. **Master DB: 54,275 of
+      57,101 symbols simulate.**
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.

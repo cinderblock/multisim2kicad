@@ -12,7 +12,7 @@ import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
-import { circuitParams, expandTemplate, inlineResistorModels, modelDef, ngspiceDialect, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
+import { circuitParams, enablePinModel, expandTemplate, inlineResistorModels, modelDef, ngspiceDialect, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
 import { dchipSubckt, parseChip, rewriteDChipInstances, translateDChips } from "./parse/dchip.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
@@ -724,7 +724,7 @@ describe("d_chip (Multisim behavioural logic)", () => {
   });
 
   test("trailing pins the chip doesn't declare (VCC / GND, read-back) are dropped; too few is an error", () => {
-    const chips = new Map([["ch", { name: "CH", pins: 3, inputs: 2, outputs: 1 }]]);
+    const chips = new Map([["ch", { name: "CH", pins: 3, inputs: 2, outputs: 1, enables: [] }]]);
     expect(rewriteDChipInstances("aU [a b r_y] [y VCC GND] CH", chips)).toBe("xaU a b y CH");
     const errors: string[] = [];
     expect(rewriteDChipInstances("aU [a] [y] CH", chips, errors)).toBe("aU [a] [y] CH");
@@ -756,5 +756,60 @@ describe("spice: digital details", () => {
     expect(text).toContain("aU9 r_Y d_Y BUF");
     expect(text.match(/^xU9_Y /gm)).toEqual(["xU9_Y "]);
     expect(text).toContain("xU9_Y Y d_Y r_Y BIDI");
+  });
+
+  test("a `~` node in a pin template is made by an inverter", () => {
+    const lib = new SpiceLibrary();
+    const drv = pinModelDef("DRV", ".SUBCKT DRV 1 2\naD [1] [2] D\n.MODEL D dac_bridge(out_low=0 out_high=5)\n.ENDS")!;
+    const gate = modelDef("BUF", ".MODEL BUF d_buffer")!;
+    simSpec("U8", [{ template: "a%p %tA?%t:d%t;A %tY?%t:d%t;Y %m", params: [], model: gate, pins: new Map([["A", "1"], ["Y", "2"]]), pinModels: new Map([["Y", { model: drv, template: "x%p ~%t2 %t1 %m" }]]) }], lib);
+    const text = lib.text("t");
+    expect(text).toContain("xU8_Y d_Y_n Y DRV");
+    expect(text).toContain("ad_Y_inv d_Y d_Y_n EW_invert");
+  });
+});
+
+describe("tri-state digital pins", () => {
+  const chip = (name: string, body: string[]) => `.MODEL ${name} d_chip ( behaviour= "\n${body.map((l) => `+${l}`).join("\n")}\n+")`;
+  const buffer = chip("TS", ["/inputs ~C A", "/outputs Y", "/table 2", " L X A", " H X Z", "/conditional_delay 2", " ZH ~C (~C=L) Y MAX 20n", " HZ ~C (~C=H) Y MAX 25n"]);
+  const ls3s = {
+    model: pinModelDef("LS3S", ".SUBCKT LS3S 1 2 3 4\naDACin [1] [5] aDAC_in\naDACcntl [1] [6] aDAC_cntl\nS1 5 2 6 0 vsw0\n.model vsw0 vswitch (Roff=10MEG Ron=100m Voff=2.5 Von=2.5)\n.MODEL aDAC_in dac_bridge (out_low= 0 out_high = 5)\n.MODEL aDAC_cntl dac_hiz (out_enabled= 5.0 out_disabled = 0)\n.ENDS")!,
+    template: "x%p %t2 %t1 %tVCC %tGND %m",
+  };
+
+  test("a chip output that can be Z gets an enable pin (1 while it drives), with the Z delays", () => {
+    const sub = dchipSubckt("TS", buffer);
+    expect(sub.enables).toEqual([0]);
+    expect(sub.text).toContain(".subckt TS _C A Y Y_en");
+    expect(sub.text).toMatch(/\[_C\] n_Y_en TS_lut\d/);
+    expect(sub.text).toContain('table_values="10" rise_delay=2e-8 fall_delay=2.5e-8');
+    // A latch whose flags go to Z asynchronously (4043): the flag holds, its enable drops.
+    const latch = dchipSubckt("L", chip("L", ["/inputs EO S", "/outputs O", "/clock EO X 1 1 2", " X X X F0", " L X X Z", " H X X S", "/table 1", " X X X F0"]));
+    expect(latch.enables).toEqual([0]);
+    expect(latch.text).toContain("n_F0_en");
+  });
+
+  test("the pin model's dac_hiz becomes a dac_bridge driven by an extra `en` node", () => {
+    const v = enablePinModel(ls3s)!;
+    expect(v.model.name).toBe("LS3S_EN");
+    expect(v.model.text).toContain(".SUBCKT LS3S_EN 1 2 3 4 en");
+    expect(v.model.text).toContain("aDACcntl [en] [6] aDAC_cntl");
+    expect(v.model.text).toContain(".MODEL aDAC_cntl dac_bridge (out_low=0 out_high=5.0 out_undef=0)");
+    expect(v.template).toBe("x%p %t2 %t1 %tVCC %tGND %tEN %m");
+    expect(enablePinModel({ model: pinModelDef("R", ".SUBCKT R 1 2\naA [1] [2] A\n.MODEL A adc_bridge\n.ENDS")!, template: "x%p %t1 %t2 %m" })).toBeUndefined();
+  });
+
+  test("the chip's enable reaches the pin; a pin whose logic is never Z always drives", () => {
+    const lib = new SpiceLibrary();
+    const pins = new Map([["~C", "1"], ["A", "2"], ["Y", "3"], ["VCC", "14"], ["GND", "7"]]);
+    const t = "a%p [%t~C?%t:d%t;~C %tA?%t:d%t;A] [%tY?%t:d%t;Y] %m";
+    simSpec("U1", [{ template: t, params: [], model: modelDef("TS", buffer)!, pins, pinModels: new Map([["Y", ls3s]]) }], lib);
+    const plain = modelDef("PL", chip("PL", ["/inputs ~C A", "/outputs Y", "/table 1", " X X A"]))!;
+    simSpec("U2", [{ template: t, params: [], model: plain, pins, pinModels: new Map([["Y", ls3s]]) }], lib);
+    const text = lib.text("t");
+    expect(text).toContain("xaU1 d__C d_A d_Y d_Y_en TS");
+    expect(text).toContain("xU1_Y d_Y Y VCC GND d_Y_en LS3S_EN");
+    expect(text).toContain("ad_Y_en_on d_Y_en EW_drives");
+    expect(text.match(/EW_drives/g)?.length).toBe(2); // U2 only: the pull-up and its model
   });
 });

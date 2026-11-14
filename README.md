@@ -113,10 +113,14 @@ map its pins to the model's nodes in Multisim's order.
   checks are dropped.
 - Circuit parameters become a `.param` simulator directive on their sheet.
   Part values that use them stay expressions.
+- Tri-state and bidirectional pins (bus buffers and transceivers: 74xx125,
+  240, 244, 245, 373, ...) work on shared buses. Each output that can go
+  high-Z gets an enable signal from the chip's tables, and the enable drives
+  the pin's output switch. Multisim's own high-Z sensing (`dac_hiz`) has no
+  ngspice equivalent.
 - Parts whose model needs something ngspice doesn't have are excluded,
-  with a warning: `chirp()` sources, tri-state and bidirectional digital
-  pins (Multisim's `dac_hiz` senses high-Z, which ngspice's bridges can't),
-  `d_vhdl`, and other Multisim-only code models.
+  with a warning: `chirp()` sources, `d_vhdl`, and other Multisim-only
+  code models.
 - A digital input left unconnected reads low, as in XSPICE (some of NI's
   counter demos leave `~LOAD` open, so they load instead of counting).
 

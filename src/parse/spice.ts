@@ -416,6 +416,44 @@ export function pinModelDef(id: string, text: string): ModelDef | undefined {
   return modelDef(id, ideal);
 }
 
+const enableVariants = new WeakMap<PinModel, PinModel | null>();
+
+/**
+ * A tri-state / bidirectional pin model with an enable pin. Multisim's
+ * `dac_hiz` turns its digital input's high-Z into the voltage that opens the
+ * output switch; an ngspice `dac_bridge` can't see high-Z (it holds its
+ * level). The variant takes an extra last node, `en` (1 while the logic
+ * drives the pin, from the translated chip), and a plain `dac_bridge` makes
+ * the switch voltage from that. `undefined` for a model without `dac_hiz`.
+ */
+export function enablePinModel(pm: PinModel): PinModel | undefined {
+  const known = enableVariants.get(pm);
+  if (known !== undefined) return known ?? undefined;
+  const hiz = new Map<string, string>(); // model name (lower) -> dac_bridge definition
+  let text = pm.model.text.replace(/^([ \t]*\.model[ \t]+(\S+)[ \t]+)\(?[ \t]*(?:dac_hiz|vhdl2hiz)\b[ \t]*(\([^)]*\))?.*$/gim, (_, head: string, name: string, params = "") => {
+    const value = (p: string) => new RegExp(`\\b${p}\\s*=\\s*([^\\s)]+)`, "i").exec(params)?.[1];
+    const on = value("out_enabled") ?? "5";
+    const off = value("out_disabled") ?? "0";
+    hiz.set(name.toLowerCase(), name);
+    return `${head}dac_bridge (out_low=${off} out_high=${on} out_undef=${off})`;
+  });
+  let variant: PinModel | undefined;
+  if (hiz.size && pm.model.kind === "subckt") {
+    const name = `${pm.model.name}_EN`;
+    text = text
+      // Its control bridges read `en` instead of the data.
+      .replace(/^([ \t]*a\S+[ \t]+)\[[^\]]*\]([ \t]*\[[^\]]*\][ \t]+)(\S+)[ \t]*$/gim, (m, a: string, b: string, model: string) => (hiz.has(model.toLowerCase()) ? `${a}[en]${b}${model}` : m))
+      .replace(/^([ \t]*\.subckt[ \t]+)(\S+)([^\n]*)/im, (_, a: string, _n: string, nodes: string) => `${a}${name}${nodes.trimEnd()} en`)
+      .replace(/^([ \t]*\.ends)[ \t]+\S+/im, `$1 ${name}`);
+    variant = {
+      model: { ...pm.model, name, text, nodes: [...pm.model.nodes, "en"] },
+      template: pm.template.replace(/%m\s*$/, "%tEN %m"),
+    };
+  }
+  enableVariants.set(pm, variant ?? null);
+  return variant;
+}
+
 /** Split out top-level `.subckt ... .ends` blocks (with anything nested in them). */
 export function hoistSubckts(text: string): { body: string; blocks: string[] } {
   const body: string[] = [];
@@ -534,7 +572,7 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
 
   // Code models ngspice doesn't have (Multisim's `d_chip` logic language,
   // `d_vhdl`, ...): one unknown model type fails the whole simulation.
-  const modelTexts = sections.flatMap((s) => [ngspiceDialect(s.template), s.model?.text ?? "", ...[...(s.pinModels?.values() ?? [])].map((p) => p.model.text)]);
+  const modelTexts = sections.flatMap((s) => [ngspiceDialect(s.template), s.model?.text ?? "", ...[...(s.pinModels?.values() ?? [])].map((p) => (enablePinModel(p) ?? p).model.text)]);
   const foreign = unsupportedModelType(modelTexts.join("\n"));
   if (foreign) {
     const why = sections.flatMap((s) => s.model?.issues ?? []);
@@ -563,6 +601,9 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   const chipErrors: string[] = [];
   const noInterface = new Set<string>();
   const bridged = new Set<string>();
+  // Tri-state pins' enable nodes the bridges read, and those a chip drives.
+  const enRead = new Set<string>();
+  const enDriven = new Set<string>();
   const lines = sections.map((s) => {
     if (s.model) lib.useModel(s.model);
     const node = (term: string) => {
@@ -579,22 +620,31 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
       const dnode = `${prefix}_${analog ?? spiceName(term)}`;
       if (!analog || bridged.has(analog)) return dnode;
       bridged.add(analog);
-      const pm = s.pinModels?.get(term);
+      const base = s.pinModels?.get(term);
+      const pm = base && (enablePinModel(base) ?? base);
+      if (pm && pm !== base) enRead.add(`d_${analog}_en`);
       if (!pm) {
         noInterface.add(term);
         return dnode;
       }
       lib.useModel(pm.model);
-      bridges.push(
-        expandTemplate(pm.template.replace(/\r\n?/g, "\n").trim(), {
-          ref: `${spiceName(ref)}_${spiceName(term)}`,
-          params: [],
-          model: pm.model.name,
-          // 1 = the pin, 2 = the digital side the logic drives, 3 = the pin
-          // read back (a bidirectional model's A/D output), else a supply pin.
-          node: (t) => (t === "1" ? analog : t === "2" ? `d_${analog}` : t === "3" ? `r_${analog}` : (node(t) ?? "0")),
-        }),
-      );
+      const line = expandTemplate(pm.template.replace(/\r\n?/g, "\n").trim(), {
+        ref: `${spiceName(ref)}_${spiceName(term)}`,
+        params: [],
+        model: pm.model.name,
+        // 1 = the pin, 2 = the digital side the logic drives, 3 = the pin
+        // read back (a bidirectional model's A/D output), else a supply pin.
+        // EN = a tri-state pin's enable (see enablePinModel).
+        node: (t) => (t === "1" ? analog : t === "2" ? `d_${analog}` : t === "3" ? `r_${analog}` : t === "EN" ? `d_${analog}_en` : (node(t) ?? "0")),
+      });
+      // `~%t2`: the model takes the inverted signal (an XSPICE array
+      // notation, meaningless on a subcircuit call): an inverter makes it.
+      const inverted: string[] = [];
+      const call = line.replace(/(^|\s)~(\S+)/g, (_, sp: string, n: string) => {
+        inverted.push(`a${n}_inv ${n} ${n}_n EW_invert`, ".model EW_invert d_inverter(rise_delay=1e-12 fall_delay=1e-12)");
+        return `${sp}${n}_n`;
+      });
+      bridges.push(call, ...inverted);
       return dnode;
     };
     const main = expandTemplate(s.template.replace(/\r\n?/g, "\n").trim(), {
@@ -610,7 +660,7 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
       // Multisim's inline arithmetic `<50*0.01/1k>` is ngspice's `{...}`.
       .replace(/<([0-9.][^<>\n]*)>/g, "{$1}");
     // A translated `d_chip` is a subcircuit now: `a... [ins] [outs] chip` -> `x...`.
-    const call = s.model?.dchip ? rewriteDChipInstances(main, new Map([[s.model.name.toLowerCase(), s.model.dchip]]), chipErrors) : main;
+    const call = s.model?.dchip ? rewriteDChipInstances(main, new Map([[s.model.name.toLowerCase(), s.model.dchip]]), chipErrors, enDriven) : main;
     return ngspiceDialect(staticPot([call, ...bridges].join("\n")));
   });
   if (chipErrors.length) {
@@ -621,7 +671,16 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   if (missing.length) lib.warnings.push(`${ref}: template terminals ${[...new Set(missing)].join(", ")} have no pin; left as internal nodes`);
   const pinList = [...nodeOfPin.keys()];
   const nodes = pinList.map((p) => nodeOfPin.get(p)!);
-  let body = lines.join("\n");
+  // A tri-state pin whose logic has no enable (an output that is never Z) always drives.
+  const alwaysOn = [...enRead].filter((n) => !enDriven.has(n));
+  if (alwaysOn.length) lines.push([...alwaysOn.map((n) => `a${n}_on ${n} EW_drives`), ".model EW_drives d_pullup"].join("\n"));
+  // Helper models (EW_invert, ...) once per wrapper.
+  const seenModels = new Set<string>();
+  let body = lines
+    .join("\n")
+    .split("\n")
+    .filter((l) => !/^\.model EW_/.test(l) || (!seenModels.has(l) && !!seenModels.add(l)))
+    .join("\n");
   // Again on the expanded text: `%S0` can carry a whole `.model`.
   const foreignExpanded = unsupportedModelType(body);
   if (foreignExpanded) {

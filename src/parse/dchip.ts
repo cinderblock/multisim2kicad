@@ -54,6 +54,8 @@ interface Module {
   table?: string[][];
   /** Output -> largest rise / fall delay in seconds. */
   delays: Map<string, { rise: number; fall: number }>;
+  /** Output -> largest delay into / out of high-Z (rise = turn on, fall = turn off). */
+  zDelays: Map<string, { rise: number; fall: number }>;
   instances: { module: string; args: string[] }[];
 }
 
@@ -80,7 +82,7 @@ function behaviourText(modelText: string): string | undefined {
 export function parseChip(modelText: string): Chip {
   const text = behaviourText(modelText);
   if (text === undefined) throw new Error("no behaviour string");
-  const newModule = (name: string): Module => ({ name, inputs: [], outputs: [], wires: [], delays: new Map(), instances: [] });
+  const newModule = (name: string): Module => ({ name, inputs: [], outputs: [], wires: [], delays: new Map(), zDelays: new Map(), instances: [] });
   const top = newModule("");
   const modules = new Map<string, Module>();
   let cur = top;
@@ -89,12 +91,15 @@ export function parseChip(modelText: string): Chip {
   // Rows still expected by the last directive.
   let want: { kind: "table" | "sync" | "async" | "delay" | "cdelay" | "skip"; left: number } | undefined;
   let asyncLeft = 0;
-  const addDelay = (out: string, rise: number | undefined, fall: number | undefined) => {
+  const addDelay = (out: string, rise: number | undefined, fall: number | undefined, z = false) => {
     if (rise === undefined && fall === undefined) return;
-    const d = cur.delays.get(out) ?? { rise: 0, fall: 0 };
-    d.rise = Math.max(d.rise, rise ?? fall ?? 0);
-    d.fall = Math.max(d.fall, fall ?? rise ?? 0);
-    cur.delays.set(out, d);
+    const map = z ? cur.zDelays : cur.delays;
+    const d = map.get(out) ?? { rise: 0, fall: 0 };
+    // A plain row with one time missing (`X`) uses the other for both; a
+    // Z row gives only the turn-on or the turn-off time.
+    d.rise = Math.max(d.rise, rise ?? (z ? 0 : fall) ?? 0);
+    d.fall = Math.max(d.fall, fall ?? (z ? 0 : rise) ?? 0);
+    map.set(out, d);
   };
 
   for (const raw of text.replace(/\r\n?/g, "\n").split("\n")) {
@@ -185,8 +190,10 @@ export function parseChip(modelText: string): Chip {
         const t = seconds(tokens[tokens.length - 1]!);
         const out = tokens[tokens.length - 3]!;
         const event = tokens[0]!.toUpperCase();
-        // LH / ZH: a rise; HL / ZL: a fall; to Z: both.
-        addDelay(out, event.endsWith("L") ? undefined : t, event.endsWith("H") ? undefined : t);
+        // LH / HL: the output's own rise / fall. ZH / ZL: turning on, HZ /
+        // LZ: turning off (the enable's rise / fall).
+        if (event.includes("Z")) addDelay(out, event.startsWith("Z") ? t : undefined, event.endsWith("Z") ? t : undefined, true);
+        else addDelay(out, event.endsWith("L") ? undefined : t, event.endsWith("H") ? undefined : t);
         break;
       }
       case "skip":
@@ -224,6 +231,8 @@ interface Columns {
   inputs: string[];
   flags: number;
   outputs: string[];
+  /** Further named columns after the outputs (flag enables). */
+  extra?: string[];
 }
 
 /**
@@ -234,7 +243,7 @@ function outputFn(token: string, c: Columns, what: string): { read: number[]; va
   const t = token;
   const constant = ({ L: "0", H: "1", X: "X", Z: "Z", "0": "0", "1": "1" } as Record<string, Value>)[t.toUpperCase()];
   if (constant) return { read: [], value: () => constant };
-  const names = [...c.inputs, ...Array.from({ length: c.flags }, () => "\u0000"), ...c.outputs];
+  const names = [...c.inputs, ...Array.from({ length: c.flags }, () => "\u0000"), ...c.outputs, ...(c.extra ?? [])];
   const find = (name: string) => {
     let i = names.indexOf(name);
     if (i < 0) i = names.findIndex((n) => n.toLowerCase() === name.toLowerCase());
@@ -352,6 +361,10 @@ const TINY = "1e-12";
 /** Emits the flattened netlist of one chip. */
 class Emitter {
   lines: string[] = [];
+  /** Net -> the net that is 1 while it drives (absent: always drives). */
+  enables = new Map<string, string>();
+  /** Net -> the net it is a delayed copy of. */
+  aliases = new Map<string, string>();
   private models = new Map<string, string>(); // definition -> name
   private used = new Set<string>();
   private n = 0;
@@ -470,6 +483,7 @@ function flatten(chip: Chip, mod: Module, ports: Map<string, string>, em: Emitte
     const pre = em.node(`${scope}${out}_pre`);
     delayedPre.set(out, pre);
     em.element(`${pre} ${net(out)} ${em.model("d_buffer", delayParams(d))}`);
+    em.aliases.set(net(out), pre);
   }
 
   mod.instances.forEach((inst, k) => {
@@ -495,11 +509,18 @@ function flatten(chip: Chip, mod: Module, ports: Map<string, string>, em: Emitte
   if (!inNodes.length && !flags) throw new Error(`${what}: no inputs`);
   const nCols = mod.inputs.length + flags;
   const none = new Map<number, 0 | 1>();
+  const isZ = (t: string) => /^z$/i.test(t);
+  // Flags an asynchronous row sets to Z (4043 / 4044 latches with an
+  // output enable): the flag keeps its value; its enable goes low.
+  const flagEnables: (string | undefined)[] = [];
+  // Pseudo column names: a row token never contains a space.
+  const enName = (k: number) => ` EN${k}`;
 
   if (mod.clock) {
     const c = mod.clock;
     const sync = splitRows(c.sync, nCols, flags, `${what} /clock`);
-    const asyn = splitRows(c.async, nCols, flags, `${what} /clock`);
+    const asynZ = splitRows(c.async, nCols, flags, `${what} /clock`);
+    const asyn = asynZ.map((r) => ({ ins: r.ins, outs: r.outs.map((t, j) => (isZ(t) ? `F${j}` : t)) }));
     const clkIndex = mod.inputs.indexOf(c.input);
     if (clkIndex < 0) throw new Error(`${what}: clock ${c.input} is not an input`);
     let clk = inNodes[clkIndex]!;
@@ -539,6 +560,12 @@ function flatten(chip: Chip, mod: Module, ports: Map<string, string>, em: Emitte
         emitFn(em, f, none, colNode, n);
         return n;
       });
+      if (asynZ.some((r) => isZ(r.outs[k]!))) {
+        const en = em.node(`${scope}F${k}_en`);
+        const rows = asynZ.map((r) => ({ ins: r.ins, outs: r.outs.map((t) => (isZ(t) ? "L" : "H")) }));
+        emitFn(em, { rows, out: k, columns, fallback: () => "1", fallbackReads: [], what: `${what} /clock enable` }, none, colNode, en);
+        flagEnables[k] = en;
+      }
       em.element(
         `${data} ${clk} ${pins[0]} ${pins[1]} ${flagNodes[k]} NULL ${em.model("d_dff", `clk_delay=${TINY} set_delay=${TINY} reset_delay=${TINY} ${delayParams()}`)}`,
       );
@@ -547,13 +574,32 @@ function flatten(chip: Chip, mod: Module, ports: Map<string, string>, em: Emitte
 
   if (mod.table) {
     const rows = splitRows(mod.table, nCols, mod.outputs.length, `${what} /table`);
+    // Enable columns: one per flag (only those with an enable are read).
+    const enColumns: Columns = { ...columns, extra: Array.from({ length: flags }, (_, k) => enName(k)) };
+    const enNode = (i: number) => (i >= nCols + mod.outputs.length ? flagEnables[i - nCols - mod.outputs.length]! : colNode(i));
     mod.outputs.forEach((out, o) => {
       const f: TableFn = { rows, out: o, columns, fallback: () => "X", fallbackReads: [], what: `${what} /table` };
       emitFn(em, f, none, colNode, net(out), mod.delays.get(out));
+      // Tri-state: 1 while the output drives. A row giving Z disables it;
+      // a row passing a flag on passes the flag's enable on.
+      const enToken = (t: string) => {
+        if (isZ(t)) return "L";
+        const k = /^~?F(\d+)$/i.exec(t)?.[1];
+        return k !== undefined && flagEnables[Number(k)] && !mod.inputs.includes(t) ? enName(Number(k)) : "H";
+      };
+      const enRows = rows.map((r) => ({ ins: r.ins, outs: r.outs.map(enToken) }));
+      if (enRows.some((r) => r.outs[o] !== "H")) {
+        const en = em.node(`${net(out)}_en`);
+        emitFn(em, { rows: enRows, out: o, columns: enColumns, fallback: () => "1", fallbackReads: [], what: `${what} /table enable` }, none, enNode, en, mod.zDelays.get(out) ?? mod.delays.get(out));
+        em.enables.set(net(out), en);
+      }
     });
   } else if (mod.clock && mod.outputs.length === flags) {
     // No output table: the outputs are the flags.
-    mod.outputs.forEach((out, k) => em.element(`${flagNodes[k]} ${net(out)} ${em.model("d_buffer", delayParams(mod.delays.get(out)))}`));
+    mod.outputs.forEach((out, k) => {
+      em.element(`${flagNodes[k]} ${net(out)} ${em.model("d_buffer", delayParams(mod.delays.get(out)))}`);
+      if (flagEnables[k]) em.enables.set(net(out), flagEnables[k]!);
+    });
   } else if (mod.clock) {
     throw new Error(`${what}: clocked module without an output /table`);
   }
@@ -565,6 +611,11 @@ export interface DChip {
   pins: number;
   inputs: number;
   outputs: number;
+  /**
+   * Tri-state outputs (indexes into the outputs): each has an enable pin,
+   * 1 while it drives, after the outputs in the same order.
+   */
+  enables: number[];
 }
 
 /**
@@ -586,9 +637,21 @@ export function dchipSubckt(name: string, modelText: string): DChip & { text: st
     portNodes.push(n);
   }
   flatten(chip, chip.top, ports, em, "", 0);
+  // Tri-state outputs get an enable pin (through any delaying buffer).
+  const enables: number[] = [];
+  chip.top.outputs.forEach((p, j) => {
+    const node = ports.get(p)!;
+    const pre = em.aliases.get(node);
+    const en = em.enables.get(node) ?? (pre ? em.enables.get(pre) : undefined);
+    if (!en) return;
+    const port = em.reserve(`${p}_en`);
+    em.element(`${en} ${port} ${em.model("d_buffer", delayParams())}`);
+    portNodes.push(port);
+    enables.push(j);
+  });
   const header = `* Multisim d_chip ${name}, translated: ${chip.top.inputs.join(" ")} -> ${chip.top.outputs.join(" ")}`;
   const text = [header, `.subckt ${safe} ${portNodes.join(" ")}`, ...em.lines, ...em.modelLines(), `.ends ${safe}`].join("\n");
-  return { name: safe, pins: portNodes.length, inputs: chip.top.inputs.length, outputs: chip.top.outputs.length, text };
+  return { name: safe, pins: portNodes.length, inputs: chip.top.inputs.length, outputs: chip.top.outputs.length, enables, text };
 }
 
 /**
@@ -609,7 +672,7 @@ export function translateDChips(text: string): { text: string; chips: Map<string
   let out = src.replace(re, (whole, name: string) => {
     try {
       const sub = dchipSubckt(name, whole);
-      const chip: DChip = { name: sub.name, pins: sub.pins, inputs: sub.inputs, outputs: sub.outputs };
+      const chip: DChip = { name: sub.name, pins: sub.pins, inputs: sub.inputs, outputs: sub.outputs, enables: sub.enables };
       chips.set(name.toLowerCase(), chip);
       chips.set(sub.name.toLowerCase(), chip);
       generated.push(sub.text);
@@ -630,11 +693,12 @@ export function translateDChips(text: string): { text: string; chips: Map<string
  * (an IC variant's VCC / GND at the end of the outputs, an open-collector
  * part's outputs read back at the end of the inputs); the chip never reads
  * them, so trailing extras are dropped. Too few nodes is an error.
+ * Tri-state outputs' enable nodes are added to `enables`.
  */
-export function rewriteDChipInstances(text: string, chips: ReadonlyMap<string, DChip>, errors: string[] = []): string {
+export function rewriteDChipInstances(text: string, chips: ReadonlyMap<string, DChip>, errors: string[] = [], enables?: Set<string>): string {
   // Instance lines may continue with `+`.
   const joined = text.replace(/\r\n?/g, "\n").replace(/\n[ \t]*\+/g, " ");
-  return joined.replace(/^([ \t]*)(a\S*)[ \t]+\[([^\]]*)\][ \t]*\[([^\]]*)\][ \t]+(\S+)[ \t]*$/gim, (whole, indent: string, inst: string, ins: string, outs: string, model: string) => {
+  return joined.replace(/^([ \t]*)(a\S*)[ \t]+\[([^\]]*)\][ \t]*\[([^\]]*)\][ \t]*(\S+)[ \t]*$/gim, (whole, indent: string, inst: string, ins: string, outs: string, model: string) => {
     const chip = chips.get(model.toLowerCase());
     if (!chip) return whole;
     const list = (s: string) => s.trim().split(/\s+/).filter(Boolean);
@@ -644,6 +708,9 @@ export function rewriteDChipInstances(text: string, chips: ReadonlyMap<string, D
       errors.push(`${inst}: ${i.length} inputs / ${o.length} outputs for d_chip ${model}, which has ${chip.inputs} / ${chip.outputs}`);
       return whole;
     }
-    return `${indent}x${inst} ${[...i.slice(0, chip.inputs), ...o.slice(0, chip.outputs)].join(" ")} ${chip.name}`;
+    // A tri-state output's enable: `<its node>_en` (the pin bridge reads it).
+    const en = chip.enables.map((j) => `${o[j]}_en`);
+    for (const n of en) enables?.add(n);
+    return `${indent}x${inst} ${[...i.slice(0, chip.inputs), ...o.slice(0, chip.outputs), ...en].join(" ")} ${chip.name}`;
   });
 }
