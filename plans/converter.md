@@ -302,10 +302,15 @@ private.** Public repo https://github.com/cinderblock/multisim2kicad (created
 typecheck, test, build, Node run of the CLI on the samples) is green.
 npm: `publish.yml` publishes on `v*` tags via trusted publishing with
 provenance; `scripts/guard-publish.ts` refuses local publishes except the
-`0.0.0` name claim. Remaining: claim `multisim2kicad` on npm with the `0.0.0`
-placeholder (needs the user's npm auth; placeholder package prepared in
-the session scratchpad), the user configures the trusted publisher, then
-bump to `0.1.0` and push the tag.
+`0.0.0` name claim. Name claimed 2026-11-13 8:24 PM PST (04:24Z on the
+14th) by the user's CLI publish of the `0.0.0` placeholder. npm now stages
+new publishes: the registry shows a `0.0.0-stage` stub ("awaiting a staged
+release") while the real `0.0.0` is processed; the name is held either way.
+Gotchas: npm's web-login and publish-2FA links expire in about 5 minutes, so
+relaying them through chat kept timing out; the user ran `npm login` and
+`npm publish` in their own terminal. Remaining: the user configures the
+trusted publisher (expires if no publish within 2 days), then bump to
+`0.1.0`, push the tag, and verify provenance.
 
 What is public: code, plans, and `samples/Design1*` / `Temp` (the user's
 own toy designs, committed by the user at scaffold time; they contain
