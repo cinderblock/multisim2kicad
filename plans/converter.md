@@ -1042,14 +1042,17 @@ hierarchy, connectors), since those are what make an output useless today.
       Test harness note: a hand-made instance must carry the lib's fields
       (KiCad reads Sim.* from the instance, as the GUI copies them).
 - [x] (2026-11-14) **Master DB with SPICE:** 54,441 of 57,101 symbols get
-      a model, 155 family `.lib`s (60 MB), 95 s.
+      a model, 155 family `.lib`s (60 MB), 95 s. (Superseded: that count
+      predates the code-model allow-list; at `78d34a6` it is 52,127. See
+      the d_chip entry for the current number.)
 - [x] (2026-11-14) **Digital parts.** Templates use
       `%tNAME?%t:d%t;NAME` (`r` prefix for bidirectional) = the digital
       side of pin NAME. Each digital pin has an interface model: design
       `CiPort` strings[0][3] id, [0][5] text, [1][5] template; DB
       `Pin_Type` `D:INPUT:TTL_ALSRCV` -> `SYS_MODEL_PIN` (TEMPLATE, DATA).
       Pin-model templates: `%t1` = the pin, `%t2` = digital side, `%t3` =
-      tri-state control (no source; left internal), `%tVCC/%tGND/...` =
+      the pin read back (`r` prefix; corrected 2026-11-14, was taken for a
+      tri-state control), `%tVCC/%tGND/...` =
       the part's supply pins. Their text has `*#L1` (ideal XSPICE
       `adc_bridge`/`dac_bridge`) and `*#L2` (Multisim-only
       `adc_bridge_real`, `digital_dc_load`) blocks: keep L1. Gates use
@@ -1057,8 +1060,8 @@ hierarchy, connectors), since those are what make an output useless today.
       `d_chip` (Multisim's behavioural logic language: `/module`, `/table`,
       `/instance` in a `behaviour=` string; 1,068 master-DB models, e.g.
       74LS85) and `d_vhdl` (58): parts using a model type outside an
-      ngspice allow-list are excluded with a warning. Translating `d_chip`
-      to `d_lut`/gates is a possible later project.
+      ngspice allow-list are excluded with a warning. (`d_chip`: done, see
+      below.)
 - [x] (2026-11-14) **KiCad reading quirks:** a wrapper whose nodes are
       numeric (`.subckt EW_J1 3 1 2`) got the wrong node count in KiCad's
       netlist (2 of 3) -> wrapper nodes never start with a digit (`t1`);
@@ -1092,6 +1095,66 @@ hierarchy, connectors), since those are what make an output useless today.
       **Full sweep at `2b85e68`: 172 ok / 23 op-failed / 4 parse errors /
       1 unknown** (parse errors: DCMotorDriveCloseLoop, VectorControlPMSM,
       BuckConverter thermal, S-DomainFunctions).
+- [x] (2026-11-14) **`d_chip` -> XSPICE** (`src/parse/dchip.ts`, user
+      said "pick your favorite and implement"). Language, from the 968
+      master-DB models: `/inputs /outputs /wires /module../endmodule`
+      (modules nest; names global) `/instance M args` (module inputs then
+      outputs, positional), `/table N` rows (first match wins; input
+      values L/H/X one char per column, so `HHLL` is 4 columns; output
+      values L/H/X/Z, an input name or `~name`, `Fk`/`~Fk`, `F+k`/`F-k` =
+      bit k of the flags as a number +/- 1, F0 lowest, and an output's own
+      name = hold it (4511 latch)), `/clock CLK +|-|X flags sync async`
+      (sync rows on the edge, no match = hold; async rows level-sensitive;
+      `X` = no clock, async rows only; columns = inputs then flags),
+      `/delay`, `/conditional_delay` (events LH/HL/ZH/ZL/HZ/LZ),
+      `/constraint` (timing checks), `*+` = commented-out row. Compiled
+      to: `d_lut` per output over the columns it really reads (first input
+      = lowest index bit, verified), wider than 10 columns split Shannon-
+      style on the column whose halves read fewest (74150 splits on its
+      selects), `d_dff` per flag (data = sync `d_lut`, set / reset = async
+      `d_lut`s, `-` edge via `d_inverter`, `X` clock tied low), modules
+      flattened, each output's slowest delay on its `d_lut` (or a
+      `d_buffer` for outputs driven by instances), 1 ps elsewhere. The
+      `.model x d_chip` becomes `.subckt x <inputs> <outputs>` (moved to
+      the top level when inside a vendor `.subckt`) and the template's
+      `a.. [ins] [outs] x` becomes `xa.. ins outs x`; trailing nodes the
+      chip doesn't declare (an IC variant's VCC/GND, an open-collector
+      part's read-back pins: 236 master-DB parts) are dropped. **967 of
+      968 models compile** (74HC126_2 is broken in NI's data: instances of
+      a module it never defines). **Verified in KiCad's ngspice
+      (transient, `scratchpad/spice/dchip/tb.py`):** 74LS161 counts 0-15,
+      RCO at 15, wraps; 74LS74 D/clear; 74LS85 >, =, <; 74LS138 all 8
+      outputs; 74150 16:1 mux; 4511 latch holds then follows; 74LS47 BCD
+      to segments; 40192 BCD up/down with carry/borrow and wrap. NI's
+      DigitalCounter sample (74LS191 + 74LS85) through `kicad-cli`'s
+      netlist counts 1..12 on its 1 kHz clock (with `~LOAD` tied high; as
+      drawn it is open). Master DB: 338 74LS/74/74HC/4000 chips placed
+      from the converted library all load through KiCad into ngspice.
+      Same pass: Multisim's VHDL-family bridges `a2vhdl`/`vhdl2a` =
+      `adc_bridge`/`dac_bridge` (same parameters); all-digit model names
+      (`7400`) get an `m` prefix (ngspice read `7400` on an `a` line as a
+      number: "unable to find definition of model 7400"; a bug in master-DB
+      output before this); one pin bridge per pin with `d_` -> node 2 and
+      `r_` -> node 3 (7447's open-collector outputs named both and got two
+      bridges: "device already exists"). **Master DB: 53,839 of 57,101
+      symbols simulate** (52,127 at `78d34a6`).
+      Findings: an undriven XSPICE digital node reads 0, so an open input
+      reads low (same as the converted floating pin; Multisim is XSPICE,
+      so presumably the same there): NI's DecimalCounter/DigitalCounter
+      leave `~LOAD` open and load instead of counting. ngspice's
+      `dac_bridge` *holds* its level on a high-Z input (a `d_lut` `Z`
+      keeps the state, drops the strength; a `d_buffer` in front doesn't
+      help), so Multisim's `dac_hiz` (tri-state sense) has no equivalent:
+      336 + 102 (`vhdl2hiz`) parts with tri-state/bidirectional pins stay
+      excluded. NI sweep: COMM and INOUT (Ferromagnetic Detector) went from
+      ok to op-failed once their 74HC139/153 simulate (DC-floating MAX222
+      charge-pump nets); both solve with `.options rshunt=1e9`.
+      Harness gotcha: `${KIPRJMOD}` in `Sim.Library` needs a `.kicad_pro`
+      beside the schematic, or every model is "not found".
+- [ ] Tri-state digital pins: export each Z-capable `d_chip` output's
+      enable as an extra subcircuit port and drive the pin model's switch
+      from it (replacing `dac_hiz`), so 74xx bus buffers (244, 245, 373,
+      ...) simulate. Needs the pin-model instance rewritten per pin.
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.

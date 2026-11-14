@@ -27,6 +27,7 @@
 import type { SchematicSheet, SchematicSymbol, SimSpec } from "../ir/types.ts";
 import type { EwElement } from "./doc.ts";
 import { ciCollStrings, collValues, portPinNumbers } from "../ref/ci-netlist.ts";
+import { type DChip, rewriteDChipInstances, translateDChips } from "./dchip.ts";
 
 export interface SpiceDesign {
   /** Sim spec per `CiComponent` id. */
@@ -43,6 +44,10 @@ export interface ModelDef {
   /** Subcircuit node names, in order. */
   nodes: string[];
   text: string;
+  /** The model was a Multisim `d_chip`, now this subcircuit (instances need rewriting). */
+  dchip?: DChip;
+  /** Why parts of the text could not be translated (a `d_chip` left as it was). */
+  issues?: string[];
 }
 
 /**
@@ -168,22 +173,33 @@ export function ngspiceDialect(text: string): string {
       // named exactly `VT` for something else ("no such function v.x1.v_").
       .replace(/^([ \t]*)VT(?=[ \t])/gim, "$1VTx")
       .replace(/\bI\([ \t]*VT[ \t]*\)/gi, "I(VTx)")
+      // Multisim's VHDL-family pin bridges take exactly the parameters of
+      // XSPICE's adc_bridge / dac_bridge. (Its tri-state sense `dac_hiz` has
+      // no equivalent: an ngspice dac_bridge holds its level on a high-Z
+      // input instead of reporting it.)
+      .replace(/^([ \t]*\.model[ \t]+\S+[ \t]+\(?[ \t]*)(a2vhdl|vhdl2a)\b/gim, (_, head: string, type: string) =>
+        `${head}${type.toLowerCase() === "a2vhdl" ? "adc_bridge" : "dac_bridge"}`,
+      )
   );
 }
 
 /** A model's definition: find its `.SUBCKT` / `.MODEL` head and rename it SPICE-safe. */
-export function modelDef(localName: string, text: string): ModelDef | undefined {
+export function modelDef(localName: string, textIn: string): ModelDef | undefined {
+  // Multisim's `d_chip` logic becomes XSPICE subcircuits first.
+  const dchips = translateDChips(textIn);
+  const text = dchips.text;
   const lines = logicalLines(text);
-  const want = localName.toLowerCase();
+  const want = spiceName(localName).toLowerCase();
   const heads = lines
     .map((l) => /^\s*\.(subckt|model)\s+(\S+)(.*)$/i.exec(l))
     .filter((m): m is RegExpExecArray => !!m);
   // The head naming this model; otherwise the first top-level one.
-  const head = heads.find((m) => m[2]!.toLowerCase() === want) ?? heads[0];
+  const head = heads.find((m) => spiceName(m[2]!).toLowerCase() === want) ?? heads[0];
   if (!head) return undefined;
   const kind = head[1]!.toLowerCase() as ModelDef["kind"];
   const original = head[2]!;
-  const name = spiceName(original);
+  // An all-digit name (NI's `7400` NAND) reads as a number on an XSPICE line.
+  const name = /^\d+$/.test(spiceName(original)) ? `m${spiceName(original)}` : spiceName(original);
   const nodes =
     kind === "subckt"
       ? head[3]!
@@ -201,7 +217,8 @@ export function modelDef(localName: string, text: string): ModelDef | undefined 
   const renamed = ngspiceDialect(text.replace(/\r\n?/g, "\n"))
     .replace(new RegExp(`^([ \\t]*\\.${kind}[ \\t]+)${escaped}(?=\\s|\\(|$)`, "gim"), `$1${name}`)
     .replace(new RegExp(`^([ \\t]*\\.ends[ \\t]+)${escaped}(?=\\s|$)`, "gim"), (m, head: string) => (kind === "subckt" ? `${head}${name}` : m));
-  return { name, kind, nodes, text: renamed.trim() };
+  const dchip = kind === "subckt" ? dchips.chips.get(original.toLowerCase()) : undefined;
+  return { name, kind, nodes, text: renamed.trim(), ...(dchip && { dchip: { ...dchip, name } }), ...(dchips.errors.length > 0 && { issues: dchips.errors }) };
 }
 
 const truthy = (v: string | undefined): boolean => {
@@ -517,10 +534,11 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
 
   // Code models ngspice doesn't have (Multisim's `d_chip` logic language,
   // `d_vhdl`, ...): one unknown model type fails the whole simulation.
-  const modelTexts = sections.flatMap((s) => [s.template, s.model?.text ?? "", ...[...(s.pinModels?.values() ?? [])].map((p) => p.model.text)]);
+  const modelTexts = sections.flatMap((s) => [ngspiceDialect(s.template), s.model?.text ?? "", ...[...(s.pinModels?.values() ?? [])].map((p) => p.model.text)]);
   const foreign = unsupportedModelType(modelTexts.join("\n"));
   if (foreign) {
-    lib.warnings.push(`${ref}: model type ${foreign} is Multisim-only; excluded from simulation`);
+    const why = sections.flatMap((s) => s.model?.issues ?? []);
+    lib.warnings.push(`${ref}: model type ${foreign} is Multisim-only${why.length ? ` (${why.join("; ")})` : ""}; excluded from simulation`);
     return { exclude: true };
   }
 
@@ -542,6 +560,7 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   // Every pin a section names gets a node, even if its template skips it.
   for (const s of sections) for (const [term, pin] of s.pins) nodeFor(pin, term);
   const missing: string[] = [];
+  const chipErrors: string[] = [];
   const noInterface = new Set<string>();
   const bridged = new Set<string>();
   const lines = sections.map((s) => {
@@ -553,11 +572,13 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
     // Digital pins: the gate model sees `d_<node>`; the pin's interface
     // model (an A/D or D/A bridge) joins it to the pin.
     const bridges: string[] = [];
+    // One bridge per pin: `d_` is what the logic drives, `r_` what it reads
+    // back (a bidirectional or open-collector pin names both).
     const digital = (term: string, prefix: string): string => {
       const analog = node(term);
       const dnode = `${prefix}_${analog ?? spiceName(term)}`;
-      if (!analog || bridged.has(dnode)) return dnode;
-      bridged.add(dnode);
+      if (!analog || bridged.has(analog)) return dnode;
+      bridged.add(analog);
       const pm = s.pinModels?.get(term);
       if (!pm) {
         noInterface.add(term);
@@ -569,9 +590,9 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
           ref: `${spiceName(ref)}_${spiceName(term)}`,
           params: [],
           model: pm.model.name,
-          // 1 = the pin, 2 = the digital side, 3 = a tri-state control
-          // (no source for it here: left internal), else a supply pin.
-          node: (t) => (t === "1" ? analog : t === "2" ? dnode : t === "3" ? `${dnode}_ctl` : (node(t) ?? "0")),
+          // 1 = the pin, 2 = the digital side the logic drives, 3 = the pin
+          // read back (a bidirectional model's A/D output), else a supply pin.
+          node: (t) => (t === "1" ? analog : t === "2" ? `d_${analog}` : t === "3" ? `r_${analog}` : (node(t) ?? "0")),
         }),
       );
       return dnode;
@@ -588,8 +609,14 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
     })
       // Multisim's inline arithmetic `<50*0.01/1k>` is ngspice's `{...}`.
       .replace(/<([0-9.][^<>\n]*)>/g, "{$1}");
-    return ngspiceDialect(staticPot([main, ...bridges].join("\n")));
+    // A translated `d_chip` is a subcircuit now: `a... [ins] [outs] chip` -> `x...`.
+    const call = s.model?.dchip ? rewriteDChipInstances(main, new Map([[s.model.name.toLowerCase(), s.model.dchip]]), chipErrors) : main;
+    return ngspiceDialect(staticPot([call, ...bridges].join("\n")));
   });
+  if (chipErrors.length) {
+    lib.warnings.push(`${ref}: ${chipErrors.join("; ")}; excluded from simulation`);
+    return { exclude: true };
+  }
   if (noInterface.size) lib.warnings.push(`${ref}: digital pins ${[...noInterface].join(", ")} have no interface model; left unbridged`);
   if (missing.length) lib.warnings.push(`${ref}: template terminals ${[...new Set(missing)].join(", ")} have no pin; left as internal nodes`);
   const pinList = [...nodeOfPin.keys()];

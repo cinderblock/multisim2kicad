@@ -103,11 +103,22 @@ map its pins to the model's nodes in Multisim's order.
   (fixed at its saved setting).
 - Digital parts simulate with ngspice's XSPICE gates. Each digital pin
   gets the ideal analog/digital bridge from its Multisim interface model.
+- Multisim's `d_chip` behavioural logic (most 74xx and 4000-series MSI
+  parts: counters, decoders, comparators, registers, latches, multiplexers)
+  is compiled into an XSPICE subcircuit. Each table output becomes a
+  `d_lut` truth table, and each state flag a `d_dff` with its clocked and
+  asynchronous rows. The 74LS161, 74LS74, 74LS85, 74LS138, 74LS47, 74150,
+  4511 and 40192 were checked against their datasheets in ngspice. Timing is
+  simplified: each output gets its slowest listed delay, and setup / hold
+  checks are dropped.
 - Circuit parameters become a `.param` simulator directive on their sheet.
   Part values that use them stay expressions.
 - Parts whose model needs something ngspice doesn't have are excluded,
-  with a warning: `chirp()` sources, Multisim's `d_chip` behavioural logic
-  (some 74xx MSI parts), `d_vhdl`, and other Multisim-only code models.
+  with a warning: `chirp()` sources, tri-state and bidirectional digital
+  pins (Multisim's `dac_hiz` senses high-Z, which ngspice's bridges can't),
+  `d_vhdl`, and other Multisim-only code models.
+- A digital input left unconnected reads low, as in XSPICE (some of NI's
+  counter demos leave `~LOAD` open, so they load instead of counting).
 
 Checked on NI's own Multisim 13 sample circuits: 172 of 200 solve their
 operating point in KiCad's ngspice as converted. 23 load but don't reach an

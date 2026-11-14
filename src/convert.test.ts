@@ -12,7 +12,8 @@ import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
-import { circuitParams, expandTemplate, inlineResistorModels, modelDef, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
+import { circuitParams, expandTemplate, inlineResistorModels, modelDef, ngspiceDialect, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
+import { dchipSubckt, parseChip, rewriteDChipInstances, translateDChips } from "./parse/dchip.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
@@ -651,5 +652,109 @@ describe("spice", () => {
     expect(s.library).toContain(".SUBCKT FET_X__1 DRAIN GATE SOURCE");
     expect(s.library).toContain(".subckt EW_VCC VCC\nVCCVCC  VCC 0 dc 5\n.ends EW_VCC");
     expect(s.warnings.some((w) => w.includes("chirp"))).toBe(true);
+  });
+});
+
+describe("d_chip (Multisim behavioural logic)", () => {
+  const chip = (name: string, body: string[]) => `.MODEL ${name} d_chip ( behaviour= "\n${body.map((l) => `+${l}`).join("\n")}\n+")`;
+
+  test("a table output becomes a d_lut over the columns it reads (first = lowest index bit)", () => {
+    const { text, pins } = dchipSubckt("AND2X", chip("AND2X", ["/inputs A B C", "/outputs Y", "/table 2", " H H X  H", " X X X  L", "/delay 1", " A Y 10n 12n"]));
+    expect(pins).toBe(4);
+    expect(text).toContain(".subckt AND2X A B C Y");
+    expect(text).toContain("a1 [A B] Y AND2X_lut0");
+    expect(text).toContain('.model AND2X_lut0 d_lut(table_values="0001" rise_delay=1e-8 fall_delay=1.2e-8)');
+  });
+
+  test("clocked modules: one d_dff per flag, synchronous rows as data, asynchronous rows as set / reset; F+k counts", () => {
+    const { text } = dchipSubckt(
+      "CNT2",
+      chip("CNT2", ["/inputs CLK ~CLR", "/outputs Q0 Q1", "/clock CLK + 2 1 2", " X X XX F+0 F+1", " X L XX L L", " X X XX F0 F1", "/table 1", " X X XX F0 F1"]),
+    );
+    expect(text).toContain("a1 [n_F0] n_F0_next CNT2_lut0");
+    expect(text).toContain('CNT2_lut0 d_lut(table_values="10"');
+    expect(text).toMatch(/\[_CLR\] n_F0_reset CNT2_lut\d/);
+    expect(text).toMatch(/n_F0_next CLK NULL n_F0_reset n_F0 NULL CNT2_dff\d/);
+    expect(text).toMatch(/\[n_F0 n_F1\] n_F1_next CNT2_lut\d/);
+    expect(text).toContain('table_values="0110"');
+  });
+
+  test("an output column naming an output holds it (a latch)", () => {
+    const { text } = dchipSubckt("LATCH", chip("LATCH", ["/inputs EN D", "/outputs Q", "/table 2", " H X D", " L X Q"]));
+    expect(text).toContain("a1 [EN D Q] Q LATCH_lut0");
+    expect(text).toContain('table_values="00011011"');
+  });
+
+  test("wide tables split on their select lines; no d_lut over more than 10 inputs", () => {
+    const rows = Array.from({ length: 16 }, (_, s) => ` ${[3, 2, 1, 0].map((b) => ((s >> b) & 1 ? "H" : "L")).join(" ")} ${"X".repeat(16)} E${s}`);
+    const data = Array.from({ length: 16 }, (_, i) => `E${i}`).join(" ");
+    const { text } = dchipSubckt("MUX16", chip("MUX16", [`/inputs D C B A ${data}`, "/outputs W", "/table 16", ...rows]));
+    const widths = [...text.matchAll(/^a\d+ \[([^\]]*)\]/gm)].map((m) => m[1]!.split(" ").length);
+    expect(Math.max(...widths)).toBeLessThanOrEqual(10);
+    expect(text).toContain('table_values="01010011"'); // x ? f1 : f0
+  });
+
+  test("modules flatten; a d_chip inside a subcircuit moves to the top level and its instance becomes a call", () => {
+    const src = [
+      ".SUBCKT OPTO 1 2",
+      "aU [d1]",
+      "+ [d2] LOGIC",
+      chip("LOGIC", ["/inputs A", "/outputs Y", "/module INV", "/inputs I", "/outputs O", "/table 2", " H L", " L H", "/endmodule", "/instance INV A Y"]),
+      ".ENDS",
+    ].join("\n");
+    const r = translateDChips(src);
+    expect(r.errors).toEqual([]);
+    expect(r.text.indexOf(".subckt LOGIC A Y")).toBeLessThan(r.text.indexOf(".SUBCKT OPTO"));
+    expect(r.text).toContain("a1 [A] Y LOGIC_lut0");
+    expect(r.text).toContain("xaU d1 d2 LOGIC");
+    expect(r.text).not.toMatch(/d_chip \(/);
+    expect(parseChip(chip("X", ["/inputs A", "/outputs Y", "/module M", "/module N", "/endmodule", "/endmodule"])).modules.size).toBe(2);
+  });
+
+  test("parts with a d_chip model simulate through a subcircuit call; untranslatable ones say why", () => {
+    const lib = new SpiceLibrary();
+    const pins = new Map([["A", "1"], ["Y", "2"]]);
+    const inv = modelDef("INV1", chip("INV1", ["/inputs A", "/outputs Y", "/table 2", " H L", " L H"]))!;
+    expect(inv).toMatchObject({ kind: "subckt", name: "INV1", nodes: ["A", "Y"] });
+    expect(simSpec("U3", [{ template: "a%p [%tA?%t:d%t;A]\n+ [%tY?%t:d%t;Y] %m", params: [], model: inv, pins }], lib)).toMatchObject({ device: "SUBCKT" });
+    expect(lib.text("t")).toContain("xaU3 d_A d_Y INV1");
+    const bad = modelDef("BAD", chip("BAD", ["/inputs A", "/outputs Y", "/frobnicate"]))!;
+    expect(simSpec("U4", [{ template: "a%p [%tA?%t:d%t;A] [%tY?%t:d%t;Y] %m", params: [], model: bad, pins }], lib)).toEqual({ exclude: true });
+    expect(lib.warnings.some((w) => w.startsWith("U4: model type d_chip") && w.includes("unknown directive /frobnicate"))).toBe(true);
+  });
+
+  test("trailing pins the chip doesn't declare (VCC / GND, read-back) are dropped; too few is an error", () => {
+    const chips = new Map([["ch", { name: "CH", pins: 3, inputs: 2, outputs: 1 }]]);
+    expect(rewriteDChipInstances("aU [a b r_y] [y VCC GND] CH", chips)).toBe("xaU a b y CH");
+    const errors: string[] = [];
+    expect(rewriteDChipInstances("aU [a] [y] CH", chips, errors)).toBe("aU [a] [y] CH");
+    expect(errors[0]).toContain("1 inputs / 1 outputs for d_chip CH, which has 2 / 1");
+  });
+});
+
+describe("spice: digital details", () => {
+  test("an all-digit model name gets a prefix (ngspice reads `7400` as a number)", () => {
+    const def = modelDef("7400", ".MODEL 7400 d_nand ( rise_delay = 22n)")!;
+    expect(def.name).toBe("m7400");
+    expect(def.text).toBe(".MODEL m7400 d_nand ( rise_delay = 22n)");
+  });
+
+  test("Multisim's VHDL-family bridges are XSPICE's adc / dac bridges", () => {
+    expect(ngspiceDialect(".MODEL ADC a2vhdl (in_low= 0.8 in_high = 2.0)\n.MODEL DAC vhdl2a (out_low= 0 out_high= 4.5)")).toBe(
+      ".MODEL ADC adc_bridge (in_low= 0.8 in_high = 2.0)\n.MODEL DAC dac_bridge (out_low= 0 out_high= 4.5)",
+    );
+    expect(unsupportedModelType(".model C dac_hiz (out_enabled=5)")).toBe("dac_hiz");
+  });
+
+  test("a pin named as drive (d) and read-back (r) gets one bridge with both", () => {
+    const lib = new SpiceLibrary();
+    const bidi = pinModelDef("BIDI", ".SUBCKT BIDI 1 2 3\naA [1] [3] A\naD [2] [1] D\n.MODEL A adc_bridge(in_low=1 in_high=1)\n.MODEL D dac_bridge(out_low=0 out_high=5)\n.ENDS")!;
+    const gate = modelDef("BUF", ".MODEL BUF d_buffer")!;
+    const pins = new Map([["A", "1"], ["Y", "2"]]);
+    simSpec("U9", [{ template: "a%p %tY?%t:r%t;Y %tY?%t:d%t;Y %m", params: [], model: gate, pins, pinModels: new Map([["Y", { model: bidi, template: "x%p %t1 %t2 %t3 %m" }]]) }], lib);
+    const text = lib.text("t");
+    expect(text).toContain("aU9 r_Y d_Y BUF");
+    expect(text.match(/^xU9_Y /gm)).toEqual(["xU9_Y "]);
+    expect(text).toContain("xU9_Y Y d_Y r_Y BIDI");
   });
 });
