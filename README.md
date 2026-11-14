@@ -109,10 +109,11 @@ map its pins to the model's nodes in Multisim's order.
   with a warning: `chirp()` sources, Multisim's `d_chip` behavioural logic
   (some 74xx MSI parts), `d_vhdl`, and other Multisim-only code models.
 
-Checked on NI's own Multisim 13 sample circuits: about 170 of 200 solve
-their operating point in KiCad's ngspice as converted. Most of the rest
-are built for transient analysis (oscillators, converters), and six use
-syntax ngspice lacks (PSpice `LAPLACE` sources, for one).
+Checked on NI's own Multisim 13 sample circuits: 172 of 200 solve their
+operating point in KiCad's ngspice as converted. 23 load but don't reach an
+operating point (most are built for transient analysis: oscillators,
+converters). 4 use syntax ngspice lacks (PSpice `LAPLACE` sources, for
+one).
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).

@@ -1089,6 +1089,9 @@ hierarchy, connectors), since those are what make an output useless today.
       samples, `pwl` with circuit-parameter times, an XSPICE `tranmod`.
       Op failures are mostly samples built for transient analyses
       (oscillators, converters) or with unmodelled parts.
+      **Full sweep at `2b85e68`: 172 ok / 23 op-failed / 4 parse errors /
+      1 unknown** (parse errors: DCMotorDriveCloseLoop, VectorControlPMSM,
+      BuckConverter thermal, S-DomainFunctions).
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.
