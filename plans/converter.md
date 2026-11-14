@@ -1179,7 +1179,8 @@ hierarchy, connectors), since those are what make an output useless today.
       subcircuit call; now an inverter makes `d_A1_n`. A template with no
       space in `]%m` (40244) slipped past the instance rewrite. 573
       74LS/74/74F/74ALS/74S/74HC/4000/40xxx chips from the converted
-      library load through KiCad into ngspice. **Master DB: 54,275 of
+      library load through KiCad into ngspice. NI sweep unchanged (170 / 25 /
+      4 / 1). **Master DB: 54,275 of
       57,101 symbols simulate.**
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
