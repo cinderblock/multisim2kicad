@@ -1041,6 +1041,31 @@ hierarchy, connectors), since those are what make an output useless today.
       parses (op of the unconnected bench doesn't converge, as expected).
       Test harness note: a hand-made instance must carry the lib's fields
       (KiCad reads Sim.* from the instance, as the GUI copies them).
+- [x] (2026-11-14) **Master DB with SPICE:** 54,441 of 57,101 symbols get
+      a model, 155 family `.lib`s (60 MB), 95 s.
+- [x] (2026-11-14) **Digital parts.** Templates use
+      `%tNAME?%t:d%t;NAME` (`r` prefix for bidirectional) = the digital
+      side of pin NAME. Each digital pin has an interface model: design
+      `CiPort` strings[0][3] id, [0][5] text, [1][5] template; DB
+      `Pin_Type` `D:INPUT:TTL_ALSRCV` -> `SYS_MODEL_PIN` (TEMPLATE, DATA).
+      Pin-model templates: `%t1` = the pin, `%t2` = digital side, `%t3` =
+      tri-state control (no source; left internal), `%tVCC/%tGND/...` =
+      the part's supply pins. Their text has `*#L1` (ideal XSPICE
+      `adc_bridge`/`dac_bridge`) and `*#L2` (Multisim-only
+      `adc_bridge_real`, `digital_dc_load`) blocks: keep L1. Gates use
+      standard XSPICE (`d_nand`, ...). **Not translatable (yet):**
+      `d_chip` (Multisim's behavioural logic language: `/module`, `/table`,
+      `/instance` in a `behaviour=` string; 1,068 master-DB models, e.g.
+      74LS85) and `d_vhdl` (58): parts using a model type outside an
+      ngspice allow-list are excluded with a warning. Translating `d_chip`
+      to `d_lut`/gates is a possible later project.
+- [x] (2026-11-14) **KiCad reading quirks:** a wrapper whose nodes are
+      numeric (`.subckt EW_J1 3 1 2`) got the wrong node count in KiCad's
+      netlist (2 of 3) -> wrapper nodes never start with a digit (`t1`);
+      nested `.subckt` blocks in templates are hoisted to the top level;
+      ports with no pad number use the pin name (as the drawing does).
+      Multisim's inline arithmetic `<50*0.01/1k>` -> `{...}`. NI's
+      DigitalCounter sample now solves in ngspice.
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.

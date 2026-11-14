@@ -36,7 +36,7 @@ export interface SpiceDesign {
   warnings: string[];
 }
 
-interface ModelDef {
+export interface ModelDef {
   /** Sanitised name used in the library. */
   name: string;
   kind: "subckt" | "model";
@@ -153,6 +153,8 @@ export function modelDef(localName: string, text: string): ModelDef | undefined 
   const nodes =
     kind === "subckt"
       ? head[3]!
+          // In-line comments (`; (+IN -IN V+ V- OUT)`, `$ ...`), then parameters.
+          .replace(/[;$].*$/, "")
           .replace(/\bparams:.*$/i, "")
           .trim()
           .split(/\s+/)
@@ -182,14 +184,27 @@ const truthy = (v: string | undefined): boolean => {
  */
 export function expandTemplate(
   template: string,
-  o: { ref: string; params: string[]; node: (terminal: string) => string | undefined; model?: string; missing?: (t: string) => void },
+  o: {
+    ref: string;
+    params: string[];
+    node: (terminal: string) => string | undefined;
+    /**
+     * `%tNAME?%t:d%t;NAME`: the digital side of pin NAME (`d`, or `r` for
+     * bidirectional pins), which Multisim bridges to the pin's analog node
+     * with the pin's interface model.
+     */
+    digital?: (terminal: string, prefix: string) => string;
+    model?: string;
+    missing?: (t: string) => void;
+  },
 ): string {
   const param = (i: string) => o.params[Number(i)] ?? "";
   const conditionals = template.replace(/%v(\d+)\?([\s\S]*?)%v:([\s\S]*?)%v;/g, (_, n: string, a: string, b: string) =>
     truthy(param(n)) ? a : b,
   );
   return conditionals
-    .replace(/%t(\S+)/g, (_, t: string) => {
+    .replace(/%t([^\s?]+)\?%t:([a-z]*)%t;[^\s\]]*/g, (_, t: string, prefix: string) => o.digital?.(t, prefix || "d") ?? `${prefix || "d"}_${spiceName(t)}`)
+    .replace(/%t([^\s\]]+)/g, (_, t: string) => {
       const n = o.node(t);
       if (n === undefined) o.missing?.(t);
       return n ?? t;
@@ -232,7 +247,32 @@ export function staticPot(lines: string): string {
   );
 }
 
-const R_TEMPLATE = /^r%p %t1 %t2 #1 vres%p /;
+/**
+ * `.MODEL` types ngspice (with KiCad's XSPICE code models) understands:
+ * SPICE devices, PSpice names its PSpice mode accepts, and the analog,
+ * digital, bridge and extra-device code models.
+ */
+const NGSPICE_MODEL_TYPES = new Set(
+  (
+    "r c l d npn pnp nmos pmos njf pjf nmf pmf sw csw ltra urc txl cpl vdmos res cap ind vswitch iswitch " +
+    "aswitch climit cmeter core d_dt divide gain hyst ilimit int limit lmeter mult multi_input_pwl oneshot pwl " +
+    "s_xfer sine slew square summer triangle file_source zener lcouple potentiometer delay " +
+    "d_and d_nand d_or d_nor d_xor d_xnor d_inverter d_buffer d_tristate d_open_c d_open_e d_pullup d_pulldown " +
+    "d_dff d_jkff d_tff d_srff d_dlatch d_srlatch d_state d_fsim d_osc d_source d_ram d_lut d_genlut d_pwm d_process " +
+    "adc_bridge dac_bridge d_to_real real_delay real_gain real_to_v"
+  ).split(" "),
+);
+
+/** The first `.MODEL` type in `text` that ngspice lacks, if any. */
+export function unsupportedModelType(text: string): string | undefined {
+  for (const m of text.matchAll(/^[ \t]*\.model[ \t]+\S+[ \t]+\(?[ \t]*([A-Za-z_][A-Za-z0-9_]*)/gim)) {
+    const type = m[1]!.toLowerCase();
+    if (!NGSPICE_MODEL_TYPES.has(type)) return type;
+  }
+  return undefined;
+}
+
+const R_TEMPLATE =/^r%p %t1 %t2 #1 vres%p /;
 const CL_TEMPLATE = /^([cl])%p %t1 %t2 #1 %v4\?IC=#5%v:%v;\s*$/;
 const SUBCKT_TEMPLATE = /^x%p(?:_\w+)?((?:\s+%t\S+)+)\s+%m\s*$/;
 
@@ -243,6 +283,46 @@ export interface SimSection {
   model?: ModelDef;
   /** Terminal name -> symbol pin number. */
   pins: Map<string, string>;
+  /** Digital pins: terminal name -> its interface (A/D, D/A bridge) model. */
+  pinModels?: Map<string, PinModel>;
+}
+
+/** A digital pin's interface model and the template that instantiates it. */
+export interface PinModel {
+  model: ModelDef;
+  template: string;
+}
+
+/**
+ * A pin interface model: Multisim keeps an ideal (`*#L1`, standard XSPICE
+ * `adc_bridge` / `dac_bridge`) and a real (`*#L2`, Multisim-only code
+ * models) variant in one text; ngspice gets the ideal one.
+ */
+export function pinModelDef(id: string, text: string): ModelDef | undefined {
+  const ideal = text.replace(/\r\n?/g, "\n").replace(/^\*#L2[^\n]*\n[\s\S]*?^\*#L2[^\n]*(\n|$)/gm, "");
+  return modelDef(id, ideal);
+}
+
+/** Split out top-level `.subckt ... .ends` blocks (with anything nested in them). */
+export function hoistSubckts(text: string): { body: string; blocks: string[] } {
+  const body: string[] = [];
+  const blocks: string[] = [];
+  let cur: string[] = [];
+  let depth = 0;
+  for (const line of text.split("\n")) {
+    if (/^\s*\.subckt\s/i.test(line)) depth++;
+    if (depth > 0) cur.push(line);
+    else body.push(line);
+    if (depth > 0 && /^\s*\.ends\b/i.test(line)) {
+      depth--;
+      if (depth === 0) {
+        blocks.push(cur.join("\n"));
+        cur = [];
+      }
+    }
+  }
+  if (cur.length) body.push(...cur); // unterminated: leave in place
+  return { body: body.join("\n"), blocks };
 }
 
 /** The models and wrapper subcircuits a design or library needs, deduplicated. */
@@ -259,8 +339,15 @@ export class SpiceLibrary {
     if (prev === undefined) this.models.set(m.name, m.text);
   }
 
-  /** A wrapper subcircuit around `lines`; identical bodies share one. */
-  wrapper(base: string, nodes: string[], lines: string, comment: string): string {
+  /**
+   * A wrapper subcircuit around `lines`; identical bodies share one.
+   * Subcircuits defined inside `lines` (templates that carry their own)
+   * move to the top level: KiCad's library reader misreads the outer
+   * subcircuit's pins when another is nested in it.
+   */
+  wrapper(base: string, nodes: string[], linesIn: string, comment: string): string {
+    const { body: lines, blocks } = hoistSubckts(linesIn);
+    for (const b of blocks) if (!this.texts.includes(b)) this.texts.push(b);
     const body = `${nodes.join(" ")}\n${lines}`;
     const known = this.wrappers.get(body);
     if (known) return known;
@@ -332,6 +419,15 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
     }
   }
 
+  // Code models ngspice doesn't have (Multisim's `d_chip` logic language,
+  // `d_vhdl`, ...): one unknown model type fails the whole simulation.
+  const modelTexts = sections.flatMap((s) => [s.template, s.model?.text ?? "", ...[...(s.pinModels?.values() ?? [])].map((p) => p.model.text)]);
+  const foreign = unsupportedModelType(modelTexts.join("\n"));
+  if (foreign) {
+    lib.warnings.push(`${ref}: model type ${foreign} is Multisim-only; excluded from simulation`);
+    return { exclude: true };
+  }
+
   // 3. Wrapper: Multisim's own netlist lines inside a subcircuit. One
   // section: nodes named after its terminals; several: after the pins.
   const nodeOfPin = new Map<string, string>();
@@ -339,7 +435,9 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   const nodeFor = (pin: string, terminal: string): string => {
     let n = nodeOfPin.get(pin);
     if (n) return n;
+    // Non-numeric: KiCad reads a numeric model pin name in Sim.Pins as an index.
     n = (sections.length === 1 ? spiceName(terminal) : `p${spiceName(pin)}`) || "n";
+    if (/^\d/.test(n)) n = `t${n}`;
     while (used.has(n.toLowerCase())) n += "_";
     used.add(n.toLowerCase());
     nodeOfPin.set(pin, n);
@@ -348,23 +446,53 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   // Every pin a section names gets a node, even if its template skips it.
   for (const s of sections) for (const [term, pin] of s.pins) nodeFor(pin, term);
   const missing: string[] = [];
+  const noInterface = new Set<string>();
+  const bridged = new Set<string>();
   const lines = sections.map((s) => {
     if (s.model) lib.useModel(s.model);
-    return ngspiceDialect(
-      staticPot(
-        expandTemplate(s.template.replace(/\r\n?/g, "\n").trim(), {
-          ref: spiceName(ref),
-          params: s.params,
-          model: s.model?.name,
-          node: (term) => {
-            const pin = s.pins.get(term);
-            return pin === undefined ? undefined : nodeFor(pin, term);
-          },
-          missing: (term) => missing.push(term),
+    const node = (term: string) => {
+      const pin = s.pins.get(term);
+      return pin === undefined ? undefined : nodeFor(pin, term);
+    };
+    // Digital pins: the gate model sees `d_<node>`; the pin's interface
+    // model (an A/D or D/A bridge) joins it to the pin.
+    const bridges: string[] = [];
+    const digital = (term: string, prefix: string): string => {
+      const analog = node(term);
+      const dnode = `${prefix}_${analog ?? spiceName(term)}`;
+      if (!analog || bridged.has(dnode)) return dnode;
+      bridged.add(dnode);
+      const pm = s.pinModels?.get(term);
+      if (!pm) {
+        noInterface.add(term);
+        return dnode;
+      }
+      lib.useModel(pm.model);
+      bridges.push(
+        expandTemplate(pm.template.replace(/\r\n?/g, "\n").trim(), {
+          ref: `${spiceName(ref)}_${spiceName(term)}`,
+          params: [],
+          model: pm.model.name,
+          // 1 = the pin, 2 = the digital side, 3 = a tri-state control
+          // (no source for it here: left internal), else a supply pin.
+          node: (t) => (t === "1" ? analog : t === "2" ? dnode : t === "3" ? `${dnode}_ctl` : (node(t) ?? "0")),
         }),
-      ),
-    );
+      );
+      return dnode;
+    };
+    const main = expandTemplate(s.template.replace(/\r\n?/g, "\n").trim(), {
+      ref: spiceName(ref),
+      params: s.params,
+      model: s.model?.name,
+      node,
+      digital,
+      missing: (term) => missing.push(term),
+    })
+      // Multisim's inline arithmetic `<50*0.01/1k>` is ngspice's `{...}`.
+      .replace(/<([0-9.][^<>\n]*)>/g, "{$1}");
+    return ngspiceDialect(staticPot([main, ...bridges].join("\n")));
   });
+  if (noInterface.size) lib.warnings.push(`${ref}: digital pins ${[...noInterface].join(", ")} have no interface model; left unbridged`);
   if (missing.length) lib.warnings.push(`${ref}: template terminals ${[...new Set(missing)].join(", ")} have no pin; left as internal nodes`);
   const pinList = [...nodeOfPin.keys()];
   const nodes = pinList.map((p) => nodeOfPin.get(p)!);
@@ -382,14 +510,31 @@ export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>
   const byComponent = new Map<string, SimSpec>();
 
   const ports = new Map<string, Map<string, string>>();
+  const pinModels = new Map<string, Map<string, PinModel>>();
+  const pinModelCache = new Map<string, ModelDef>();
   for (const { body } of items.get("CiPort") ?? []) {
     const comp = body.get("Component") ?? "";
     const terminal = body.str("LocalName");
-    const pad = portPinNumbers(body)[0];
+    // No pad number (instruments, interactive parts): the KiCad pin is numbered
+    // by its name, as for the drawing.
+    const pad = portPinNumbers(body)[0] ?? (terminal || undefined);
     if (!terminal || !pad) continue;
     const m = ports.get(comp) ?? new Map<string, string>();
     if (!m.has(terminal)) m.set(terminal, pad);
     ports.set(comp, m);
+    // A digital pin carries its interface model: name, text, template.
+    const [a, b] = ciCollStrings(body).map(collValues);
+    const pmId = a?.[3] ?? "";
+    const pmTemplate = b?.[5] ?? "";
+    if (pmId && pmTemplate && a?.[5]) {
+      const def = pinModelCache.get(pmId) ?? pinModelDef(pmId, a[5]);
+      if (def) {
+        pinModelCache.set(pmId, def);
+        const pm = pinModels.get(comp) ?? new Map<string, PinModel>();
+        pm.set(terminal, { model: def, template: pmTemplate });
+        pinModels.set(comp, pm);
+      }
+    }
   }
 
   const models = new Map<string, ModelDef>();
@@ -413,6 +558,7 @@ export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>
       params: componentParams(body),
       model: body.get("Model") ? models.get(body.get("Model")!) : undefined,
       pins: ports.get(id) ?? new Map(),
+      pinModels: pinModels.get(id),
     });
     parts.set(key, part);
   }

@@ -12,7 +12,7 @@ import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
-import { expandTemplate, modelDef, parseSpice, staticPot } from "./parse/spice.ts";
+import { expandTemplate, modelDef, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
@@ -563,6 +563,39 @@ describe("spice", () => {
   test("a subcircuit's inner .MODEL of the same name keeps its name; VT is renamed", () => {
     const def = modelDef("MDA980-3", ".SUBCKT MDA980-3 1 2\nD1 1 2 MDA980-3\nVT 2 3 0\nB1 3 0 I=I(VT)\n.MODEL MDA980-3 D(IS=1n)\n.ENDS MDA980-3");
     expect(def?.text).toBe(".SUBCKT MDA980_3 1 2\nD1 1 2 MDA980-3\nVTx 2 3 0\nB1 3 0 I=I(VTx)\n.MODEL MDA980-3 D(IS=1n)\n.ENDS MDA980_3");
+  });
+
+  test("digital pins: gate on d_ nodes, ideal (L1) bridge per pin; Multisim-only code models excluded", () => {
+    const rcv = pinModelDef("TTL_RCV", ".SUBCKT TTL_RCV 1 2 3 4\r\n*#L1\r\naA [1] [2] ADC\r\n.MODEL ADC adc_bridge (in_low=2.5 in_high=2.5)\r\n*#L1\r\n*#L2\r\naA [1] [2] 3 4 ADC\r\n.model ADC adc_bridge_real(technology=7)\r\n*#L2\r\n.ENDS")!;
+    expect(rcv.text).not.toContain("_real");
+    const drv = pinModelDef("TTL_DRV", ".SUBCKT TTL_DRV 1 2 3 4\n*#L1\naD [1] [2] DAC\n.MODEL DAC dac_bridge (out_low=0 out_high=5)\n*#L1\n.ENDS")!;
+    const lib = new SpiceLibrary();
+    const gate = modelDef("NAND", ".MODEL NAND d_nand (rise_delay=10n)")!;
+    const pins = new Map([["A", "1"], ["B", "2"], ["Y", "3"], ["VCC", "14"], ["GND", "7"]]);
+    const pinModels = new Map([
+      ["A", { model: rcv, template: "x%p %t1 %t2 %tVCC %tGND %m" }],
+      ["B", { model: rcv, template: "x%p %t1 %t2 %tVCC %tGND %m" }],
+      ["Y", { model: drv, template: "x%p %t2 %t1 %tVCC %tGND %m" }],
+    ]);
+    const spec = simSpec("U1", [{ template: "a%p_a [%tA?%t:d%t;A %tB?%t:d%t;B] %tY?%t:d%t;Y %m", params: [], model: gate, pins, pinModels }], lib);
+    expect(spec).toMatchObject({ device: "SUBCKT", name: "EW_U1" });
+    const text = lib.text("t");
+    expect(text).toContain("aU1_a [d_A d_B] d_Y NAND");
+    expect(text).toContain("xU1_A A d_A VCC GND TTL_RCV");
+    expect(text).toContain("xU1_Y d_Y Y VCC GND TTL_DRV");
+    const chip = modelDef("C", '.MODEL C d_chip ( behaviour= "\n+/inputs A\n+")')!;
+    expect(simSpec("U2", [{ template: "a%p [%tA?%t:d%t;A] %m", params: [], model: chip, pins }], lib)).toEqual({ exclude: true });
+    expect(unsupportedModelType(".model X d_vhdl ()")).toBe("d_vhdl");
+    expect(unsupportedModelType(".MODEL Q npn(BF=100)\n.model S vswitch")).toBeUndefined();
+  });
+
+  test("templates' own subcircuits move to the top level; <expr> becomes {expr}; numeric nodes get a prefix", () => {
+    const lib = new SpiceLibrary();
+    const pins = new Map([["1", "1"], ["2", "2"]]);
+    simSpec("J1", [{ template: "xJ %t1 %t2 SW%p\n.subckt SW%p 1 2\nR1 1 2 <1/1k>\n.ends", params: [], pins }], lib);
+    const text = lib.text("t");
+    expect(text).toContain(".subckt SWJ1 1 2\nR1 1 2 {1/1k}\n.ends");
+    expect(text).toContain(".subckt EW_J1 t1 t2\nxJ t1 t2 SWJ1\n.ends EW_J1");
   });
 
   test("interactive potentiometer gets its saved setting", () => {

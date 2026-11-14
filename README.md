@@ -101,8 +101,11 @@ map its pins to the model's nodes in Multisim's order.
 - A few Multisim-only SPICE constructs are rewritten for ngspice:
   `.mergenodes`, `TABLE ... USELIM`, and the interactive potentiometer
   (fixed at its saved setting).
-- `chirp()` sources have no ngspice equivalent; they are excluded, with a
-  warning.
+- Digital parts simulate with ngspice's XSPICE gates. Each digital pin
+  gets the ideal analog/digital bridge from its Multisim interface model.
+- Parts whose model needs something ngspice doesn't have are excluded,
+  with a warning: `chirp()` sources, Multisim's `d_chip` behavioural logic
+  (some 74xx MSI parts) and `d_vhdl`.
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).

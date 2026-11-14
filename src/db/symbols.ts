@@ -19,7 +19,7 @@
 
 import { decodeBuffer, type EwElement, parseEwXml } from "electronics-workbench-decoder";
 import { type LibrarySymbolSpec, simFieldList } from "../emit/kicad-sch.ts";
-import { modelDef, type SimSection, simSpec, SpiceLibrary } from "../parse/spice.ts";
+import { modelDef, type PinModel, pinModelDef, type SimSection, simSpec, SpiceLibrary } from "../parse/spice.ts";
 import type { PinElectrical, SchGraphic, SchPoint, SymbolPin } from "../ir/types.ts";
 import type { EwDatabase } from "./ewdb.ts";
 
@@ -220,6 +220,17 @@ export function databaseSymbols(
     if (!modelCache.has(key)) modelCache.set(key, modelText.has(key) ? modelDef(id, modelText.get(key)!) : undefined);
     return modelCache.get(key);
   };
+  const pinModelRows = new Map(rows(db, "SYS_MODEL_PIN").map((r) => [String(r.MODEL_ID ?? "").toLowerCase(), r]));
+  const pinModelCache = new Map<string, PinModel | undefined>();
+  const pinModelFor = (id: string): PinModel | undefined => {
+    const key = id.toLowerCase();
+    if (!pinModelCache.has(key)) {
+      const r = pinModelRows.get(key);
+      const def = r ? pinModelDef(id, String(r.DATA ?? "")) : undefined;
+      pinModelCache.set(key, def && r ? { model: def, template: String(r.TEMPLATE ?? "") } : undefined);
+    }
+    return pinModelCache.get(key);
+  };
   const spiceLibs = new Map<string, SpiceLibrary>();
   let needParams = 0;
 
@@ -349,11 +360,19 @@ export function databaseSymbols(
       const fam = sanitize(familyName) || "Misc";
       const lib = spiceLibs.get(fam) ?? new SpiceLibrary();
       spiceLibs.set(fam, lib);
+      // Digital pins: `Pin_Type` = `D:INPUT:TTL_ALSRCV` names the pin's
+      // interface model in SYS_MODEL_PIN.
+      const pinModels = new Map<string, PinModel>();
+      lines(c.Pin_Type).forEach((t, k) => {
+        const id = t.split(":")[2];
+        const pm = id ? pinModelFor(id) : undefined;
+        if (pm && pinNames[k] && !pinModels.has(pinNames[k]!)) pinModels.set(pinNames[k]!, pm);
+      });
       const sections: SimSection[] = modelRows.map((r) => {
         const id = String(r.Model_ID ?? "");
         const model = id && id !== "DUMMY" ? modelFor(id) : undefined;
         if (id && id !== "DUMMY" && !model && /%m/.test(String(r.Template))) lib.warnings.push(`${compName}: model ${id} not in the database`);
-        return { template: String(r.Template), params: [], model, pins: terminals };
+        return { template: String(r.Template), params: [], model, pins: terminals, pinModels };
       });
       const sim = simSpec(compName, sections, lib, `EW_${sanitize(compName).replace(/[^A-Za-z0-9_]/g, "_")}`);
       if (sim.exclude) excludeFromSim = true;
