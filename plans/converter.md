@@ -1066,6 +1066,29 @@ hierarchy, connectors), since those are what make an output useless today.
       ports with no pad number use the pin name (as the drawing does).
       Multisim's inline arithmetic `<50*0.01/1k>` -> `{...}`. NI's
       DigitalCounter sample now solves in ngspice.
+- [x] (2026-11-14) **NI sample sweep** (200 `.ms13` samples in the drive
+      corpus, local only; script `scratchpad/spice/sweep.sh`: convert ->
+      `kicad-cli sch export netlist --format spice` -> ngspice.dll op in
+      `ps` mode). First pass 145 ok / 12 op-failed / 42 parse errors. More
+      template codes: `%%` = literal `%` (`%%vd(` is XSPICE `%vd(`);
+      `%fS:L:K` = array, params S, S+K, ... (param L / K of them; square
+      wave `cntl_array`/`freq_array`); `%sN`/`%SN` = `CiaParamList`
+      `strings`[N] (MOSFET geometry, whole `.model` lines); `%vd (` ->
+      `%vd(`. **Circuit parameters** live in `CCircuitParamSheetGroupExtension`
+      (`CircuitParamName@NameItem` / `CircuitParamValue@ValueItem`, per
+      `Group@SheetName`) -> a `.param` text directive on that sheet (KiCad
+      passes `.` text to the simulator); a template value that uses a
+      circuit parameter gets `{}` unless it is already in an expression.
+      `pi` is not defined in ngspice `{}` -> `.param pi=...` where used.
+      Multisim's `r%p ... vres%p` + `.model vres%p r(..)` breaks in PSpice
+      mode (model before value) -> model folded into the line (`tc1/tc2`).
+      Model types are checked again after expansion (`%S0` can carry a
+      `.model ... triggered_pwl`). Rerun of the 55 failures: 25 ok, 23
+      op-failed, 6 parse errors left: PSpice `E ... LAPLACE`/`FREQ`, a
+      nested `%v` conditional, Multisim expression forms in two motor
+      samples, `pwl` with circuit-parameter times, an XSPICE `tranmod`.
+      Op failures are mostly samples built for transient analyses
+      (oscillators, converters) or with unmodelled parts.
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.

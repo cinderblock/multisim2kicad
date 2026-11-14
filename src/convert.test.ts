@@ -12,7 +12,7 @@ import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
-import { expandTemplate, modelDef, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
+import { circuitParams, expandTemplate, inlineResistorModels, modelDef, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
 import { checkSexp } from "./util/check-sexp.ts";
@@ -596,6 +596,30 @@ describe("spice", () => {
     const text = lib.text("t");
     expect(text).toContain(".subckt SWJ1 1 2\nR1 1 2 {1/1k}\n.ends");
     expect(text).toContain(".subckt EW_J1 t1 t2\nxJ t1 t2 SWJ1\n.ends EW_J1");
+  });
+
+  test("template codes: %% literal, %f arrays, %s strings, circuit parameters in braces only outside expressions", () => {
+    const params = ["1", "0", "1", "5", "0", "0", "0", "0", "0", "0", "6", "0", "1", "5", "1e7", "5", "2e6"];
+    expect(expandTemplate("a%p %%vd (%t2 %t1) sq%p\n+ cntl_array = [%f11:10:2]\n+ freq_array = [%f12:10:2]", { ref: "V1", params, node: (t) => `n${t}` })).toBe(
+      "aV1 %vd(n2 n1) sqV1\n+ cntl_array = [0 5 5]\n+ freq_array = [1 1e7 2e6]",
+    );
+    expect(expandTemplate("m%p %tD %tG %tS %tS %m %S0", { ref: "Q1", params: [], strings: [" L=6u W=125u"], node: (t) => t, model: "N" })).toBe("mQ1 D G S S N  L=6u W=125u");
+    const names = new Set(["r", "freq", "kp"]);
+    expect(expandTemplate("c%p %t1 %t2 #1 x=#2 e={#3*v(1)} m=#4", { ref: "C1", params: ["", "1/freq", "bidirectional", "kp", "10k"], node: (t) => t, circuitParams: names })).toBe(
+      "cC1 1 2 {1/freq} x=bidirectional e={kp*v(1)} m=10k",
+    );
+  });
+
+  test("Multisim's resistor model folds into the resistor (PSpice mode reads it as a parameter)", () => {
+    expect(inlineResistorModels("rR1 a b {R} vresR1  \n.model vresR1 r(  )")).toBe("rR1 a b {R}");
+    expect(inlineResistorModels("rR2 a b 1k vresR2 TEMP=50\n.model vresR2 r(TC1=1m TC2=2u TNOM=27)")).toBe("rR2 a b 1k TEMP=50 tc1=1m tc2=2u");
+  });
+
+  test("circuit parameters become one .param directive per sheet", () => {
+    const root = el(
+      `<R><Group SheetName="&amp;ASCTop"><CCircuitParamSheetGroupExtension><CircuitParamData><CircuitParamNameList><CircuitParamName NameItem="&amp;ASCfreq"/><CircuitParamName NameItem="&amp;ASCw"/></CircuitParamNameList><CircuitParamValueList><CircuitParamValue ValueItem="&amp;ASC1meg"/><CircuitParamValue ValueItem="&amp;ASC2*pi*freq"/></CircuitParamValueList></CircuitParamData></CCircuitParamSheetGroupExtension></Group></R>`,
+    );
+    expect(circuitParams(root)).toEqual(new Map([["Top", ".param pi=3.141592653589793\n.param freq=1meg\n.param w={2*pi*freq}"]]));
   });
 
   test("interactive potentiometer gets its saved setting", () => {

@@ -103,9 +103,16 @@ map its pins to the model's nodes in Multisim's order.
   (fixed at its saved setting).
 - Digital parts simulate with ngspice's XSPICE gates. Each digital pin
   gets the ideal analog/digital bridge from its Multisim interface model.
+- Circuit parameters become a `.param` simulator directive on their sheet.
+  Part values that use them stay expressions.
 - Parts whose model needs something ngspice doesn't have are excluded,
   with a warning: `chirp()` sources, Multisim's `d_chip` behavioural logic
-  (some 74xx MSI parts) and `d_vhdl`.
+  (some 74xx MSI parts), `d_vhdl`, and other Multisim-only code models.
+
+Checked on NI's own Multisim 13 sample circuits: about 170 of 200 solve
+their operating point in KiCad's ngspice as converted. Most of the rest
+are built for transient analysis (oscillators, converters), and six use
+syntax ngspice lacks (PSpice `LAPLACE` sources, for one).
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).

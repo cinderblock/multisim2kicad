@@ -39,7 +39,7 @@ import type {
   SymbolText,
 } from "../ir/types.ts";
 import { type CiNetlist, collectCiItems, parseCiNetlist } from "../ref/ci-netlist.ts";
-import { parseSpice, type SpiceDesign, supplySymbols } from "./spice.ts";
+import { circuitParams, parkingX, parseSpice, type SpiceDesign, supplySymbols } from "./spice.ts";
 import { drawnPinNumbers, portPinNumbers } from "../ref/ci-netlist.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 import { type PageIndex, parseMultisimDesign, type SheetInstance } from "./ms-hierarchy.ts";
@@ -773,7 +773,9 @@ export function parseSchematicXml(input: XmlInput): Schematic {
   if (designSheets.length === 0) throw new Error("no DesignSheet element found");
 
   const ci = parseCiNetlist(doc);
-  const spice = parseSpice(collectCiItems(root));
+  const params = circuitParams(root);
+  const paramNames = new Set([...params.values()].flatMap((d) => [...d.matchAll(/^\.param (\w+)=/gm)].map((m) => m[1]!.toLowerCase())));
+  const spice = parseSpice(collectCiItems(root), paramNames);
   const design = parseMultisimDesign(doc);
   portPins = (portId) => {
     const port = portId ? design.ci.get(portId) : undefined;
@@ -788,6 +790,14 @@ export function parseSchematicXml(input: XmlInput): Schematic {
   const rootPage = sheets.find((sh) => sh.title === rootSheet) ?? sheets[0]!;
   const supplies = supplySymbols(sheets, rootPage);
   rootPage.symbols.push(...supplies.symbols);
+  // Circuit parameters: a `.param` simulator directive on their sheet (KiCad
+  // passes text that starts with "." to the simulator), parked with the
+  // supplies.
+  for (const [sheetName, directive] of params) {
+    const page = sheets.find((sh) => sh.title === sheetName) ?? rootPage;
+    const y = 20 + (page === rootPage ? 30 * (supplies.symbols.length / 2) : 0);
+    page.texts.push({ text: directive, at: { x: parkingX(page), y }, size: 5 });
+  }
 
   return {
     source: {

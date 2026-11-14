@@ -52,6 +52,21 @@ export interface ModelDef {
  * part carrying that model, touching a copy of the net's power symbol,
  * parked to the right of the root page.
  */
+/**
+ * Where simulation-only additions go: right of everything on the page
+ * (Multisim content can sit past its edge) and of the parked extra-page
+ * sheet symbols at width + 40.
+ */
+export function parkingX(page: SchematicSheet): number {
+  const xs = [
+    page.size.width + 40 + 100,
+    ...page.symbols.filter((s) => !s.simOnly).map((s) => s.at.x),
+    ...page.wires.flatMap((w) => w.points.map((q) => q.x)),
+    ...page.labels.map((l) => l.at.x),
+  ];
+  return Math.max(...xs) + 60;
+}
+
 export function supplySymbols(sheets: SchematicSheet[], page: SchematicSheet): { symbols: SchematicSymbol[]; warnings: string[] } {
   const warnings: string[] = [];
   const firstByNet = new Map<string, SchematicSymbol>();
@@ -64,23 +79,18 @@ export function supplySymbols(sheets: SchematicSheet[], page: SchematicSheet): {
     }
   }
   const symbols: SchematicSymbol[] = [];
-  // Right of everything on the page (Multisim content can sit past its edge)
-  // and of the parked extra-page sheet symbols at width + 40.
-  const xs = [
-    page.size.width + 40 + 100,
-    ...page.symbols.map((s) => s.at.x),
-    ...page.wires.flatMap((w) => w.points.map((q) => q.x)),
-    ...page.labels.map((l) => l.at.x),
-  ];
-  const x = Math.max(...xs) + 60;
+  const x = parkingX(page);
   let y = 20;
   let n = 0;
   for (const [net, p] of firstByNet) {
     const pin = p.pins[0]!;
     // The copy: same drawing, upright, its pin at `tip`.
-    const at = { x, y };
+    // The pin tip on 50 mil (5 units), KiCad's default grid, which its ERC
+    // checks; the copy's own origin may then be fractional, as Multisim's
+    // often are.
+    const tip = { x: Math.round(x / 5) * 5, y: Math.round(y / 5) * 5 };
+    const at = { x: tip.x - pin.at.x, y: tip.y - pin.at.y };
     const copy: SchematicSymbol = { ...p, at, transform: { a: 1, b: 0, c: 0, d: 1 }, floating: false, drawnKey: undefined, sim: undefined, simOnly: true };
-    const tip = { x: at.x + pin.at.x, y: at.y + pin.at.y };
     const node = p.sim!.pins?.[0]?.[1];
     if (!node) continue;
     symbols.push(copy, {
@@ -120,10 +130,34 @@ function logicalLines(text: string): string[] {
   return out;
 }
 
+/**
+ * Multisim's resistor template pairs `rR1 a b 10k vresR1` with a
+ * `.model vresR1 r(TC1=.. TC2=..)` that is often empty. In PSpice mode
+ * (which the model files need) a resistor's model name goes before its
+ * value, so the pair breaks: drop the model and put its temperature
+ * coefficients on the resistor itself.
+ */
+export function inlineResistorModels(text: string): string {
+  const models = new Map<string, string>();
+  const kept = text.replace(/^[ \t]*\.model[ \t]+(vres\S*)[ \t]+r[ \t]*\(([^)]*)\)[ \t]*$/gim, (_, name: string, params: string) => {
+    const tc = [...params.matchAll(/\b(TC[12])\s*=\s*(\S+)/gi)].map((m) => `${m[1]!.toLowerCase()}=${m[2]}`);
+    models.set(name.toLowerCase(), tc.join(" "));
+    return "";
+  });
+  if (!models.size) return text;
+  return kept
+    .replace(/^([ \t]*r\S+[ \t]+\S+[ \t]+\S+[ \t]+\S+)[ \t]+(vres\S*)(.*)$/gim, (m, head: string, name: string, rest: string) => {
+      const tc = models.get(name.toLowerCase());
+      return tc === undefined ? m : `${head}${rest.trimEnd()}${tc ? ` ${tc}` : ""}`;
+    })
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
 /** Rewrite the Multisim-only SPICE that real models use into ngspice. */
 export function ngspiceDialect(text: string): string {
   return (
-    text
+    inlineResistorModels(text)
       // `.mergenodes a b` (Multisim's digital ground ties itself to 0): a
       // 1 uOhm resistor does the same job.
       .replace(/^[ \t]*\.mergenodes[ \t]+(\S+)[ \t]+(\S+)[ \t]*$/gim, (_, a: string, b: string) => `Rmerge_${spiceName(a)}_${spiceName(b)} ${a} ${b} 1u`)
@@ -194,33 +228,91 @@ export function expandTemplate(
      * with the pin's interface model.
      */
     digital?: (terminal: string, prefix: string) => string;
+    /** `%sN`: the component's string parameters (MOSFET geometry, ...). */
+    strings?: string[];
+    /** Circuit parameter names (lower case): values using them get braces. */
+    circuitParams?: ReadonlySet<string>;
     model?: string;
     missing?: (t: string) => void;
   },
 ): string {
-  const param = (i: string) => o.params[Number(i)] ?? "";
-  const conditionals = template.replace(/%v(\d+)\?([\s\S]*?)%v:([\s\S]*?)%v;/g, (_, n: string, a: string, b: string) =>
-    truthy(param(n)) ? a : b,
-  );
+  const raw = (i: number) => (o.params[i] ?? "").trim();
+  // A value that uses a circuit parameter (`R`, `1/freq`) is evaluated by
+  // ngspice in braces, unless it already sits in an expression; anything
+  // else (numbers, words like `bidirectional`) stays as it is.
+  const usesCircuitParam = (v: string) => [...v.matchAll(/[A-Za-z_]\w*/g)].some((m) => o.circuitParams?.has(m[0].toLowerCase()));
+  const param = (i: number, inExpression: boolean) => {
+    const v = raw(i);
+    return v && !inExpression && !isSpiceNumber(v) && !/^[{"'[]/.test(v) && usesCircuitParam(v) ? `{${v}}` : v;
+  };
+  // Inside `{...}` or an open `(` on the same line: an expression.
+  const inExpression = (s: string, at: number) => {
+    const line = s.slice(s.lastIndexOf("\n", at) + 1, at);
+    const open = (c: string, d: string) => line.split(c).length - line.split(d).length;
+    return open("{", "}") > 0 || /[=]\s*\(/.test(line) && open("(", ")") > 0;
+  };
+  const conditionals = template
+    .replace(/%%/g, "\u0000") // a literal `%` (`%%vd(` is XSPICE's `%vd(`)
+    .replace(/%v(\d+)\?([\s\S]*?)%v:([\s\S]*?)%v;/g, (_, n: string, a: string, b: string) => (truthy(o.params[Number(n)]) ? a : b));
   return conditionals
+    // `%fS:L:K`: an array, parameters S, S+K, ... (parameter L / K of them);
+    // `%fS`: parameter S.
+    .replace(/%f(\d+)(?::(\d+):(\d+))?/g, (_, s: string, l?: string, k?: string) => {
+      if (!l || !k) return param(Number(s), true);
+      const step = Number(k) || 1;
+      const count = Math.floor(Number(raw(Number(l))) / step) || 0;
+      return Array.from({ length: count }, (_, j) => raw(Number(s) + j * step)).filter(Boolean).join(" ");
+    })
+    .replace(/%[sS](\d+)/g, (_, n: string) => {
+      const s = o.strings?.[Number(n)] ?? "";
+      return s === "Param" ? "" : s;
+    })
     .replace(/%t([^\s?]+)\?%t:([a-z]*)%t;[^\s\]]*/g, (_, t: string, prefix: string) => o.digital?.(t, prefix || "d") ?? `${prefix || "d"}_${spiceName(t)}`)
     .replace(/%t([^\s\]]+)/g, (_, t: string) => {
       const n = o.node(t);
       if (n === undefined) o.missing?.(t);
       return n ?? t;
     })
-    .replace(/#(\d+)/g, (_, n: string) => param(n))
+    .replace(/#(\d+)/g, (_, n: string, at: number, s: string) => param(Number(n), inExpression(s, at)))
     .replace(/%p/g, o.ref)
-    .replace(/%m/g, o.model ?? "");
+    .replace(/%m/g, o.model ?? "")
+    .replace(/\u0000/g, "%")
+    .replace(/%vd\s+\(/g, "%vd("); // XSPICE port types take no space
 }
 
 /** The component's netlist template (attribute strings[1][5]). */
 export const netlistTemplate = (comp: EwElement): string => collValues(ciCollStrings(comp)[1])[5] ?? "";
 
-/** The component's `CiaParamList` parameter values. */
-export function componentParams(comp: EwElement): string[] {
-  const list = comp.child("Attributes")?.find("CiaParamList");
-  return list?.child("parameters")?.childrenNamed("Item").map((i) => i.str("Value")) ?? [];
+/** A SPICE number with an optional scale suffix / unit: `10k`, `1.5e-3`, `100nF`. */
+export const isSpiceNumber = (v: string): boolean => /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?[a-zµ]*$/i.test(v);
+
+/** The component's `CiaParamList` parameter values (`parameters`, or `strings`). */
+export function componentParams(comp: EwElement, list: "parameters" | "strings" = "parameters"): string[] {
+  const pl = comp.child("Attributes")?.find("CiaParamList");
+  return pl?.child(list)?.childrenNamed("Item").map((i) => i.str("Value")) ?? [];
+}
+
+/**
+ * Circuit parameters (Multisim's per-sheet `.param`s) as one simulator
+ * directive per sheet title: names from `CircuitParamNameList`, values
+ * (numbers or expressions) from `CircuitParamValueList`.
+ */
+export function circuitParams(root: EwElement): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const ext of root.findAll("CCircuitParamSheetGroupExtension")) {
+    const names = ext.find("CircuitParamNameList")?.childrenNamed("CircuitParamName").map((n) => n.str("NameItem")) ?? [];
+    const values = ext.find("CircuitParamValueList")?.childrenNamed("CircuitParamValue").map((v) => v.str("ValueItem")) ?? [];
+    const pairs = names
+      .map((n, i) => [n.trim(), (values[i] ?? "").trim()] as const)
+      .filter(([n, v]) => /^[A-Za-z_]\w*$/.test(n) && v)
+      .map(([n, v]) => `.param ${n}=${isSpiceNumber(v) ? v : `{${v}}`}`);
+    if (!pairs.length) continue;
+    // Multisim's expressions know `pi`; ngspice's don't.
+    if (pairs.some((p) => /\bpi\b/i.test(p)) && !names.some((n) => n.toLowerCase() === "pi")) pairs.unshift(".param pi=3.141592653589793");
+    const sheet = ext.closest((e) => e.has("SheetName"))?.str("SheetName") ?? "";
+    out.set(sheet, [...(out.get(sheet)?.split("\n") ?? []), ...pairs].join("\n"));
+  }
+  return out;
 }
 
 /** The CiModel's SPICE text (its `CiaCString`). */
@@ -280,6 +372,10 @@ const SUBCKT_TEMPLATE = /^x%p(?:_\w+)?((?:\s+%t\S+)+)\s+%m\s*$/;
 export interface SimSection {
   template: string;
   params: string[];
+  /** String parameters (`%sN`). */
+  strings?: string[];
+  /** The design's circuit parameter names (lower case). */
+  circuitParams?: ReadonlySet<string>;
   model?: ModelDef;
   /** Terminal name -> symbol pin number. */
   pins: Map<string, string>;
@@ -388,7 +484,7 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
     // 1. Ideal R / C / L.
     const r = R_TEMPLATE.test(t) && ![4, 6, 8, 10].some((i) => truthy(params[i]));
     const cl = CL_TEMPLATE.exec(t);
-    if ((r || (cl && !truthy(params[4]))) && pins.get("1") && pins.get("2")) {
+    if ((r || (cl && !truthy(params[4]))) && isSpiceNumber((params[1] ?? "").trim()) && pins.get("1") && pins.get("2")) {
       const device = r ? "R" : cl![1]!.toUpperCase();
       return {
         device,
@@ -483,6 +579,8 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
     const main = expandTemplate(s.template.replace(/\r\n?/g, "\n").trim(), {
       ref: spiceName(ref),
       params: s.params,
+      strings: s.strings,
+      circuitParams: s.circuitParams,
       model: s.model?.name,
       node,
       digital,
@@ -496,7 +594,16 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   if (missing.length) lib.warnings.push(`${ref}: template terminals ${[...new Set(missing)].join(", ")} have no pin; left as internal nodes`);
   const pinList = [...nodeOfPin.keys()];
   const nodes = pinList.map((p) => nodeOfPin.get(p)!);
-  const name = lib.wrapper(wrapperBase, nodes, lines.join("\n"), `${ref} (Multisim netlist template)`);
+  let body = lines.join("\n");
+  // Again on the expanded text: `%S0` can carry a whole `.model`.
+  const foreignExpanded = unsupportedModelType(body);
+  if (foreignExpanded) {
+    lib.warnings.push(`${ref}: model type ${foreignExpanded} is Multisim-only; excluded from simulation`);
+    return { exclude: true };
+  }
+  // Multisim's expressions know `pi`; ngspice's `{...}` doesn't.
+  if (/\{[^}]*\bpi\b/i.test(body)) body = `.param pi=3.141592653589793\n${body}`;
+  const name = lib.wrapper(wrapperBase, nodes, body, `${ref} (Multisim netlist template)`);
   return { device: "SUBCKT", name, library: true, pins: pinList.map((p) => [p, nodeOfPin.get(p)!]) };
 }
 
@@ -505,7 +612,7 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
  * `items` is the design's Ci objects by class (`collectCiItems`). The
  * sections of one part (same circuit and refdes) share one spec.
  */
-export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>): SpiceDesign {
+export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>, circuitParamNames: ReadonlySet<string> = new Set()): SpiceDesign {
   const lib = new SpiceLibrary();
   const byComponent = new Map<string, SimSpec>();
 
@@ -556,6 +663,8 @@ export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>
     part.sections.push({
       template,
       params: componentParams(body),
+      strings: componentParams(body, "strings"),
+      circuitParams: circuitParamNames,
       model: body.get("Model") ? models.get(body.get("Model")!) : undefined,
       pins: ports.get(id) ?? new Map(),
       pinModels: pinModels.get(id),
