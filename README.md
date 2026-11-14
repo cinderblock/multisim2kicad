@@ -120,11 +120,11 @@ map its pins to the model's nodes in Multisim's order.
 - A digital input left unconnected reads low, as in XSPICE (some of NI's
   counter demos leave `~LOAD` open, so they load instead of counting).
 
-Checked on NI's own Multisim 13 sample circuits: 172 of 200 solve their
-operating point in KiCad's ngspice as converted. 23 load but don't reach an
+Checked on NI's own Multisim 13 sample circuits: 170 of 200 solve their
+operating point in KiCad's ngspice as converted. 25 load but don't reach an
 operating point (most are built for transient analysis: oscillators,
-converters). 4 use syntax ngspice lacks (PSpice `LAPLACE` sources, for
-one).
+converters; two need `.options rshunt=1e9` once their logic simulates).
+4 use syntax ngspice lacks (PSpice `LAPLACE` sources, for one).
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).

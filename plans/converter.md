@@ -1148,7 +1148,9 @@ hierarchy, connectors), since those are what make an output useless today.
       336 + 102 (`vhdl2hiz`) parts with tri-state/bidirectional pins stay
       excluded. NI sweep: COMM and INOUT (Ferromagnetic Detector) went from
       ok to op-failed once their 74HC139/153 simulate (DC-floating MAX222
-      charge-pump nets); both solve with `.options rshunt=1e9`.
+      charge-pump nets); both solve with `.options rshunt=1e9`. **Full
+      sweep at `2a374bd`: 170 ok / 25 op-failed / 4 parse errors / 1
+      unknown**; the only differences from `2b85e68` are those two.
       Harness gotcha: `${KIPRJMOD}` in `Sim.Library` needs a `.kicad_pro`
       beside the schematic, or every model is "not found".
 - [ ] Tri-state digital pins: export each Z-capable `d_chip` output's
