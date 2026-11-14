@@ -308,9 +308,15 @@ new publishes: the registry shows a `0.0.0-stage` stub ("awaiting a staged
 release") while the real `0.0.0` is processed; the name is held either way.
 Gotchas: npm's web-login and publish-2FA links expire in about 5 minutes, so
 relaying them through chat kept timing out; the user ran `npm login` and
-`npm publish` in their own terminal. Remaining: the user configures the
-trusted publisher (expires if no publish within 2 days), then bump to
-`0.1.0`, push the tag, and verify provenance.
+`npm publish` in their own terminal. The user then configured the trusted
+publisher (cinderblock / multisim2kicad / `publish.yml`, no environment).
+**`0.1.0` released 2026-11-13 10:27 PM PST (06:27Z)** from CI tag `v0.1.0`
+(`313e444`): SLSA provenance attestation verified, `latest` = `0.1.0`,
+`bin` intact (npm's "No bin file found at dist/cli.js" warning is from
+reading package.json before `prepublishOnly` builds; harmless), and
+`npx multisim2kicad@0.1.0` converts the samples. Remaining (optional, the
+user's call): package setting "Require two-factor authentication and
+disallow tokens".
 
 What is public: code, plans, and `samples/Design1*` / `Temp` (the user's
 own toy designs, committed by the user at scaffold time; they contain
@@ -984,8 +990,9 @@ hierarchy, connectors), since those are what make an output useless today.
       support in ewd); 4 pictures fail to decompress ("Decoder returned
       wrong length"); 73 sections have no picture and 61 parts no symbol.
       DIN symbol variants (`Symbol_ID_DIN`) are not emitted (ANSI only).
-- [ ] **Next:** npm 0.1.0 release (waiting on the user: name claim +
-      trusted publisher), then B3 cleanup (typed EW models in ewd;
+- [x] npm 0.1.0 released from CI with provenance (2026-11-13 10:27 PM PST).
+- [ ] **Next:**
+      B3 cleanup (typed EW models in ewd;
       multisim2kicad's parsers shrink to mappers). Drive-corpus leftovers (11
       nets: ground-symbol pin naming) are optional.
 - [ ] Not translated at all yet (candidates, user to prioritise):
