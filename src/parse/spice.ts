@@ -34,6 +34,8 @@ export interface SpiceDesign {
   byComponent: Map<string, SimSpec>;
   /** The design's model library text (models + wrappers); empty when none. */
   library: string;
+  /** Top-level netlist lines for a KiCad text directive (couplings across parts). */
+  directives: string[];
   warnings: string[];
 }
 
@@ -278,7 +280,8 @@ export function expandTemplate(
       if (!l || !k) return param(Number(s), true);
       const step = Number(k) || 1;
       const count = Math.floor(Number(raw(Number(l))) / step) || 0;
-      return Array.from({ length: count }, (_, j) => raw(Number(s) + j * step)).filter(Boolean).join(" ");
+      // Each item on its own: `pwl(%f11:10:1)` lists times like `T_on+10n`.
+      return Array.from({ length: count }, (_, j) => param(Number(s) + j * step, false)).filter(Boolean).join(" ");
     })
     .replace(/%[sS](\d+)/g, (_, n: string) => {
       const s = o.strings?.[Number(n)] ?? "";
@@ -510,10 +513,90 @@ export class SpiceLibrary {
     return name;
   }
 
+  /** Nodes every subcircuit shares (cross-part probes, see `Xref`). */
+  readonly globals = new Set<string>();
+
   text(header: string): string {
-    const sections = [...this.models.values(), ...this.texts];
+    const globals = this.globals.size ? [`.global ${[...this.globals].join(" ")}`] : [];
+    const sections = [...globals, ...this.models.values(), ...this.texts];
     return sections.length ? `* ${header}\n\n${sections.join("\n\n")}\n` : "";
   }
+}
+
+/**
+ * Cross-part references. Multisim netlists flat, so a part's expression can
+ * read another part's current (`I(Vsensor1)`) or any net (`V(pri)`). Here
+ * each part is its own subcircuit, where ngspice would look those names up
+ * locally (and fail, or read a floating node). The part that owns the name
+ * gets a probe instead: a B source copying the current or voltage onto a
+ * `.global` node, which the expression reads.
+ */
+export interface Xref {
+  /** In: the part's lines moved to the top level (couplings); the part itself is excluded. */
+  moved?: boolean;
+  /** In: always build a wrapper (a probe needs one), even for an ideal R/C/L or a vendor subcircuit. */
+  wrap?: boolean;
+  /** In: node names the expressions read -> what to read instead (a pin's node or a global). */
+  nodes?: Map<string, string>;
+  /** In: device names whose current the expressions read -> the global node carrying it. */
+  currents?: Map<string, string>;
+  /** In: probes to add, onto global nodes: a pin's voltage, or a device's current. */
+  probes?: { global: string; pin?: string; device?: string }[];
+  /** Out: whether the part became a wrapper. */
+  wrapped?: boolean;
+  /** Out: devices the wrapper defines, and the node of each pin. */
+  devices?: string[];
+  pinNodes?: Map<string, string>;
+  /** Out: names the expressions read but the wrapper doesn't define (lowercase). */
+  readsNodes?: string[];
+  readsCurrents?: string[];
+  /** Out: the wrapper is only mutual inductances (`K`) coupling inductors it doesn't define. */
+  couplings?: { name: string; inductors: string[]; k: string }[];
+}
+
+const EXPR_REF = /\b([vi])\(\s*([^()]*?)\s*\)/gi;
+/** Apply `f` to the inside of each `{...}` expression. */
+const inExpressions = (text: string, f: (expr: string) => string): string => text.replace(/\{[^{}]*\}/g, f);
+
+/** Fill `xref`'s outputs from a wrapper body, and apply its rewrites. */
+function crossRefs(body: string, ports: string[], xref: Xref): string {
+  const elements = body.split("\n").filter((l) => l.trim() && !/^[*.+]/.test(l.trim()));
+  // Local names: the tokens outside expressions (element names, nodes, models).
+  const local = new Set<string>(["0", ...ports.map((p) => p.toLowerCase())]);
+  for (const l of elements) for (const t of l.replace(/\{[^{}]*\}/g, " ").split(/[\s=(),]+/)) if (t) local.add(t.toLowerCase());
+  const devices = elements.map((l) => l.trim().split(/\s+/)[0]!);
+  const isDevice = (d: string) => devices.some((x) => x.toLowerCase() === d);
+  const nodes = new Set<string>();
+  const currents = new Set<string>();
+  const rewritten = inExpressions(body, (expr) =>
+    expr.replace(EXPR_REF, (all, kind: string, args: string) => {
+      const names = args.split(",").map((a) => a.trim());
+      if (kind.toLowerCase() === "i") {
+        const d = names[0]!.toLowerCase();
+        if (isDevice(d)) return all;
+        currents.add(d);
+        const g = xref.currents?.get(d);
+        return g ? `V(${g})` : all;
+      }
+      const out = names.map((n) => {
+        if (local.has(n.toLowerCase())) return n;
+        nodes.add(n.toLowerCase());
+        return xref.nodes?.get(n.toLowerCase()) ?? n;
+      });
+      return `${kind}(${out.join(",")})`;
+    }),
+  );
+  xref.devices = devices;
+  xref.readsNodes = [...nodes];
+  xref.readsCurrents = [...currents];
+  // A coupling part (`kT2 lL4 lL5 0.9`): the inductors are other parts.
+  const ks = elements.map((l) => l.trim().split(/\s+/)).filter((t) => /^k/i.test(t[0]!) && t.length >= 4);
+  const foreignL = (t: string[]) => t.slice(1, -1).every((x) => !isDevice(x.toLowerCase()));
+  xref.couplings =
+    ks.length && ks.length === elements.length && ks.every(foreignL)
+      ? ks.map((t) => ({ name: t[0]!, inductors: t.slice(1, -1).map((x) => x.toLowerCase()), k: t.at(-1)! }))
+      : undefined;
+  return rewritten;
 }
 
 /**
@@ -521,7 +604,7 @@ export class SpiceLibrary {
  * section that carries a template). KiCad simulates a part as one element
  * across all its units, so several sections become one wrapper.
  */
-export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary, wrapperBase = `EW_${spiceName(ref)}`): SimSpec {
+export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary, wrapperBase = `EW_${spiceName(ref)}`, xref?: Xref): SimSpec {
   const sections = sectionsIn.filter((s) => s.template.trim());
   if (sections.length === 0) return { exclude: true };
   for (const s of sections) {
@@ -533,7 +616,7 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
     }
   }
 
-  if (sections.length === 1) {
+  if (sections.length === 1 && !xref?.wrap) {
     const { template, params, model, pins } = sections[0]!;
     const t = template.trim();
     // 1. Ideal R / C / L.
@@ -689,8 +772,175 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   }
   // Multisim's expressions know `pi`; ngspice's `{...}` doesn't.
   if (/\{[^}]*\bpi\b/i.test(body)) body = `.param pi=3.141592653589793\n${body}`;
+  if (xref) {
+    body = crossRefs(body, nodes, xref);
+    xref.wrapped = true;
+    xref.pinNodes = new Map(nodeOfPin);
+    const probes = (xref.probes ?? []).flatMap((p) => {
+      const what = p.pin !== undefined ? nodeOfPin.get(p.pin) && `V(${nodeOfPin.get(p.pin)})` : p.device && `I(${p.device})`;
+      return what ? [`B${p.global} ${p.global} 0 V={${what}}`] : [];
+    });
+    if (probes.length) body = `${body}\n* Probes other parts read (Multisim names are global)\n${probes.join("\n")}`;
+  }
   const name = lib.wrapper(wrapperBase, nodes, body, `${ref} (Multisim netlist template)`);
   return { device: "SUBCKT", name, library: true, pins: pinList.map((p) => [p, nodeOfPin.get(p)!]) };
+}
+
+/**
+ * Find what each part's expressions read from other parts (see `Xref`) and
+ * set up the probes and rewrites. A dry run of every part (on a scratch
+ * library) gives the names each one reads and defines.
+ */
+function resolveCrossRefs(
+  parts: { ref: string; circuit: string; ids: string[]; sections: SimSection[]; xref: Xref }[],
+  ciNodes: { body: EwElement }[],
+  portOf: Map<string, { comp: string; pad: string }>,
+  partOf: Map<string, (typeof parts)[number]>,
+  finals: Map<string, string[]>,
+  namedNets: Map<string, { refdes: string; pin: string }[]>,
+  lib: SpiceLibrary,
+): string[] {
+  type P = (typeof parts)[number];
+  // How each part simulates on its own, and its wrapper's names.
+  const plain = new Map<P, boolean>();
+  const info = new Map<P, Xref>();
+  for (const p of parts) {
+    const asIs: Xref = {};
+    const spec = simSpec(p.ref, p.sections, new SpiceLibrary(), undefined, asIs);
+    if (spec.exclude) continue;
+    plain.set(p, !asIs.wrapped);
+    const wrapped: Xref = { wrap: true };
+    simSpec(p.ref, p.sections, new SpiceLibrary(), undefined, wrapped);
+    info.set(p, wrapped);
+  }
+  const readers = parts.filter((p) => !plain.get(p) && (info.get(p)?.readsNodes?.length || info.get(p)?.readsCurrents?.length));
+  const couplers = parts.filter((p) => info.get(p)?.couplings);
+  if (!readers.length && !couplers.length) return [];
+
+  // Multisim's name for each part: its final refdes, once per placement.
+  const namesOf = (p: P): string[] => [...new Set(p.ids.flatMap((id) => finals.get(id) ?? [p.ref]))];
+  const nets = ciNodes.map(({ body }) => ({
+    name: body.str("LocalName").toLowerCase(),
+    circuit: body.get("Circuit") ?? "",
+    ports: (body.child("Ports")?.childrenNamed("Item") ?? []).flatMap((i) => {
+      const port = portOf.get(i.get("CiID") ?? "");
+      const part = port && partOf.get(port.comp);
+      return port && part ? [{ part, pad: port.pad }] : [];
+    }),
+  }));
+  const probe = (target: P, global: string, at: { pin?: string; device?: string }): void => {
+    target.xref.wrap = true;
+    const probes = (target.xref.probes ??= []);
+    if (!probes.some((q) => q.global === global)) probes.push({ global, ...at });
+    lib.globals.add(global);
+  };
+  // One global node per name read (`amp_in+` and `amp_in-` stay apart).
+  const globalNames = new Map<string, string>();
+  const globalFor = (prefix: string, name: string): string => {
+    const key = `${prefix}${name}`;
+    let g = globalNames.get(key);
+    if (g) return g;
+    g = `${prefix}${spiceName(name.replace(/\+/g, "p").replace(/-/g, "n"))}`;
+    while ([...globalNames.values()].includes(g)) g += "_";
+    globalNames.set(key, g);
+    return g;
+  };
+  // A probe in a part placed more than once would be driven once per placement.
+  const once = (p: P): boolean => namesOf(p).length === 1 && info.has(p);
+
+  // `vSensor1` is the device `v%p` of the part named Sensor1: our wrapper
+  // names it after the part's Ci name (`vV5`).
+  const deviceNamed = (d: string): { part: P; device: string; final: string } | undefined => {
+    for (const p of parts) {
+      if (!info.has(p)) continue;
+      const own = spiceName(p.ref).toLowerCase();
+      for (const dev of info.get(p)!.devices ?? []) {
+        const lower = dev.toLowerCase();
+        const at = lower.indexOf(own);
+        if (at < 0) continue;
+        const final = namesOf(p).find((f) => `${lower.slice(0, at)}${f.toLowerCase()}${lower.slice(at + own.length)}` === d);
+        if (final) return { part: p, device: dev, final };
+      }
+    }
+    return undefined;
+  };
+
+  // Couplings move to the top level as a KiCad text directive (KiCad passes
+  // `K` lines through), naming the inductors as KiCad's netlist does.
+  const directives: string[] = [];
+  for (const p of couplers) {
+    const lines: string[] = [];
+    for (const c of info.get(p)!.couplings!) {
+      const names = c.inductors.map((l) => {
+        const found = deviceNamed(l);
+        if (!found || !once(found.part)) return undefined;
+        // An ideal inductor is KiCad's own `L`, named after its reference
+        // (prefixed with L unless it starts with one); else the inductor
+        // inside the part's subcircuit, by its flattened name.
+        return plain.get(found.part) ? (found.final.startsWith("L") ? found.final : `L${found.final}`) : `${found.device[0]}.x${found.final}.${found.device}`.toLowerCase();
+      });
+      if (names.some((n) => !n)) {
+        lib.warnings.push(`${p.ref}: couples ${c.inductors.join(", ")}, which the design doesn't simulate as single inductors; excluded from simulation`);
+        lines.length = 0;
+        break;
+      }
+      const own = spiceName(namesOf(p)[0]!);
+      lines.push(`${/^k/i.test(own) ? own : `K${own}`}${lines.length ? `_${lines.length}` : ""} ${names.join(" ")} ${c.k}`);
+    }
+    p.xref.moved = true;
+    if (lines.length) directives.push(lines.join("\n"));
+  }
+
+  for (const reader of readers) {
+    const { readsNodes = [], readsCurrents = [] } = info.get(reader)!;
+    const nodes = (reader.xref.nodes ??= new Map());
+    const currents = (reader.xref.currents ??= new Map());
+    for (const n of readsNodes) {
+      // A name users gave the net, else Multisim's own net number (`V(12,1)`).
+      const same = nets.filter((x) => x.name === n && x.circuit === reader.circuit);
+      const numbered = same[0] ?? (nets.filter((x) => x.name === n).length === 1 ? nets.find((x) => x.name === n) : undefined);
+      const named = namedNets.get(n)?.flatMap(({ refdes, pin }) => {
+        const part = parts.find((p) => namesOf(p).includes(refdes));
+        return part ? [{ part, pad: pin }] : [];
+      });
+      const net = named ? { ports: named } : numbered;
+      if (!net) {
+        lib.warnings.push(`${reader.ref}: its expression reads V(${n}), but the design has no net ${n}`);
+        continue;
+      }
+      // The reader's own pin: read its node directly.
+      const own = net.ports.find((q) => q.part === reader);
+      const ownNode = own && info.get(reader)?.pinNodes?.get(own.pad);
+      if (ownNode) {
+        nodes.set(n, ownNode);
+        continue;
+      }
+      // Else probe on another part's pin, preferring one that is a wrapper anyway.
+      const host = [...net.ports].filter((q) => q.part !== reader && once(q.part) && info.get(q.part)?.pinNodes?.has(q.pad)).sort((a, b) => Number(plain.get(a.part)) - Number(plain.get(b.part)))[0];
+      if (!host) {
+        lib.warnings.push(`${reader.ref}: its expression reads V(${n}), but no simulated part on that net can carry a probe; left unconnected`);
+        continue;
+      }
+      const g = globalFor("ew_v_", n);
+      probe(host.part, g, { pin: host.pad });
+      nodes.set(n, g);
+    }
+    for (const d of readsCurrents) {
+      const found = deviceNamed(d);
+      if (!found) {
+        lib.warnings.push(`${reader.ref}: its expression reads I(${d}), but no part defines ${d}`);
+        continue;
+      }
+      if (!once(found.part)) {
+        lib.warnings.push(`${reader.ref}: its expression reads I(${d}), but that part is placed more than once; left as is`);
+        continue;
+      }
+      const g = globalFor("ew_i_", d);
+      probe(found.part, g, { device: found.device });
+      currents.set(d, g);
+    }
+  }
+  return directives;
 }
 
 /**
@@ -698,20 +948,29 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
  * `items` is the design's Ci objects by class (`collectCiItems`). The
  * sections of one part (same circuit and refdes) share one spec.
  */
-export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>, circuitParamNames: ReadonlySet<string> = new Set()): SpiceDesign {
+export function parseSpice(
+  items: Map<string, { id: string; body: EwElement }[]>,
+  circuitParamNames: ReadonlySet<string> = new Set(),
+  /** Final refdes per `CiComponent` placement (`MultisimDesign.finalNames`), for cross-part references. */
+  finals: Map<string, string[]> = new Map(),
+  /** Pins on each net users named (`flattenNetlist`), for expressions that read `V(name)`. */
+  namedNets: Map<string, { refdes: string; pin: string }[]> = new Map(),
+): SpiceDesign {
   const lib = new SpiceLibrary();
   const byComponent = new Map<string, SimSpec>();
 
   const ports = new Map<string, Map<string, string>>();
+  const portOf = new Map<string, { comp: string; pad: string }>();
   const pinModels = new Map<string, Map<string, PinModel>>();
   const pinModelCache = new Map<string, ModelDef>();
-  for (const { body } of items.get("CiPort") ?? []) {
+  for (const { id, body } of items.get("CiPort") ?? []) {
     const comp = body.get("Component") ?? "";
     const terminal = body.str("LocalName");
     // No pad number (instruments, interactive parts): the KiCad pin is numbered
     // by its name, as for the drawing.
     const pad = portPinNumbers(body)[0] ?? (terminal || undefined);
     if (!terminal || !pad) continue;
+    portOf.set(id, { comp, pad });
     const m = ports.get(comp) ?? new Map<string, string>();
     if (!m.has(terminal)) m.set(terminal, pad);
     ports.set(comp, m);
@@ -737,14 +996,23 @@ export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>
     else lib.warnings.push(`model ${body.str("LocalName")}: no .SUBCKT or .MODEL in its text`);
   }
 
-  const parts = new Map<string, { ref: string; ids: string[]; sections: SimSection[] }>();
+  interface Part {
+    ref: string;
+    circuit: string;
+    ids: string[];
+    sections: SimSection[];
+    xref: Xref;
+  }
+  const parts = new Map<string, Part>();
+  const partOf = new Map<string, Part>();
   for (const { id, body } of items.get("CiComponent") ?? []) {
     const ref = body.str("LocalName");
     const template = netlistTemplate(body);
     // Sections of one part netlist as `%p_a`, `%p_b`, ...; other parts that
     // share a name (every VCC symbol is "VCC") stay separate.
     const key = /%p_\w/.test(template) ? `${body.get("Circuit") ?? ""}|${ref}` : id;
-    const part = parts.get(key) ?? { ref, ids: [], sections: [] };
+    const part = parts.get(key) ?? { ref, circuit: body.get("Circuit") ?? "", ids: [], sections: [], xref: {} };
+    partOf.set(id, part);
     part.ids.push(id);
     part.sections.push({
       template,
@@ -757,10 +1025,11 @@ export function parseSpice(items: Map<string, { id: string; body: EwElement }[]>
     });
     parts.set(key, part);
   }
-  for (const { ref, ids, sections } of parts.values()) {
-    const spec = simSpec(ref, sections, lib);
+  const directives = resolveCrossRefs([...parts.values()], items.get("CiNode") ?? [], portOf, partOf, finals, namedNets, lib);
+  for (const { ref, ids, sections, xref } of parts.values()) {
+    const spec = xref.moved ? { exclude: true } : simSpec(ref, sections, lib, undefined, xref);
     for (const id of ids) byComponent.set(id, spec);
   }
 
-  return { byComponent, library: lib.text("SPICE models from the Multisim design (multisim2kicad)"), warnings: lib.warnings };
+  return { byComponent, library: lib.text("SPICE models from the Multisim design (multisim2kicad)"), directives, warnings: lib.warnings };
 }

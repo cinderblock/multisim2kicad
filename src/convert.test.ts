@@ -604,7 +604,10 @@ describe("spice", () => {
     expect(expandTemplate("a%p %%vd (%t2 %t1) sq%p\n+ cntl_array = [%f11:10:2]\n+ freq_array = [%f12:10:2]", { ref: "V1", params, node: (t) => `n${t}` })).toBe(
       "aV1 %vd(n2 n1) sqV1\n+ cntl_array = [0 5 5]\n+ freq_array = [1 1e7 2e6]",
     );
-    expect(expandTemplate("m%p %tD %tG %tS %tS %m %S0", { ref: "Q1", params: [], strings: [" L=6u W=125u"], node: (t) => t, model: "N" })).toBe("mQ1 D G S S N  L=6u W=125u");
+    expect(expandTemplate("v%p %t1 0 pwl(%f2:1:1)", { ref: "V2", params: ["", "5", "0", "0", "t_on", "5", "t_on+10n"], node: (t) => t, circuitParams: new Set(["t_on"]) })).toBe(
+      "vV2 1 0 pwl(0 0 {t_on} 5 {t_on+10n})",
+    );
+    expect(expandTemplate("m%p %tD %tG %tS %tS %m %S0",{ ref: "Q1", params: [], strings: [" L=6u W=125u"], node: (t) => t, model: "N" })).toBe("mQ1 D G S S N  L=6u W=125u");
     const names = new Set(["r", "freq", "kp"]);
     expect(expandTemplate("c%p %t1 %t2 #1 x=#2 e={#3*v(1)} m=#4", { ref: "C1", params: ["", "1/freq", "bidirectional", "kp", "10k"], node: (t) => t, circuitParams: names })).toBe(
       "cC1 1 2 {1/freq} x=bidirectional e={kp*v(1)} m=10k",
@@ -652,6 +655,43 @@ describe("spice", () => {
     expect(s.library).toContain(".SUBCKT FET_X__1 DRAIN GATE SOURCE");
     expect(s.library).toContain(".subckt EW_VCC VCC\nVCCVCC  VCC 0 dc 5\n.ends EW_VCC");
     expect(s.warnings.some((w) => w.includes("chirp"))).toBe(true);
+  });
+
+  test("cross-part references: currents and nets through global probes, couplings to a directive", () => {
+    const node = (id: string, name: string, ports: string[]) =>
+      `<Item CiID="${id}" Class="CiNode"><CiNode Class="CiNode" LocalName="&amp;ASC${name}" Circuit=""><Ports>${ports.map((p) => `<Item CiID="${p}"/>`).join("")}</Ports></CiNode></Item>`;
+    const xml = [
+      // Multisim calls V5 "Sensor1" (its final refdes): I2 reads I(Vsensor1).
+      comp("1", "V5", "v%p %t1 %t2 dc 0"),
+      port("11", "1", "1", "1"),
+      port("12", "1", "2", "2"),
+      comp("2", "I2", "B%p %t2 %t1 I = { I(Vsensor1) - 1.13 + V(12) * v(pri) }"),
+      port("21", "2", "1", "1"),
+      port("22", "2", "2", "2"),
+      // An ideal resistor holds the only pins on nets 12 and pri: it becomes a wrapper to carry the probes.
+      comp("3", "R1", "r%p %t1 %t2 #1 vres%p \n.model vres%p r()", ["0", "1k"]),
+      port("31", "3", "1", "1"),
+      port("32", "3", "2", "2"),
+      node("41", "12", ["31"]),
+      comp("5", "L4", "l%p %t1 %t2 #1 %v4?IC=#5%v:%v;", ["0", "90m"]),
+      port("51", "5", "1", "1"),
+      port("52", "5", "2", "2"),
+      comp("6", "L5", "l%p %t1 %t2 #1 %v4?IC=#5%v:%v;", ["0", "10m"]),
+      port("61", "6", "1", "1"),
+      port("62", "6", "2", "2"),
+      comp("7", "K1", "k%p lL4 lL5 0.9"),
+    ].join("");
+    const finals = new Map([["1", ["Sensor1"]]]);
+    const s = parseSpice(items(xml), new Set(), finals, new Map([["pri", [{ refdes: "R1", pin: "2" }]]]));
+    expect(s.library).toContain(".global ew_v_12 ew_v_pri ew_i_vsensor1");
+    expect(s.library).toContain("BI2 t2 t1 I = { V(ew_i_vsensor1) - 1.13 + V(ew_v_12) * v(ew_v_pri) }");
+    expect(s.library).toContain("vV5 t1 t2 dc 0\n* Probes other parts read (Multisim names are global)\nBew_i_vsensor1 ew_i_vsensor1 0 V={I(vV5)}");
+    expect(s.byComponent.get("3")).toMatchObject({ device: "SUBCKT", name: "EW_R1" });
+    expect(s.library).toContain("Bew_v_12 ew_v_12 0 V={V(t1)}\nBew_v_pri ew_v_pri 0 V={V(t2)}");
+    // The inductors stay KiCad's own; the coupling is a top-level K line.
+    expect(s.byComponent.get("5")).toMatchObject({ device: "L" });
+    expect(s.byComponent.get("7")).toEqual({ exclude: true });
+    expect(s.directives).toEqual(["K1 L4 L5 0.9"]);
   });
 });
 

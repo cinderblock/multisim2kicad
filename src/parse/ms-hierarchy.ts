@@ -88,6 +88,8 @@ export interface MultisimDesign {
   pinRemap(inst: SheetInstance, page: string, drawnKey: string): Map<string, string> | undefined;
   /** 1-based unit (section) of the final part this drawn symbol is, if multi-section. */
   finalUnit(inst: SheetInstance, page: string, drawnKey: string): number | undefined;
+  /** Final refdes of each `CiComponent`, one per placement (a subcircuit used twice places it twice). */
+  finalNames(): Map<string, string[]>;
   warnings: string[];
 }
 
@@ -262,6 +264,24 @@ export function parseMultisimDesign(input: XmlInput): MultisimDesign & { ci: Map
     finalRefdes: (inst, page, key) => irMap.get(inst.cirOf(page))?.get(key),
     pinRemap: (inst, page, key) => remaps.get(`${inst.cirOf(page)}|${key}`),
     finalUnit: (inst, page, key) => unitMap.get(`${inst.cirOf(page)}|${key}`),
+    finalNames: () => {
+      const out = new Map<string, string[]>();
+      const walk = (inst: SheetInstance): void => {
+        for (const pg of pages.filter((p) => p.title === inst.sheet)) {
+          for (const s of pg.symbols.values()) {
+            const drawn = s.ciComp ? ci.get(s.ciComp)?.body.str("LocalName") : undefined;
+            if (!drawn || s.kind === "CIITMacroComponent") continue;
+            const final = irMap.get(inst.cirOf(pg.page))?.get(drawn + s.obj.str("DBComponentSectionName")) ?? drawn;
+            const list = out.get(s.ciComp) ?? [];
+            if (!list.includes(final)) list.push(final);
+            out.set(s.ciComp, list);
+          }
+        }
+        for (const c of inst.children) walk(c);
+      };
+      walk(root);
+      return out;
+    },
   };
 }
 
@@ -269,7 +289,11 @@ export function parseMultisimDesign(input: XmlInput): MultisimDesign & { ci: Map
  * Multisim's flattened netlist (final refdes, final pin numbers), built from
  * the drawing ID graph. This is the scorecard's reference.
  */
-export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): Map<string, NetPin[]> {
+export function flattenNetlist(
+  design: ReturnType<typeof parseMultisimDesign>,
+  /** Filled with each net name users gave (lowercase; the root sheet's first, then deeper ones) -> its pins. */
+  named?: Map<string, NetPin[]>,
+): Map<string, NetPin[]> {
   const { ci, pages, warnings } = design;
   const portPins = (portId?: string): string[] => {
     const p = portId ? ci.get(portId) : undefined;
@@ -296,6 +320,7 @@ export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): 
   };
 
   const pinsAt = new Map<string, NetPin[]>();
+  const supplyAt = new Map<string, NetPin[]>();
   const expand = (inst: SheetInstance, ports: Map<string, string>, depth: number) => {
     for (const pg of pages.filter((p) => p.title === inst.sheet)) {
       const K = (id: string) => `${inst.path}|${pg.page}|${id}`;
@@ -327,10 +352,15 @@ export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): 
           continue;
         }
         const s = strColls(comp.body);
-        if (s[0]?.[0] === "POWER_SOURCES" || s[1]?.[0] === "91") continue; // power / connector: joined by modifier
         const drawn = comp.body.str("LocalName");
         const key = drawn + owner.obj.str("DBComponentSectionName");
         const final = design.finalRefdes(inst, pg.page, key) ?? (depth === 0 ? drawn : `${inst.path}/${drawn}`);
+        if (s[0]?.[0] === "POWER_SOURCES" || s[1]?.[0] === "91") {
+          // Power / connector: joined by modifier, not part of the netlist;
+          // a source still has a pin a named net can be read from.
+          if (named && s[0]?.[0] === "POWER_SOURCES") supplyAt.set(pk, [...(supplyAt.get(pk) ?? []), { refdes: final, pin: displayText(p.pinName) || p.pinNumber }]);
+          continue;
+        }
         const remap = design.pinRemap(inst, pg.page, key);
         const nums = portPins(p.portId);
         const list = pinsAt.get(pk) ?? [];
@@ -372,6 +402,18 @@ export function flattenNetlist(design: ReturnType<typeof parseMultisimDesign>): 
   for (const [k, ps] of pinsAt) {
     const r = find(k);
     nets.set(r, [...(nets.get(r) ?? []), ...ps]);
+  }
+  if (named) {
+    const names = [...parent.keys()].flatMap((k) => {
+      // Net-name labels, on- and off-page connectors, global names.
+      const m = /^([^|]*)\|(?:[^|]*\|)?(?:NAME|ONPAGE|OFFPAGE):(.*)$/.exec(k) ?? /^()G:(.*)$/.exec(k);
+      return m ? [{ depth: m[1]!.split("/").length, name: m[2]!.toLowerCase(), root: find(k) }] : [];
+    });
+    const supplies = new Map<string, NetPin[]>();
+    for (const [k, ps] of supplyAt) supplies.set(find(k), [...(supplies.get(find(k)) ?? []), ...ps]);
+    for (const n of names.sort((a, b) => a.depth - b.depth)) {
+      if (!named.has(n.name)) named.set(n.name, [...(nets.get(n.root) ?? []), ...(supplies.get(n.root) ?? [])]);
+    }
   }
   return nets;
 }

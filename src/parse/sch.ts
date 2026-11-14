@@ -42,7 +42,7 @@ import { type CiNetlist, collectCiItems, parseCiNetlist } from "../ref/ci-netlis
 import { circuitParams, parkingX, parseSpice, type SpiceDesign, supplySymbols } from "./spice.ts";
 import { drawnPinNumbers, portPinNumbers } from "../ref/ci-netlist.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
-import { type PageIndex, parseMultisimDesign, type SheetInstance } from "./ms-hierarchy.ts";
+import { flattenNetlist, type NetPin, type PageIndex, parseMultisimDesign, type SheetInstance } from "./ms-hierarchy.ts";
 
 /** Child elements of `n` named `list` > `item` (e.g. `Points` > `Item`). */
 const items = (n: EwElement | undefined, list: string, item = "Item"): EwElement[] =>
@@ -775,8 +775,10 @@ export function parseSchematicXml(input: XmlInput): Schematic {
   const ci = parseCiNetlist(doc);
   const params = circuitParams(root);
   const paramNames = new Set([...params.values()].flatMap((d) => [...d.matchAll(/^\.param (\w+)=/gm)].map((m) => m[1]!.toLowerCase())));
-  const spice = parseSpice(collectCiItems(root), paramNames);
   const design = parseMultisimDesign(doc);
+  const namedNets = new Map<string, NetPin[]>();
+  flattenNetlist(design, namedNets);
+  const spice = parseSpice(collectCiItems(root), paramNames, design.finalNames(), namedNets);
   portPins = (portId) => {
     const port = portId ? design.ci.get(portId) : undefined;
     return port ? portPinNumbers(port.body) : [];
@@ -797,6 +799,14 @@ export function parseSchematicXml(input: XmlInput): Schematic {
     const page = sheets.find((sh) => sh.title === sheetName) ?? rootPage;
     const y = 20 + (page === rootPage ? 30 * (supplies.symbols.length / 2) : 0);
     page.texts.push({ text: directive, at: { x: parkingX(page), y }, size: 5 });
+  }
+  // Coupled inductors that belong to separate parts: `K` lines, which KiCad
+  // passes to the simulator from a text item too. Below the supplies and the
+  // root sheet's parameters.
+  if (spice.directives.length) {
+    const rootParams = [...params.keys()].filter((name) => (sheets.find((sh) => sh.title === name) ?? rootPage) === rootPage).length;
+    const y = 20 + 30 * (supplies.symbols.length / 2) + 30 * rootParams;
+    rootPage.texts.push({ text: spice.directives.join("\n"), at: { x: parkingX(rootPage), y }, size: 5 });
   }
 
   return {
