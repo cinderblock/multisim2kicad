@@ -113,6 +113,12 @@ map its pins to the model's nodes in Multisim's order.
   checks are dropped.
 - Circuit parameters become a `.param` simulator directive on their sheet.
   Part values that use them stay expressions.
+- A part's expression can read another part's current (`I(Vsensor1)`) or a
+  net by name (`V(pri)`), as in Multisim's flat netlist. The part that owns
+  the current or sits on the net gets a probe: a behavioural source copying
+  the value onto a shared (`.global`) node, which the expression reads.
+  Coupled inductors that are separate parts (`K1 L4 L5 0.9`) become a `K`
+  line in a text directive on the root sheet.
 - Tri-state and bidirectional pins (bus buffers and transceivers: 74xx125,
   240, 244, 245, 373, ...) work on shared buses. Each output that can go
   high-Z gets an enable signal from the chip's tables, and the enable drives
@@ -124,11 +130,12 @@ map its pins to the model's nodes in Multisim's order.
 - A digital input left unconnected reads low, as in XSPICE (some of NI's
   counter demos leave `~LOAD` open, so they load instead of counting).
 
-Checked on NI's own Multisim 13 sample circuits: 170 of 200 solve their
-operating point in KiCad's ngspice as converted. 25 load but don't reach an
+Checked on NI's own Multisim 13 sample circuits: 177 of 200 solve their
+operating point in KiCad's ngspice as converted. 19 load but don't reach an
 operating point (most are built for transient analysis: oscillators,
-converters; two need `.options rshunt=1e9` once their logic simulates).
-4 use syntax ngspice lacks (PSpice `LAPLACE` sources, for one).
+converters; a few have a source or logic net with no DC path and need
+`.options rshunt=1e9`). 3 use syntax ngspice lacks (PSpice `LAPLACE`
+sources, for one).
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).

@@ -1182,6 +1182,37 @@ hierarchy, connectors), since those are what make an output useless today.
       library load through KiCad into ngspice. NI sweep unchanged (170 / 25 /
       4 / 1). **Master DB: 54,275 of
       57,101 symbols simulate.**
+- [x] (2026-11-14) **Cross-part references** (`7fe78d3`). Multisim
+      netlists flat, so expressions read other parts' currents
+      (`I(Vsensor1)`: device `v` + the *final* refdes, `IRPrefix`+`IRNumber`
+      from `CIRToInfoMap`, not the Ci `LocalName` V5) and nets by name
+      (`V(pri)`, `V(12,1)`). Inside our per-part wrappers ngspice looked them
+      up locally: "unknown controlling source v.xi6.vsensor1" (4 samples)
+      or, for nets, a silently floating local node (23 references in 12 of
+      200 samples). Fix: the owning part's wrapper gets a probe `Bew_i_x
+      ew_i_x 0 V={I(dev)}` / `Bew_v_n ew_v_n 0 V={V(pin node)}` on a
+      `.global` node, and the expression reads `V(ew_..)`; a reader's own pin
+      is read directly; an ideal R/C/L host becomes a wrapper; parts placed
+      more than once can't host (warned). Net names come from
+      `flattenNetlist(design, named)`: `NI_EWB_NET_NAME` labels **and on/off-
+      page connectors** (ControlledSources' `p`, `gain` are connector names)
+      plus POWER_SOURCES pins (sources are left out of the scorecard netlist
+      but host probes); then Multisim's net numbers (`CiNode` LocalName are
+      numbers, never user names). Coupling parts (`kT2 lL4 lL5 0.9`) move to
+      a root-sheet text directive `K1 L4 L5 0.9` (KiCad passes K lines from
+      text items); an inductor inside a wrapper is named `l.xl4.ll4`
+      (verified in ngspice directly, not yet through KiCad). Also `%f`
+      arrays (`pwl(%f11:10:1)`) now brace items using circuit parameters
+      (BuckConverter: "unknown parameter (hs_surgetimeos)"). **Verified:**
+      TransformerModels' three equivalent models (ideal, B-source pair
+      using the probes, K-coupled inductors) give the same 49.1 mV output,
+      matching a hand calculation. **NI sweep: 177 ok / 19 op-failed / 3
+      parse / 1 unknown** (from 170/25/4/1; 7 improved, none regressed).
+      Remaining op-failed in that group are real DC-floating nets (Vin
+      with only a scope on it, diode-bridge nodes), not wrapper artifacts.
+      Gotcha: `TaskStop` on a backgrounded `bash sweep.sh` left its loop
+      running and two sweeps wrote one results.tsv (381 rows); check for
+      stray `sweep.sh` processes before trusting a rerun.
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.
