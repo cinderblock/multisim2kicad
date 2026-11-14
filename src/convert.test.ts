@@ -12,7 +12,7 @@ import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
-import { circuitParams, enablePinModel, expandTemplate, inlineResistorModels, modelDef, ngspiceDialect, parseSpice, pinModelDef, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
+import { circuitParams, enablePinModel, expandTemplate, inlineResistorModels, laplaceToXspice, modelDef, ngspiceDialect, parseLaplace, parseSpice, pinModelDef, renameReservedParams, sdtToIntegrator, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
 import { dchipSubckt, parseChip, rewriteDChipInstances, translateDChips } from "./parse/dchip.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
@@ -604,7 +604,11 @@ describe("spice", () => {
     expect(expandTemplate("a%p %%vd (%t2 %t1) sq%p\n+ cntl_array = [%f11:10:2]\n+ freq_array = [%f12:10:2]", { ref: "V1", params, node: (t) => `n${t}` })).toBe(
       "aV1 %vd(n2 n1) sqV1\n+ cntl_array = [0 5 5]\n+ freq_array = [1 1e7 2e6]",
     );
-    expect(expandTemplate("v%p %t1 0 pwl(%f2:1:1)", { ref: "V2", params: ["", "5", "0", "0", "t_on", "5", "t_on+10n"], node: (t) => t, circuitParams: new Set(["t_on"]) })).toBe(
+    // s_xfer's template: a stray else/end opens each list; the last condition has no end.
+    expect(expandTemplate("num=[ %v:%v;%v3?#4 %v:%v;%v1?#2 ]\nden=[ %v:%v;%v5?#6 %v:%v;%v7?#8 ])", { ref: "A1", params: ["", "1", "1", "0", "5", "1", "0.001", "1", "1"], node: (t) => t })).toBe(
+      "num=[ 1 ]\nden=[ 0.001 1 ])",
+    );
+    expect(expandTemplate("v%p %t1 0 pwl(%f2:1:1)",{ ref: "V2", params: ["", "5", "0", "0", "t_on", "5", "t_on+10n"], node: (t) => t, circuitParams: new Set(["t_on"]) })).toBe(
       "vV2 1 0 pwl(0 0 {t_on} 5 {t_on+10n})",
     );
     expect(expandTemplate("m%p %tD %tG %tS %tS %m %S0",{ ref: "Q1", params: [], strings: [" L=6u W=125u"], node: (t) => t, model: "N" })).toBe("mQ1 D G S S N  L=6u W=125u");
@@ -760,7 +764,7 @@ describe("d_chip (Multisim behavioural logic)", () => {
     expect(lib.text("t")).toContain("xaU3 d_A d_Y INV1");
     const bad = modelDef("BAD", chip("BAD", ["/inputs A", "/outputs Y", "/frobnicate"]))!;
     expect(simSpec("U4", [{ template: "a%p [%tA?%t:d%t;A] [%tY?%t:d%t;Y] %m", params: [], model: bad, pins }], lib)).toEqual({ exclude: true });
-    expect(lib.warnings.some((w) => w.startsWith("U4: model type d_chip") && w.includes("unknown directive /frobnicate"))).toBe(true);
+    expect(lib.warnings.some((w) => w.startsWith("U4: its model uses d_chip") && w.includes("unknown directive /frobnicate"))).toBe(true);
   });
 
   test("trailing pins the chip doesn't declare (VCC / GND, read-back) are dropped; too few is an error", () => {
@@ -769,6 +773,55 @@ describe("d_chip (Multisim behavioural logic)", () => {
     const errors: string[] = [];
     expect(rewriteDChipInstances("aU [a] [y] CH", chips, errors)).toBe("aU [a] [y] CH");
     expect(errors[0]).toContain("1 inputs / 1 outputs for d_chip CH, which has 2 / 1");
+  });
+});
+
+describe("spice: PSpice functions ngspice lacks", () => {
+  test("parameters named like functions are renamed in the subcircuit and its calls", () => {
+    const text = [
+      ".subckt PI inp inn outp outn PARAMS: kp=1 ki=1",
+      "+ max=60 min=-60",
+      "E1 outp outn value={limit(kp*V(inp,inn),min,max)}",
+      ".ends",
+      "xA1 a b c d PI PARAMS: kp=2 max=6 min=-6",
+    ].join("\n");
+    expect(renameReservedParams(text)).toBe(
+      [".subckt PI inp inn outp outn PARAMS: kp=1 ki=1", "+ p_max=60 p_min=-60", "E1 outp outn value={limit(kp*V(inp,inn),p_min,p_max)}", ".ends", "xA1 a b c d PI PARAMS: kp=2 p_max=6 p_min=-6"].join("\n"),
+    );
+  });
+
+  test("sdt() becomes an XSPICE integrator after its element", () => {
+    expect(sdtToIntegrator("E1 o 0 value={kp*v(a) + ki*sdt(v(a,b)*2)}\n+ ")).toBe(
+      [
+        "E1 o 0 value={kp*v(a) + ki*V(ew_sdt1)}",
+        "+ ",
+        "Bew_sdt1 ew_sdt1_in 0 V={v(a,b)*2}",
+        "aew_sdt1 ew_sdt1_in ew_sdt1 ew_sdt1_int",
+        ".model ew_sdt1_int int(gain=1 out_ic=0 out_lower_limit=-1e12 out_upper_limit=1e12 limit_range=1e-6)",
+      ].join("\n"),
+    );
+  });
+
+  test("LAPLACE: rational functions of s and delays become s_xfer (+ a delay line)", () => {
+    expect(parseLaplace("e^(-1m*s)/(1+0.001*s)")).toEqual({ num: [1], den: [1, 0.001], delay: 0.001 });
+    expect(parseLaplace("100/(s*(s+10))")).toEqual({ num: [100], den: [0, 10, 1], delay: 0 });
+    expect(parseLaplace("(s+1)^2/(s+1k)^2")).toEqual({ num: [1, 2, 1], den: [1e6, 2000, 1], delay: 0 });
+    expect(parseLaplace("1/(1+s*tau)")).toBeUndefined();
+    expect(laplaceToXspice("G2 a b LAPLACE {V(x)} = {1/(s+1)}")).toBe(
+      [
+        "* G2: LAPLACE {V(x)} {1/(s+1)} as XSPICE s_xfer",
+        "Bew_lap_G2 ew_lap_G2_in 0 V={V(x)}",
+        "aew_lap_G2 ew_lap_G2_in ew_lap_G2_out ew_lap_G2_xfer",
+        ".model ew_lap_G2_xfer s_xfer(gain=1 num_coeff=[1] den_coeff=[1 1])",
+        "G2 a b ew_lap_G2_out 0 1",
+      ].join("\n"),
+    );
+    const warnings: string[] = [];
+    expect(laplaceToXspice("E3 a b LAPLACE {V(x)} {s^2/(s+1)}", warnings)).toBe("E3 a b LAPLACE {V(x)} {s^2/(s+1)}");
+    expect(warnings).toHaveLength(1);
+    // What stays untranslated marks the part excluded.
+    expect(unsupportedModelType("E3 a b LAPLACE {V(x)} {s^2/(s+1)}")).toBe("PSpice LAPLACE");
+    expect(unsupportedModelType("E4 3 4 FREQ {v(1,2)} (100,0,0) (1k,-3,-45) db deg")).toBe("PSpice FREQ");
   });
 });
 

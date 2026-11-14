@@ -161,10 +161,224 @@ export function inlineResistorModels(text: string): string {
     .trim();
 }
 
+/** Function names a subcircuit parameter can't share in ngspice's PSpice mode (it expands `limit()` into `min()` / `max()`). */
+const RESERVED_PARAMS = new Set(["min", "max", "abs", "sqrt", "exp", "ln", "log", "log10", "sin", "cos", "tan", "atan", "sinh", "cosh", "tanh", "pow", "pwr", "sgn", "floor", "ceil", "int", "limit", "if", "table"]);
+
+/**
+ * Subcircuit parameters named like functions (NI's PI block has `max=60
+ * min=-60` and uses `limit(..., min, max)`) become `p_<name>`: in the
+ * subcircuit that declares them, and in every call's `PARAMS:`.
+ */
+export function renameReservedParams(text: string): string {
+  if (!/\bparams:/i.test(text)) return text;
+  const reserved = (name: string) => RESERVED_PARAMS.has(name.toLowerCase());
+  const lines = text.split("\n");
+  // Elements with their `+` continuation lines.
+  const groups: string[][] = [];
+  for (const l of lines) {
+    if (/^\s*\+/.test(l) && groups.length) groups.at(-1)!.push(l);
+    else groups.push([l]);
+  }
+  let renames: RegExp | undefined;
+  const out: string[] = [];
+  for (const g of groups) {
+    const joined = g.join(" ");
+    if (/^\s*\.ends\b/i.test(joined)) renames = undefined;
+    const isHeader = /^\s*\.subckt\b/i.test(joined);
+    if (isHeader) {
+      const names = [...(/\bparams:(.*)$/i.exec(joined)?.[1] ?? "").matchAll(/\b([A-Za-z_]\w*)\s*=/g)].map((m) => m[1]!).filter(reserved);
+      renames = names.length ? new RegExp(`\\b(${names.join("|")})\\b(?!\\s*[(=])`, "gi") : undefined;
+    }
+    // Everything after `PARAMS:` (on whichever line of the element) is assignments: `max=6` -> `p_max=6`.
+    let afterParams = false;
+    for (const line of g) {
+      const at = afterParams ? 0 : (/\bparams:/i.exec(line)?.index ?? -1);
+      let l = line;
+      if (at >= 0) {
+        afterParams = true;
+        l = l.slice(0, at) + l.slice(at).replace(/\b([A-Za-z_]\w*)(\s*=)/g, (m, n: string, eq: string) => (reserved(n) ? `p_${n}${eq}` : m));
+      }
+      // Uses inside the subcircuit that declares them (not calls, not assignments).
+      out.push(renames && !isHeader && !/^\s*\*/.test(l) ? l.replace(renames, "p_$1") : l);
+    }
+  }
+  return out.join("\n");
+}
+
+/**
+ * PSpice's integral `sdt(x)`, which ngspice lacks, as XSPICE's integrator:
+ * a B source carries `x` onto a node, an `int` block integrates it (from 0
+ * at the operating point, as PSpice does), and the expression reads its
+ * output. The new lines go after the element that used it, in its scope.
+ */
+export function sdtToIntegrator(text: string): string {
+  if (!/\bsdt\s*\(/i.test(text)) return text;
+  let n = 0;
+  const lines = text.split("\n");
+  const out: string[] = [];
+  const pending: string[] = [];
+  const rewrite = (s: string): string => {
+    let r = "";
+    let i = 0;
+    for (;;) {
+      const m = /\bsdt\s*\(/gi;
+      m.lastIndex = i;
+      const hit = m.exec(s);
+      if (!hit) return r + s.slice(i);
+      // The argument, up to its matching parenthesis.
+      let depth = 1;
+      let j = hit.index + hit[0].length;
+      for (; j < s.length && depth; j++) depth += s[j] === "(" ? 1 : s[j] === ")" ? -1 : 0;
+      const arg = rewrite(s.slice(hit.index + hit[0].length, j - 1));
+      const k = ++n;
+      pending.push(`Bew_sdt${k} ew_sdt${k}_in 0 V={${arg}}`, `aew_sdt${k} ew_sdt${k}_in ew_sdt${k} ew_sdt${k}_int`, `.model ew_sdt${k}_int int(gain=1 out_ic=0 out_lower_limit=-1e12 out_upper_limit=1e12 limit_range=1e-6)`);
+      r += `${s.slice(i, hit.index)}V(ew_sdt${k})`;
+      i = j;
+    }
+  };
+  lines.forEach((line, i) => {
+    out.push(/^\s*\*/.test(line) ? line : rewrite(line));
+    // After the last continuation line of this element.
+    if (pending.length && !/^\s*\+/.test(lines[i + 1] ?? "")) out.push(...pending.splice(0));
+  });
+  return out.join("\n");
+}
+
+/** A transfer function: numerator / denominator polynomials in s (index = power), times e^(-delay*s). */
+interface Rational {
+  num: number[];
+  den: number[];
+  delay: number;
+}
+
+const polyMul = (a: number[], b: number[]): number[] => {
+  const out = new Array<number>(a.length + b.length - 1).fill(0);
+  a.forEach((x, i) => b.forEach((y, j) => (out[i + j]! += x * y)));
+  return out;
+};
+const polyAdd = (a: number[], b: number[]): number[] => Array.from({ length: Math.max(a.length, b.length) }, (_, i) => (a[i] ?? 0) + (b[i] ?? 0));
+const SPICE_SCALE: Record<string, number> = { t: 1e12, g: 1e9, meg: 1e6, k: 1e3, mil: 25.4e-6, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 };
+
+/**
+ * Read a PSpice `LAPLACE` transfer function, `e^(-1m*s)/(1+0.001*s)`, into
+ * a rational function of s and a pure delay. Numbers only (with SPICE
+ * suffixes); undefined for anything else (parameters, other functions).
+ */
+export function parseLaplace(expr: string): Rational | undefined {
+  const tokens = expr.match(/\d+\.?\d*(?:e[-+]?\d+)?(?:meg|mil|[tgkmunpf])?[a-z]*|\.\d+(?:e[-+]?\d+)?(?:meg|mil|[tgkmunpf])?[a-z]*|[A-Za-z_]\w*|\*\*|[-+*/^()]|\S/gi) ?? [];
+  let i = 0;
+  const peek = () => tokens[i];
+  const constant = (r: Rational) => r.num.length === 1 && r.den.length === 1 && r.delay === 0;
+  const value = (r: Rational) => r.num[0]! / r.den[0]!;
+  const fail = (): never => {
+    throw new Error("unsupported");
+  };
+  const atom = (): Rational => {
+    const t = tokens[i++] ?? fail();
+    if (t === "(") {
+      const r = sum();
+      if (tokens[i++] !== ")") fail();
+      return r;
+    }
+    if (t === "-") {
+      const r = power();
+      return { ...r, num: r.num.map((x) => -x) };
+    }
+    if (t === "+") return power();
+    if (/^s$/i.test(t)) return { num: [0, 1], den: [1], delay: 0 };
+    const num = /^(\d+\.?\d*(?:e[-+]?\d+)?|\.\d+(?:e[-+]?\d+)?)(meg|mil|[tgkmunpf])?[a-z]*$/i.exec(t);
+    if (num) return { num: [Number(num[1]) * (num[2] ? SPICE_SCALE[num[2].toLowerCase()]! : 1)], den: [1], delay: 0 };
+    // e^(x) / exp(x): x must be -T*s (a delay).
+    const isE = /^e$/i.test(t) && (peek() === "^" || peek() === "**");
+    if (isE || (/^exp$/i.test(t) && peek() === "(")) {
+      if (isE) i++;
+      const x = atom();
+      if (x.delay !== 0 || x.den.length !== 1 || x.num.length !== 2 || x.num[0] !== 0) fail();
+      const T = -x.num[1]! / x.den[0]!;
+      if (!(T >= 0)) fail();
+      return { num: [1], den: [1], delay: T };
+    }
+    return fail();
+  };
+  const power = (): Rational => {
+    const base = atom();
+    if (peek() !== "^" && peek() !== "**") return base;
+    i++;
+    const e = atom();
+    if (!constant(e) || !Number.isInteger(value(e))) fail();
+    const n = value(e);
+    let r: Rational = { num: [1], den: [1], delay: 0 };
+    for (let k = 0; k < Math.abs(n); k++) r = { num: polyMul(r.num, base.num), den: polyMul(r.den, base.den), delay: r.delay + base.delay };
+    return n < 0 ? { num: r.den, den: r.num, delay: -r.delay } : r;
+  };
+  const product = (): Rational => {
+    let r = power();
+    while (peek() === "*" || peek() === "/") {
+      const op = tokens[i++];
+      const b = power();
+      r = op === "*" ? { num: polyMul(r.num, b.num), den: polyMul(r.den, b.den), delay: r.delay + b.delay } : { num: polyMul(r.num, b.den), den: polyMul(r.den, b.num), delay: r.delay - b.delay };
+    }
+    return r;
+  };
+  const sum = (): Rational => {
+    let r = product();
+    while (peek() === "+" || peek() === "-") {
+      const op = tokens[i++];
+      const b = product();
+      // Terms with different delays don't combine into one delay line.
+      if (b.delay !== r.delay) fail();
+      const bn = op === "-" ? b.num.map((x) => -x) : b.num;
+      r = { num: polyAdd(polyMul(r.num, b.den), polyMul(bn, r.den)), den: polyMul(r.den, b.den), delay: r.delay };
+    }
+    return r;
+  };
+  try {
+    const r = sum();
+    if (i !== tokens.length || r.delay < 0) return undefined;
+    const trim = (p: number[]) => {
+      const q = [...p];
+      while (q.length > 1 && q.at(-1) === 0) q.pop();
+      return q;
+    };
+    return { num: trim(r.num), den: trim(r.den), delay: r.delay };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * PSpice's `E/G name n+ n- LAPLACE {input} {H(s)}` (no ngspice equivalent)
+ * as XSPICE: a B source carries the input onto a node, a lossless line
+ * delays it when H has an `e^(-sT)` factor, an `s_xfer` block applies the
+ * rational part, and the original E / G drives from its output.
+ */
+export function laplaceToXspice(text: string, warnings?: string[]): string {
+  return text.replace(/^([ \t]*)([EG]\S*)[ \t]+(\S+)[ \t]+(\S+)[ \t]+LAPLACE[ \t]*=?[ \t]*\{([^{}]*)\}[ \t]*=?[ \t]*\{([^{}]*)\}[ \t]*$/gim, (all, ind: string, name: string, p: string, n: string, input: string, h: string) => {
+    const r = parseLaplace(h);
+    // s_xfer needs a proper function (numerator order <= denominator order).
+    if (!r || r.num.length > r.den.length || r.den.every((x) => x === 0)) {
+      warnings?.push(`${name}: LAPLACE ${h.trim()} is not a rational function of s (plus a delay) with numeric coefficients; left as is`);
+      return all;
+    }
+    const b = `ew_lap_${spiceName(name)}`;
+    const fmt = (x: number) => Number(x.toPrecision(12)).toString();
+    const coeffs = (poly: number[]) => `[${[...poly].reverse().map(fmt).join(" ")}]`;
+    const src = r.delay > 0 ? `${b}_d` : `${b}_in`;
+    return [
+      `${ind}* ${name}: LAPLACE {${input.trim()}} {${h.trim()}} as XSPICE s_xfer`,
+      `${ind}B${b} ${b}_in 0 V={${input}}`,
+      ...(r.delay > 0 ? [`${ind}T${b} ${b}_in 0 ${b}_d 0 Z0=1 TD=${fmt(r.delay)}`, `${ind}R${b} ${b}_d 0 1`] : []),
+      `${ind}a${b} ${src} ${b}_out ${b}_xfer`,
+      `${ind}.model ${b}_xfer s_xfer(gain=1 num_coeff=${coeffs(r.num)} den_coeff=${coeffs(r.den)})`,
+      `${ind}${name} ${p} ${n} ${b}_out 0 1`,
+    ].join("\n");
+  });
+}
+
 /** Rewrite the Multisim-only SPICE that real models use into ngspice. */
 export function ngspiceDialect(text: string): string {
   return (
-    inlineResistorModels(text)
+    laplaceToXspice(sdtToIntegrator(renameReservedParams(inlineResistorModels(text))))
       // `.mergenodes a b` (Multisim's digital ground ties itself to 0): a
       // 1 uOhm resistor does the same job.
       .replace(/^[ \t]*\.mergenodes[ \t]+(\S+)[ \t]+(\S+)[ \t]*$/gim, (_, a: string, b: string) => `Rmerge_${spiceName(a)}_${spiceName(b)} ${a} ${b} 1u`)
@@ -272,7 +486,12 @@ export function expandTemplate(
   };
   const conditionals = template
     .replace(/%%/g, "\u0000") // a literal `%` (`%%vd(` is XSPICE's `%vd(`)
-    .replace(/%v(\d+)\?([\s\S]*?)%v:([\s\S]*?)%v;/g, (_, n: string, a: string, b: string) => (truthy(o.params[Number(n)]) ? a : b));
+    .replace(/%v(\d+)\?([\s\S]*?)%v:([\s\S]*?)%v;/g, (_, n: string, a: string, b: string) => (truthy(o.params[Number(n)]) ? a : b))
+    // An else / end with no `%vN?` before it (the s_xfer template starts each
+    // coefficient list with one) adds nothing; a last `%vN?` with no end runs
+    // to the end of the template.
+    .replace(/%v:([\s\S]*?)%v;/g, "")
+    .replace(/%v(\d+)\?([\s\S]*)$/, (_, n: string, a: string) => (truthy(o.params[Number(n)]) ? a : ""));
   return conditionals
     // `%fS:L:K`: an array, parameters S, S+K, ... (parameter L / K of them);
     // `%fS`: parameter S.
@@ -375,13 +594,18 @@ const NGSPICE_MODEL_TYPES = new Set(
   ).split(" "),
 );
 
-/** The first `.MODEL` type in `text` that ngspice lacks, if any. */
+/**
+ * The first `.MODEL` type in `text` that ngspice lacks, if any; or a PSpice
+ * source form it lacks: a `FREQ` response table (no exact time-domain
+ * equivalent), or a `LAPLACE` that `laplaceToXspice` couldn't translate.
+ */
 export function unsupportedModelType(text: string): string | undefined {
   for (const m of text.matchAll(/^[ \t]*\.model[ \t]+\S+[ \t]+\(?[ \t]*([A-Za-z_][A-Za-z0-9_]*)/gim)) {
     const type = m[1]!.toLowerCase();
     if (!NGSPICE_MODEL_TYPES.has(type)) return type;
   }
-  return undefined;
+  const source = /^[ \t]*[EG]\S*[ \t]+\S+[ \t]+\S+[ \t]+(FREQ|LAPLACE)\b/im.exec(text);
+  return source ? `PSpice ${source[1]!.toUpperCase()}` : undefined;
 }
 
 const R_TEMPLATE =/^r%p %t1 %t2 #1 vres%p /;
@@ -559,7 +783,9 @@ const EXPR_REF = /\b([vi])\(\s*([^()]*?)\s*\)/gi;
 const inExpressions = (text: string, f: (expr: string) => string): string => text.replace(/\{[^{}]*\}/g, f);
 
 /** Fill `xref`'s outputs from a wrapper body, and apply its rewrites. */
-function crossRefs(body: string, ports: string[], xref: Xref): string {
+function crossRefs(full: string, ports: string[], xref: Xref): string {
+  // Subcircuits a template defines have their own local names: leave them be.
+  const { body, blocks } = hoistSubckts(full);
   const elements = body.split("\n").filter((l) => l.trim() && !/^[*.+]/.test(l.trim()));
   // Local names: the tokens outside expressions (element names, nodes, models).
   const local = new Set<string>(["0", ...ports.map((p) => p.toLowerCase())]);
@@ -596,7 +822,7 @@ function crossRefs(body: string, ports: string[], xref: Xref): string {
     ks.length && ks.length === elements.length && ks.every(foreignL)
       ? ks.map((t) => ({ name: t[0]!, inductors: t.slice(1, -1).map((x) => x.toLowerCase()), k: t.at(-1)! }))
       : undefined;
-  return rewritten;
+  return [...blocks, rewritten].join("\n");
 }
 
 /**
@@ -656,10 +882,11 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   // Code models ngspice doesn't have (Multisim's `d_chip` logic language,
   // `d_vhdl`, ...): one unknown model type fails the whole simulation.
   const modelTexts = sections.flatMap((s) => [ngspiceDialect(s.template), s.model?.text ?? "", ...[...(s.pinModels?.values() ?? [])].map((p) => (enablePinModel(p) ?? p).model.text)]);
-  const foreign = unsupportedModelType(modelTexts.join("\n"));
+  // (A template's LAPLACE has its function only once expanded: checked below.)
+  const foreign = unsupportedModelType(modelTexts.join("\n").replace(/^.*\bLAPLACE\b.*$/gim, ""));
   if (foreign) {
     const why = sections.flatMap((s) => s.model?.issues ?? []);
-    lib.warnings.push(`${ref}: model type ${foreign} is Multisim-only${why.length ? ` (${why.join("; ")})` : ""}; excluded from simulation`);
+    lib.warnings.push(`${ref}: its model uses ${foreign}, which ngspice lacks${why.length ? ` (${why.join("; ")})` : ""}; excluded from simulation`);
     return { exclude: true };
   }
 
@@ -767,7 +994,7 @@ export function simSpec(ref: string, sectionsIn: SimSection[], lib: SpiceLibrary
   // Again on the expanded text: `%S0` can carry a whole `.model`.
   const foreignExpanded = unsupportedModelType(body);
   if (foreignExpanded) {
-    lib.warnings.push(`${ref}: model type ${foreignExpanded} is Multisim-only; excluded from simulation`);
+    lib.warnings.push(`${ref}: its model uses ${foreignExpanded}, which ngspice lacks; excluded from simulation`);
     return { exclude: true };
   }
   // Multisim's expressions know `pi`; ngspice's `{...}` doesn't.
