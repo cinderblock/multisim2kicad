@@ -1213,6 +1213,42 @@ hierarchy, connectors), since those are what make an output useless today.
       Gotcha: `TaskStop` on a backgrounded `bash sweep.sh` left its loop
       running and two sweeps wrote one results.tsv (381 rows); check for
       stray `sweep.sh` processes before trusting a rerun.
+- [x] (2026-11-14) **PSpice forms ngspice lacks** (`0af221b`). The 3
+      parse-error samples: DCMotorDriveCloseLoop / VectorControlPMSM (NI's
+      PI block: `PARAMS: max=60 min=-60` + `limit(..., min, max)`; ngspice's
+      PSpice `limit()` expansion breaks on parameters named like functions
+      -> renamed `p_max`/`p_min` in the subcircuit and its calls), and
+      S-DomainFunctions (`E1 3 4 LAPLACE {v(1,2)} {e^(-1m*s)/(1+0.001*s)}`,
+      a `FREQ` table, and an `s_xfer` template whose conditionals start
+      with a stray `%v:%v;` and end with an unterminated `%v26?#14 ])`).
+      **`sdt()` doesn't exist in ngspice**: in a B source it's "no such
+      function"; inside the PI block's E `value=` it *silently read 0* once
+      the parse error was fixed. Now an XSPICE `int` (needs
+      `out_lower/upper_limit`; set to +/-1e12) fed by a B source. LAPLACE:
+      parsed exactly to num/den polynomials + delay (numbers with SPICE
+      suffixes, + - * / ^, `e^(-T*s)` / `exp(-T*s)`) -> B source, matched
+      `T` line (Z0=1, TD=T, 1 ohm load) for the delay, `s_xfer` (coeffs
+      highest power first). FREQ -> part excluded with a warning.
+      **Verified (included-file netlists, as KiCad loads them):** PI block
+      with kp=2 ki=100, 1 V in: 3.0 V at 10 ms, 5.0 V at 30 ms, clamps at
+      6 V; LAPLACE step response 0 / 0.634 / 0.951 at 0.9 / 2 / 4 ms vs
+      exact 0 / 0.632 / 0.950. **NI sweep: 179 ok / 20 op-failed / 0
+      parse / 1 unknown.** VectorControlPMSM now parses; its `ia/ib/ic`
+      on-page connectors touch only U2 (Multisim's netlist agrees), so it
+      needs rshunt (transient then runs). FWR (unknown) is ngspice hanging
+      >6 min in the operating point of an op-amp precision rectifier
+      (BAV99 pin 1 open, as in Multisim); not investigated further.
+      **Harness gotcha:** ngspice's `ngbehavior=ps` applies PSpice
+      translations only to `.include`/`.lib` files; an inline test netlist
+      then shows `limit()` wrong (limit(3,-5,5) = -2), `if()` / `stp()` /
+      `pwrs()` unknown and `pwr()` sign-preserving. All correct with
+      `psa` or through an included file (= KiCad). Test model snippets via
+      `.include` (or `ngbehavior=psa`), never inline under `ps`.
+      `atan2()` is missing even then (unused in NI's DB). NI's DB has no
+      `sdt()`, LAPLACE or function-named parameters (`ISDT(` is a .FUNC
+      name), so its 54,275 count is unchanged.
+- [ ] FWR (NI sample): ngspice doesn't converge (hangs) on its operating
+      point. Op-amp model or ngspice options; unexplored.
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.

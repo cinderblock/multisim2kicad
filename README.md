@@ -101,6 +101,12 @@ map its pins to the model's nodes in Multisim's order.
 - A few Multisim-only SPICE constructs are rewritten for ngspice:
   `.mergenodes`, `TABLE ... USELIM`, and the interactive potentiometer
   (fixed at its saved setting).
+- PSpice forms ngspice lacks are translated: `sdt()` (integral) becomes an
+  XSPICE integrator, `E`/`G ... LAPLACE {in} {H(s)}` an XSPICE `s_xfer`
+  block (plus a delay line for an `e^(-sT)` factor; numeric coefficients
+  only), and subcircuit parameters named like functions (`max`, `min`) are
+  renamed. A `FREQ` response-table source has no exact equivalent: its part
+  is excluded, with a warning.
 - Digital parts simulate with ngspice's XSPICE gates. Each digital pin
   gets the ideal analog/digital bridge from its Multisim interface model.
 - Multisim's `d_chip` behavioural logic (most 74xx and 4000-series MSI
@@ -125,17 +131,17 @@ map its pins to the model's nodes in Multisim's order.
   the pin's output switch. Multisim's own high-Z sensing (`dac_hiz`) has no
   ngspice equivalent.
 - Parts whose model needs something ngspice doesn't have are excluded,
-  with a warning: `chirp()` sources, `d_vhdl`, and other Multisim-only
-  code models.
+  with a warning: `chirp()` sources, `d_vhdl`, other Multisim-only code
+  models, PSpice `FREQ` tables.
 - A digital input left unconnected reads low, as in XSPICE (some of NI's
   counter demos leave `~LOAD` open, so they load instead of counting).
 
-Checked on NI's own Multisim 13 sample circuits: 177 of 200 solve their
-operating point in KiCad's ngspice as converted. 19 load but don't reach an
+Checked on NI's own Multisim 13 sample circuits: 179 of 200 solve their
+operating point in KiCad's ngspice as converted. 20 load but don't reach an
 operating point (most are built for transient analysis: oscillators,
-converters; a few have a source or logic net with no DC path and need
-`.options rshunt=1e9`). 3 use syntax ngspice lacks (PSpice `LAPLACE`
-sources, for one).
+converters, motor drives; several have a source or logic net with no DC path
+and need `.options rshunt=1e9`). One (a precision rectifier) doesn't
+converge. None fail to parse.
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).
