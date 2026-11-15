@@ -818,13 +818,17 @@ export function parseSchematicXml(input: XmlInput): Schematic {
     const state = rootDs?.findAll((e) => e.name === "CIITDiagram").map((d) => d.str("SimState")).find(Boolean);
     let settings: SimSettings | undefined;
     try {
-      settings = state ? simSettings(state) : undefined;
+      settings = state ? simSettings(state, { digital: /\b(adc_bridge|dac_bridge)\b/i.test(spice.library) }) : undefined;
     } catch (e) {
       warnings.push(`simulation settings unreadable: ${(e as Error).message}`);
     }
     const lines = [settings?.options, settings?.analysis].filter((l): l is string => !!l);
     if (settings?.skipped.length) lines.push(`* Multisim also has results for: ${settings.skipped.join(", ")}`);
     if (lines.length && lines[0]!.startsWith(".")) rootPage.texts.push({ text: lines.join("\n"), at: { x: parkingX(rootPage), y: parkY }, size: 5 });
+    // LabVIEW co-simulation: LabVIEW drives the design's input terminals
+    // while Multisim runs; in KiCad nothing does.
+    const cosimInputs = root.find((e) => e.name === "CCoSimConnectorManager")?.child("InputGuids")?.findAll((e) => e.name === "Guid").length ?? 0;
+    if (cosimInputs) warnings.push(`LabVIEW co-simulation: ${cosimInputs} input(s) come from a LabVIEW VI while Multisim runs; in KiCad those nets are undriven`);
   }
 
   return {

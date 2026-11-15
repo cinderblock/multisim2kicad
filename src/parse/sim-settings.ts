@@ -66,7 +66,7 @@ const NGSPICE_OPTIONS = new Set(
 export interface SimSettings {
   /** `.options ...`, or undefined when none apply. */
   options?: string;
-  /** The analysis to run (`.tran ...`, `.ac ...`, `.op`), from those Multisim has results for. */
+  /** The analysis to run (`.tran ...`, `.ac ...`, `.op`), from those Multisim has results for, plus any note on it. */
   analysis?: string;
   /** The other analyses Multisim has results for (KiCad's directive runs one). */
   skipped: string[];
@@ -95,25 +95,47 @@ function optionsOf(analysis: SimStateNode | undefined): string | undefined {
   return opts.length ? `.options ${opts.join(" ")}` : undefined;
 }
 
-/** The directive for one analysis, when it translates. */
-function directiveOf(kind: string, analysis: SimStateNode): string | undefined {
+/** A transient from its settings (`TSTOP`, `TSTEP`, `TMAX`, `IC`, ...). */
+function tranDirective(a: SimStateNode[] | undefined): string | undefined {
+  const v = (k: string) => child(a, k)?.value;
+  const tstop = num(v("TSTOP"));
+  // 1e30: Multisim's "run until stopped" (interactive), no fixed end.
+  if (tstop === undefined || tstop <= 0 || tstop >= 1e20) return undefined;
+  const tstart = num(v("TSTART")) ?? 0;
+  const tmax = num(v("TMAX"));
+  // "calculate": Multisim picks the step; a thousandth of the span plots smoothly.
+  const tstep = num(v("TSTEP")) ?? (tstop - tstart) / 1000;
+  const uic = /^(uic|zero_ic)$/i.test(v("IC") ?? "");
+  const parts = [".tran", fmt(tstep), fmt(tstop)];
+  if (tstart || tmax !== undefined || uic) parts.push(fmt(tstart));
+  if (tmax !== undefined) parts.push(fmt(tmax));
+  if (uic) parts.push("uic");
+  return parts.join(" ");
+}
+
+/** The directive (and any note) for one analysis, when it translates. */
+function directiveOf(kind: string, analysis: SimStateNode): string[] | undefined {
   const a = child(analysis.items, "ANALYSIS")?.items;
   const v = (k: string) => child(a, k)?.value;
-  if (kind === "OP") return ".op";
+  if (kind === "OP") return [".op"];
   if (kind === "TRAN") {
-    const tstop = num(v("TSTOP"));
-    // 1e30: Multisim's "run until stopped" (interactive), no fixed end.
-    if (tstop === undefined || tstop <= 0 || tstop >= 1e20) return undefined;
-    const tstart = num(v("TSTART")) ?? 0;
-    const tmax = num(v("TMAX"));
-    // "calculate": Multisim picks the step; a thousandth of the span plots smoothly.
-    const tstep = num(v("TSTEP")) ?? (tstop - tstart) / 1000;
-    const uic = /^(uic|zero_ic)$/i.test(v("IC") ?? "");
-    const parts = [".tran", fmt(tstep), fmt(tstop)];
-    if (tstart || tmax !== undefined || uic) parts.push(fmt(tstart));
-    if (tmax !== undefined) parts.push(fmt(tmax));
-    if (uic) parts.push("uic");
-    return parts.join(" ");
+    const tran = tranDirective(a);
+    return tran ? [tran] : undefined;
+  }
+  if (kind === "FOUR") {
+    // Multisim's Fourier analysis runs a transient (its own settings) and
+    // transforms the last period. ngspice ignores `.four` in KiCad's
+    // interactive mode, so the transient runs and a note gives the
+    // fundamental (KiCad can plot the FFT, or ngspice's `fourier` command).
+    const tran = child(a, "Tran")?.items ?? [];
+    const tstop = num(v("TStop"));
+    const settings = tstop && !num(child(tran, "TSTOP")?.value) ? [...tran, { key: "TSTOP", type: "double", value: String(tstop) }] : tran;
+    const directive = tranDirective(settings);
+    if (!directive) return undefined;
+    const fund = num(v("FundFreq"));
+    const n = num(v("NumFreqs"));
+    const note = fund && v("FundFreqSet") !== "0" ? `* Multisim's Fourier analysis of this transient: fundamental ${fmt(fund)} Hz${n ? `, ${fmt(n)} harmonics` : ""}` : "* Multisim's Fourier analysis runs this transient";
+    return [directive, note];
   }
   if (kind === "AC") {
     const variation = (v("VARIATION") ?? "dec").toLowerCase();
@@ -121,24 +143,37 @@ function directiveOf(kind: string, analysis: SimStateNode): string | undefined {
     const f1 = num(v("FSTART"));
     const f2 = num(v("FSTOP"));
     if (!/^(dec|oct|lin)$/.test(variation) || n === undefined || f1 === undefined || f2 === undefined) return undefined;
-    return `.ac ${variation} ${fmt(n)} ${fmt(f1)} ${fmt(f2)}`;
+    return [`.ac ${variation} ${fmt(n)} ${fmt(f1)} ${fmt(f2)}`];
   }
   return undefined;
 }
 
 /** Order of preference when Multisim has results for several analyses. */
-const PREFERRED = ["TRAN", "AC", "OP"];
+const PREFERRED = ["TRAN", "FOUR", "AC", "OP"];
 
-/** Settings from a sheet's `SimState` attribute (the root sheet's speaks for the design). */
-export function simSettings(simState: string): SimSettings {
+/**
+ * Settings from a sheet's `SimState` attribute (the root sheet's speaks for
+ * the design). `digital`: the design has XSPICE event-driven parts.
+ */
+export function simSettings(simState: string, o: { digital?: boolean } = {}): SimSettings {
   const analyses = child(parseSimState(simState), "SIMULATION_INFO", "ANALYSES")?.items ?? [];
-  const ran = analyses.filter((n) => n.type === "list" && (num(child(n.items, "ANALYSIS_ID")?.value) ?? 0) > 0);
+  // Multisim has results for an analysis that wrote a results file (plotted
+  // analyses), or that has an id (the operating point, shown as a table).
+  const ran = analyses.filter((n) => n.type === "list" && ((num(child(n.items, "ANALYSIS_ID")?.value) ?? 0) > 0 || !!child(n.items, "RAWFILE_NAME")?.value));
   const chosen = PREFERRED.map((k) => ran.find((n) => n.key === k)).find((n) => n && directiveOf(n.key, n));
   // Options of the analysis that runs; else the operating point's (Multisim's defaults).
-  const options = optionsOf(chosen ?? analyses.find((n) => n.key === "OP"));
+  let options = optionsOf(chosen ?? analyses.find((n) => n.key === "OP"));
+  const analysis = chosen && directiveOf(chosen.key, chosen)?.join("\n");
+  // A transient that starts from the operating point ("determine
+  // automatically"): Multisim starts from zero when that fails, as it does
+  // for a digital oscillator, whose analog/digital alternation never
+  // settles. ngspice has no fallback; `noopalter` takes one alternation
+  // instead, which changes only the t=0 point of a design that would settle
+  // (its logic re-evaluates at the first time step).
+  if (o.digital && analysis?.startsWith(".tran") && !/ uic$/.test(analysis.split("\n")[0]!)) options = options ? `${options} noopalter` : ".options noopalter";
   return {
     options,
-    analysis: chosen && directiveOf(chosen.key, chosen),
+    analysis,
     skipped: ran.filter((n) => n !== chosen).map((n) => n.key),
   };
 }

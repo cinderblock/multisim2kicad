@@ -375,10 +375,63 @@ export function laplaceToXspice(text: string, warnings?: string[]): string {
   });
 }
 
+/**
+ * Multisim's `adc_bridge (in_low=a in_high=b schmitt=true)`: a Schmitt input
+ * that switches high at `in_high` and low at `in_low`. XSPICE's bridge has
+ * no hysteresis (it ignores `schmitt`), so an XSPICE `hyst` block takes the
+ * input first (rising threshold `b`, falling `a`, output 0..1) and the bridge
+ * reads that at 0.5.
+ */
+export function schmittBridges(text: string): string {
+  const schmitt = new Map<string, { low: number; high: number }>();
+  let out = text.replace(/^([ \t]*\.model[ \t]+(\S+)[ \t]+)\(?[ \t]*adc_bridge\b[ \t]*\(([^)]*)\).*$/gim, (m, head: string, name: string, params: string) => {
+    if (!/\bschmitt[ \t]*=[ \t]*true\b/i.test(params)) return m;
+    const value = (p: string) => Number(new RegExp(`\\b${p}\\s*=\\s*([^\\s)]+)`, "i").exec(params)?.[1]);
+    const low = value("in_low");
+    const high = value("in_high");
+    if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return m.replace(/\bschmitt[ \t]*=[ \t]*true\b/i, "");
+    schmitt.set(name.toLowerCase(), { low, high });
+    const mid = (low + high) / 2;
+    const half = (high - low) / 2;
+    const w = Math.min(half / 10, 0.01);
+    return [
+      `${head}adc_bridge (in_low=0.5 in_high=0.5)`,
+      `${head.replace(/(\S+)([ \t]+)$/, "$1_hyst$2")}hyst (in_low=${fmtNum(mid - w)} in_high=${fmtNum(mid + w)} hyst=${fmtNum(half)} out_lower_limit=0 out_upper_limit=1 input_domain=0.01 fraction=false)`,
+    ].join("\n");
+  });
+  if (!schmitt.size) return text;
+  out = out.replace(/^([ \t]*)(a\S+)([ \t]+)\[[ \t]*([^\s\]]+)[ \t]*\]([ \t]+\[[^\]]*\][ \t]+)(\S+)[ \t]*$/gim, (m, ind: string, a: string, sp: string, input: string, rest: string, model: string) => {
+    if (!schmitt.has(model.toLowerCase())) return m;
+    const mid = `${a}_hy`;
+    return `${ind}${a}_h ${input} ${mid} ${model}_hyst\n${ind}${a}${sp}[${mid}]${rest}${model}`;
+  });
+  return out;
+}
+
+const fmtNum = (x: number): string => String(Number(x.toPrecision(6)));
+
+/**
+ * A capacitor's `IC=` in a vendor model: PSpice (which these models target)
+ * holds that voltage during the bias point, and models lean on it to start
+ * their latches in a known state (Basso's PWM controllers). ngspice uses
+ * device `IC=` only with `uic`, so such latches leave the operating point
+ * without a solution. A `.nodeset` for each grounded one gives ngspice the
+ * same starting state, without holding the node once the bias point is found.
+ */
+export function capacitorIcNodesets(text: string): string {
+  if (!/\bic[ \t]*=/i.test(text)) return text;
+  return text.replace(/^([ \t]*)C\S*[ \t]+(\S+)[ \t]+(\S+)[ \t]+[^\n]*?\bIC[ \t]*=[ \t]*([-+]?[0-9.]+(?:e[-+]?\d+)?[a-z]*)[ \t]*$/gim, (m, ind: string, a: string, b: string, v: string) => {
+    const neg = (x: string) => (x.startsWith("-") ? x.slice(1) : `-${x.replace(/^\+/, "")}`);
+    if (b === "0") return `${m}\n${ind}.nodeset V(${a})=${v}`;
+    if (a === "0") return `${m}\n${ind}.nodeset V(${b})=${neg(v)}`;
+    return m;
+  });
+}
+
 /** Rewrite the Multisim-only SPICE that real models use into ngspice. */
 export function ngspiceDialect(text: string): string {
   return (
-    laplaceToXspice(sdtToIntegrator(renameReservedParams(inlineResistorModels(text))))
+    capacitorIcNodesets(schmittBridges(laplaceToXspice(sdtToIntegrator(renameReservedParams(inlineResistorModels(text))))))
       // `.mergenodes a b` (Multisim's digital ground ties itself to 0): a
       // 1 uOhm resistor does the same job.
       .replace(/^[ \t]*\.mergenodes[ \t]+(\S+)[ \t]+(\S+)[ \t]*$/gim, (_, a: string, b: string) => `Rmerge_${spiceName(a)}_${spiceName(b)} ${a} ${b} 1u`)
@@ -395,6 +448,11 @@ export function ngspiceDialect(text: string): string {
       // input instead of reporting it.)
       .replace(/^([ \t]*\.model[ \t]+\S+[ \t]+\(?[ \t]*)(a2vhdl|vhdl2a)\b/gim, (_, head: string, type: string) =>
         `${head}${type.toLowerCase() === "a2vhdl" ? "adc_bridge" : "dac_bridge"}`,
+      )
+      // Multisim's interactive digital constant: a fixed logic level (its
+      // saved state; the key toggles it only while Multisim runs).
+      .replace(/^([ \t]*\.model[ \t]+\S+[ \t]+)\(?[ \t]*d_constsource\b[ \t]*(\([^)]*\))?.*$/gim, (_, head: string, params = "") =>
+        `${head}${/\bstate[ \t]*=[ \t]*0*1\b/i.test(params) ? "d_pullup" : "d_pulldown"}`,
       )
   );
 }
@@ -640,7 +698,24 @@ export interface PinModel {
  */
 export function pinModelDef(id: string, text: string): ModelDef | undefined {
   const ideal = text.replace(/\r\n?/g, "\n").replace(/^\*#L2[^\n]*\n[\s\S]*?^\*#L2[^\n]*(\n|$)/gm, "");
-  return modelDef(id, ideal);
+  return modelDef(id, dacOutputResistance(ideal));
+}
+
+/**
+ * An XSPICE `dac_bridge` output is an ideal voltage source, so two outputs
+ * tied together, or one driving a source (NI's pin-model demo), make a
+ * singular matrix. Multisim's real pin models have an output impedance; a
+ * 1 mOhm series resistor keeps the ideal level within microvolts while
+ * letting such circuits solve.
+ */
+export function dacOutputResistance(text: string): string {
+  const dacs = new Set([...text.matchAll(/^[ \t]*\.model[ \t]+(\S+)[ \t]+\(?[ \t]*(?:dac_bridge|vhdl2a)\b/gim)].map((m) => m[1]!.toLowerCase()));
+  if (!dacs.size) return text;
+  return text.replace(/^([ \t]*)(a\S+)([ \t]+\[[^\]]*\][ \t]+)\[[ \t]*([^\s\]]+)[ \t]*\]([ \t]+)(\S+)[ \t]*$/gim, (m, ind: string, a: string, input: string, out: string, sp: string, model: string) => {
+    if (!dacs.has(model.toLowerCase())) return m;
+    const mid = `${out}_${a}_ro`;
+    return `${ind}${a}${input}[${mid}]${sp}${model}\n${ind}R${a}_ro ${mid} ${out} 1m`;
+  });
 }
 
 const enableVariants = new WeakMap<PinModel, PinModel | null>();

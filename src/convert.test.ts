@@ -13,7 +13,7 @@ import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./par
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
 import { parseSimState, simSettings } from "./parse/sim-settings.ts";
-import { circuitParams, enablePinModel, expandTemplate, inlineResistorModels, laplaceToXspice, modelDef, ngspiceDialect, parseLaplace, parseSpice, pinModelDef, renameReservedParams, sdtToIntegrator, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
+import { capacitorIcNodesets, circuitParams, dacOutputResistance, enablePinModel, expandTemplate, inlineResistorModels, laplaceToXspice, modelDef, ngspiceDialect, parseLaplace, parseSpice, pinModelDef, renameReservedParams, schmittBridges, sdtToIntegrator, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
 import { dchipSubckt, parseChip, rewriteDChipInstances, translateDChips } from "./parse/dchip.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
 import type { Board, Component, Dihedral, Point, Schematic, SchematicSymbol, SchPoint } from "./ir/types.ts";
@@ -939,5 +939,41 @@ describe("simulation settings (SimState)", () => {
     expect(simSettings(state(analysis("OP", 0, "", opts)))).toEqual({ options: ".options rshunt=1e+012 convlimit", analysis: undefined, skipped: [] });
     const ac = analysis("AC", 1, "VARIATION:string{lin}\nNPOINTS_PER_VARIATION:double{1000}\nFSTART:double{3.3e+009}\nFSTOP:double{5.3e+009}");
     expect(simSettings(state(analysis("TRAN", 4, "TSTEP:string{calculate}\nTSTOP:double{1e+030}\nTSTART:double{0}\nTMAX:string{calculate}\nIC:string{auto_ic}") + "\n" + ac)).analysis).toBe(".ac lin 1000 3.3e+09 5.3e+09");
+  });
+
+  test("a results file marks a run analysis; Fourier runs its transient; digital transients from the bias point skip alternation", () => {
+    const withRaw = (a: string) => a.replace("ASYS_OPT:", "RAWFILE_NAME:string{C:\\T\\x.raw}\nASYS_OPT:");
+    const tran = (ic: string) => withRaw(analysis("TRAN", 0, `TSTEP:string{calculate}\nTSTOP:double{0.001}\nTSTART:double{0}\nTMAX:string{calculate}\nIC:string{${ic}}`));
+    expect(simSettings(state(analysis("OP", 1, "") + "\n" + tran("zero_ic"))).analysis).toBe(".tran 1e-06 0.001 0 uic");
+    const four = withRaw(
+      analysis("FOUR", 1, "FundFreqSet:long{1}\nFundFreq:double{5000}\nNumFreqs:long{9}\nTStop:double{0.001}\nTran:list{TSTEP:string{calculate}\nTSTOP:double{0.001}\nTSTART:double{0}\nTMAX:string{calculate}\nIC:string{auto_ic}\n}"),
+    );
+    expect(simSettings(state(four))).toEqual({ options: undefined, analysis: ".tran 1e-06 0.001\n* Multisim's Fourier analysis of this transient: fundamental 5000 Hz, 9 harmonics", skipped: [] });
+    expect(simSettings(state(four), { digital: true }).options).toBe(".options noopalter");
+    expect(simSettings(state(tran("zero_ic")), { digital: true }).options).toBeUndefined();
+  });
+});
+
+describe("spice: convergence and Multisim-only digital forms", () => {
+  test("a Schmitt adc_bridge becomes an XSPICE hyst block feeding a plain bridge", () => {
+    const out = schmittBridges("aADC1in [1] [2] ADC1\n.MODEL ADC1 adc_bridge (in_low=1.4 in_high = 2.2 schmitt=true)");
+    expect(out).toContain("aADC1in_h 1 aADC1in_hy ADC1_hyst\naADC1in [aADC1in_hy] [2] ADC1");
+    expect(out).toContain(".MODEL ADC1 adc_bridge (in_low=0.5 in_high=0.5)");
+    expect(out).toContain(".MODEL ADC1_hyst hyst (in_low=1.79 in_high=1.81 hyst=0.4 out_lower_limit=0 out_upper_limit=1");
+    expect(schmittBridges(".MODEL A adc_bridge (in_low=1 in_high=2)")).toBe(".MODEL A adc_bridge (in_low=1 in_high=2)");
+  });
+  test("ideal digital outputs get a 1 mOhm series resistor", () => {
+    expect(dacOutputResistance("aDAC1in  [1]  [2] aDAC1\n.MODEL aDAC1 dac_bridge (out_low= 0 out_high = 5)")).toBe(
+      "aDAC1in  [1]  [2_aDAC1in_ro] aDAC1\nRaDAC1in_ro 2_aDAC1in_ro 2 1m\n.MODEL aDAC1 dac_bridge (out_low= 0 out_high = 5)",
+    );
+  });
+  test("Multisim's digital constant is a pull-up or pull-down", () => {
+    expect(ngspiceDialect(".model s d_constsource(state=0)\n.model t d_constsource(state=1)")).toBe(".model s d_pulldown\n.model t d_pullup");
+    expect(unsupportedModelType(ngspiceDialect(".model s d_constsource(state=0)"))).toBeUndefined();
+  });
+  test("grounded capacitors' IC= in a model seed the operating point", () => {
+    expect(capacitorIcNodesets("CD1   1 0 10P IC=5\nCD2 0 2 10p ic=0.5\nC3 1 2 1n IC=3\nC4 a 0 1n")).toBe(
+      "CD1   1 0 10P IC=5\n.nodeset V(1)=5\nCD2 0 2 10p ic=0.5\n.nodeset V(2)=-0.5\nC3 1 2 1n IC=3\nC4 a 0 1n",
+    );
   });
 });
