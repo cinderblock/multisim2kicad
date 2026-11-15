@@ -1333,6 +1333,9 @@ hierarchy, connectors), since those are what make an output useless today.
       OscillatorRC, whose analysis is now a `uic` transient).
       Gotcha: Python edits wrote `\b` as a backspace byte into a regex
       (`grep -c $'\x08'`); use the Edit tool for regex text.
+- [x] (2026-11-14) **Released 0.2.0** (`f7cbec6`, tag `v0.2.0`) via the CI
+      publish workflow, with npm provenance. User accepted the 11 remaining
+      sample failures as documented callouts (README "Simulation").
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.
