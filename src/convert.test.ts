@@ -12,6 +12,7 @@ import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
 import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
+import { parseSimState, simSettings } from "./parse/sim-settings.ts";
 import { circuitParams, enablePinModel, expandTemplate, inlineResistorModels, laplaceToXspice, modelDef, ngspiceDialect, parseLaplace, parseSpice, pinModelDef, renameReservedParams, sdtToIntegrator, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
 import { dchipSubckt, parseChip, rewriteDChipInstances, translateDChips } from "./parse/dchip.ts";
 import { compareNetlists, foldNetNames, type Netlist } from "./ref/netlist-compare.ts";
@@ -904,5 +905,39 @@ describe("tri-state digital pins", () => {
     expect(text).toContain("xU1_Y d_Y Y VCC GND d_Y_en LS3S_EN");
     expect(text).toContain("ad_Y_en_on d_Y_en EW_drives");
     expect(text.match(/EW_drives/g)?.length).toBe(2); // U2 only: the pull-up and its model
+  });
+});
+
+describe("simulation settings (SimState)", () => {
+  const opt = (k: string, type: string, v: string, on: boolean) => `${k}:list{IsEnabled:long{${on ? 1 : 0}}\n${k}:${type}{${v}}\n}`;
+  const analysis = (key: string, id: number, body: string, opts = "") =>
+    `${key}:list{NODES:list{}\nANALYSIS:list{${body}}\nANALYSIS_ID:long{${id}}\nASYS_OPT:list{${opts}}\n}`;
+  const opts = [opt("0", "flag", "", false).replace("0:flag{}", "acct:flag{}"), "1:list{IsEnabled:long{1}\nrshunt:double{1e+012}\n}", "2:list{IsEnabled:long{1}\nconvlimit:flag{}\n}", "3:list{IsEnabled:long{1}\ndynamicdc:flag{}\n}", "4:list{IsEnabled:long{0}\nreltol:double{0.001}\n}"].join("\n");
+  const state = (analyses: string) => `SIMULATION_INFO:list{ANALYSES:list{ANALYSIS_LIST:list{}\nUSE:long{-1}\n${analyses}}\n}`;
+
+  test("parses Multisim's serialization, typed arrays included", () => {
+    expect(parseSimState("A:list{B:double{1.5}\nC:double[]{}\nD:string{x{y}}\n}")).toEqual([
+      { key: "A", type: "list", items: [{ key: "B", type: "double", value: "1.5" }, { key: "C", type: "double[]", value: "" }, { key: "D", type: "string", value: "x{y}" }] },
+    ]);
+  });
+
+  test("enabled ngspice options and the preferred analysis with results", () => {
+    const s = simSettings(
+      state(
+        [
+          analysis("OP", 3, "", opts),
+          analysis("AC", 2, "VARIATION:string{dec}\nNPOINTS_PER_VARIATION:double{10}\nFSTART:double{1}\nFSTOP:double{1e+010}", opts),
+          analysis("TRAN", 5, "TSTEP:string{calculate}\nTSTOP:double{0.5}\nTSTART:double{0}\nTMAX:double{1e-005}\nIC:string{uic}", opts),
+          analysis("FOUR", 1, "", opts),
+        ].join("\n"),
+      ),
+    );
+    expect(s).toEqual({ options: ".options rshunt=1e+012 convlimit", analysis: ".tran 5e-04 0.5 0 1e-05 uic", skipped: ["OP", "AC", "FOUR"] });
+  });
+
+  test("no results: options only; interactive (run until stopped) transients don't translate", () => {
+    expect(simSettings(state(analysis("OP", 0, "", opts)))).toEqual({ options: ".options rshunt=1e+012 convlimit", analysis: undefined, skipped: [] });
+    const ac = analysis("AC", 1, "VARIATION:string{lin}\nNPOINTS_PER_VARIATION:double{1000}\nFSTART:double{3.3e+009}\nFSTOP:double{5.3e+009}");
+    expect(simSettings(state(analysis("TRAN", 4, "TSTEP:string{calculate}\nTSTOP:double{1e+030}\nTSTART:double{0}\nTMAX:string{calculate}\nIC:string{auto_ic}") + "\n" + ac)).analysis).toBe(".ac lin 1000 3.3e+09 5.3e+09");
   });
 });

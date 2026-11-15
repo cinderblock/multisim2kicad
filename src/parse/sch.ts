@@ -40,6 +40,7 @@ import type {
 } from "../ir/types.ts";
 import { type CiNetlist, collectCiItems, parseCiNetlist } from "../ref/ci-netlist.ts";
 import { circuitParams, parkingX, parseSpice, type SpiceDesign, supplySymbols } from "./spice.ts";
+import { type SimSettings, simSettings } from "./sim-settings.ts";
 import { drawnPinNumbers, portPinNumbers } from "../ref/ci-netlist.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 import { flattenNetlist, type NetPin, type PageIndex, parseMultisimDesign, type SheetInstance } from "./ms-hierarchy.ts";
@@ -803,10 +804,27 @@ export function parseSchematicXml(input: XmlInput): Schematic {
   // Coupled inductors that belong to separate parts: `K` lines, which KiCad
   // passes to the simulator from a text item too. Below the supplies and the
   // root sheet's parameters.
+  const rootParams = [...params.keys()].filter((name) => (sheets.find((sh) => sh.title === name) ?? rootPage) === rootPage).length;
+  let parkY = 20 + 30 * (supplies.symbols.length / 2) + 30 * rootParams;
   if (spice.directives.length) {
-    const rootParams = [...params.keys()].filter((name) => (sheets.find((sh) => sh.title === name) ?? rootPage) === rootPage).length;
-    const y = 20 + 30 * (supplies.symbols.length / 2) + 30 * rootParams;
-    rootPage.texts.push({ text: spice.directives.join("\n"), at: { x: parkingX(rootPage), y }, size: 5 });
+    rootPage.texts.push({ text: spice.directives.join("\n"), at: { x: parkingX(rootPage), y: parkY }, size: 5 });
+    parkY += 10 * spice.directives.join("\n").split("\n").length + 20;
+  }
+  // Multisim's simulation settings (root sheet): its SPICE options (its
+  // default rshunt=1e12 among them) and the analysis it has results for.
+  const warnings: string[] = [];
+  if (spice.library) {
+    const rootDs = designSheets[sheets.indexOf(rootPage)];
+    const state = rootDs?.findAll((e) => e.name === "CIITDiagram").map((d) => d.str("SimState")).find(Boolean);
+    let settings: SimSettings | undefined;
+    try {
+      settings = state ? simSettings(state) : undefined;
+    } catch (e) {
+      warnings.push(`simulation settings unreadable: ${(e as Error).message}`);
+    }
+    const lines = [settings?.options, settings?.analysis].filter((l): l is string => !!l);
+    if (settings?.skipped.length) lines.push(`* Multisim also has results for: ${settings.skipped.join(", ")}`);
+    if (lines.length && lines[0]!.startsWith(".")) rootPage.texts.push({ text: lines.join("\n"), at: { x: parkingX(rootPage), y: parkY }, size: 5 });
   }
 
   return {
@@ -821,6 +839,6 @@ export function parseSchematicXml(input: XmlInput): Schematic {
     sheets,
     root: toSchInstance(design.root, sheets, design),
     spiceLibrary: spice.library,
-    warnings: [...spice.warnings, ...supplies.warnings],
+    warnings: [...spice.warnings, ...supplies.warnings, ...warnings],
   };
 }
