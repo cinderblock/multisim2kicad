@@ -135,20 +135,38 @@ map its pins to the model's nodes in Multisim's order.
   models, PSpice `FREQ` tables.
 - A digital input left unconnected reads low, as in XSPICE (some of NI's
   counter demos leave `~LOAD` open, so they load instead of counting).
+- Schmitt-trigger inputs (74xx14 and friends) keep their hysteresis: an
+  XSPICE `hyst` block ahead of the input bridge. Multisim's interactive
+  digital constant is a fixed logic level at its saved state. Ideal digital
+  outputs have a 1 mOhm series resistance, so an output tied to a source or
+  to another output still solves.
+- Vendor models' capacitor `IC=` values seed the operating point
+  (`.nodeset`), as PSpice uses them; PWM controller latches need that.
 
 - The design's simulation settings come along as a text directive on the
   root sheet: Multisim's SPICE options (its default `rshunt=1e12`, which
   lets designs with floating nets simulate, and any tolerances the designer
-  set) and the analysis Multisim has results for (transient, else AC, else
-  operating point), so KiCad's Run does what Multisim did. Other analyses it
-  ran (Fourier, noise, sweeps, ...) are listed in a comment.
+  set) and the analysis Multisim has results for (transient, else Fourier,
+  else AC, else operating point), so KiCad's Run does what Multisim did. A
+  Fourier analysis comes across as its transient plus a note with the
+  fundamental. Other analyses it ran (noise, sweeps, ...) are listed in a
+  comment.
+- A design driven by LabVIEW co-simulation gets a warning: those inputs
+  are undriven in KiCad.
 
-Checked on NI's own Multisim 13 sample circuits: 190 of 200 solve their
-operating point in KiCad's ngspice as converted, and none fail to parse.
-149 carry an analysis Multisim ran; 135 of those run to completion as
-converted. The others are mostly switching converters and oscillators where
-ngspice's transient gives up ("timestep too small") or runs past 5
-minutes.
+Checked on NI's own Multisim 13 sample circuits: none fail to parse, and
+156 carry an analysis Multisim ran; 145 of those run to completion in
+KiCad's ngspice as converted. Of the other 11:
+- 2 are meant to fail: NI's "Overcoming Simulation Challenges" demos, whose
+  notes say to watch the convergence failure.
+- 3 are LabVIEW co-simulations, driven by a LabVIEW VI that isn't in the
+  design.
+- 1 saves a 5000-second transient at a 0.1 ms step.
+- 5 are switching converters on which ngspice's transient gives up
+  ("timestep too small") where Multisim's solver does not.
+
+192 of the 200 solve their operating point. The rest are converters whose
+own analysis skips it, and one co-simulation.
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).

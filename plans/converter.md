@@ -1276,6 +1276,63 @@ hierarchy, connectors), since those are what make an output useless today.
       small" at a diode / MOSFET gate) and IsolatedCircuits (designer
       turned rshunt off; outputs float). Not translation gaps; ngspice
       convergence on hard switching.
+- [x] (2026-11-14) **Toward 100% of NI's samples** (`524e8ed`). User asked
+      "let's get to 100%". Triage of the 24 failures (10 OP, 14 own
+      analysis), with what each turned out to be:
+      - **Real gaps, fixed:** Multisim's `adc_bridge (... schmitt=true)`
+        (XSPICE ignores `schmitt`): now an XSPICE `hyst` block (rising at
+        in_high, falling at in_low; checked 2.2 / 1.4 V) feeding a plain
+        bridge at 0.5. `d_constsource` (interactive digital constant):
+        `d_pullup`/`d_pulldown` at its saved state (was excluded).
+        `dac_bridge` outputs are ideal sources: an output into a source
+        (NI's DigitalComponentPinModels demo) or another output was
+        singular; 1 mOhm series R. Vendor models' grounded capacitor `IC=`
+        -> `.nodeset` (PSpice uses IC= in the bias point; Basso's PWM
+        latches need a start state; `.ic` was worse: it fights the logic).
+      - **Wrong analysis picked:** `ANALYSIS_ID` is a per-analysis run
+        counter, not "has results" (Push_VM: OP id 1, TRAN id 0 but a
+        results file). An analysis counts as run when it has a
+        `RAWFILE_NAME` (plotted) or an id. Preference TRAN > FOUR > AC >
+        OP; FOUR -> its own `Tran` settings + a note (ngspice ignores
+        `.four` in KiCad's interactive mode; the `fourier` command works).
+        OscillatorRC's and Push_VM's transients are `zero_ic` -> `uic`.
+      - **Digital oscillators** (OscillatorRC, PWMs): no DC solution; the
+        analog/event alternation never settles ("Too many analog/
+        event-driven solution alternations"; maxopalter/maxevtiter don't
+        help). `.options noopalter` solves it but changes OP readouts of
+        18 of 35 digital samples (inconsistent states). In a *transient*
+        it changes only the t=0 point (measured on 4 digital samples: all
+        later samples identical). So: digital design + transient that
+        starts from the OP -> `noopalter`. (Multisim's auto_ic would fall
+        back to zero ICs there.)
+      - **Intentional failures:** InductiveSwitching ("notice ... a
+        convergence failure ... after Q1 is turned off at 1ms"; ours fails
+        at 1.0001 ms) and IsolatedCircuits ("note the convergence
+        failure"; 1 TOhm isolation). Faithful.
+      - **LabVIEW co-simulation** (LabVIEW FPGA samples: Single Level
+        Inverter x2, DC Motor H Bridge): the gates come from a LabVIEW VI
+        (`CCoSimConnectorManager` InputGuids); now a warning. Untranslatable.
+      - **ControlledRectifier / Semikron inverter**: TSTOP 5000 s with TMAX
+        1e-4 (5e7 steps), as saved; runs past any sane limit.
+      - **ngspice convergence on switching models** (not translation):
+        Buck_VM (averaged, Basso DBREAK N=0.01), Boost_VM (D1N5820 at
+        540 us), BuckConverter (Infineon OptiMOS thermal MOSFET), Full_VM
+        and Push_CM (auto_ic: OP fails; Multisim would start from zero,
+        ngspice has no fallback; `uic` makes Full_VM run). Option grids
+        (gear, reltol, gmin 1e-9/1e-10, abstol, chgtol, itl4, trtol, xmu,
+        pivtol/pivrel, klu, no convlimit) fix none of them except gmin
+        1e-10 for Push_VM. Push transformers: winding E sources parallel
+        to external magnetizing L = voltage-source loop at DC (singular
+        `lm2#branch`); 1 uOhm in series removes the singularity but not the
+        latch problem; not adopted.
+      **Result: own analyses 145 / 156 run as converted** (was 135 / 149;
+      more designs now carry one). The 11 left: 2 intentional, 3 LabVIEW
+      co-sim, 1 TSTOP 5000 s, 5 ngspice convergence (above). **OP sweep:
+      192 / 200** (fails: 6 Basso CM/VM converters whose analyses are
+      `uic`, the H-bridge co-sim whose TRAN options drop rshunt, and
+      OscillatorRC, whose analysis is now a `uic` transient).
+      Gotcha: Python edits wrote `\b` as a backspace byte into a regex
+      (`grep -c $'\x08'`); use the Edit tool for regex text.
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.
