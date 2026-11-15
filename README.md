@@ -136,20 +136,26 @@ map its pins to the model's nodes in Multisim's order.
 - A digital input left unconnected reads low, as in XSPICE (some of NI's
   counter demos leave `~LOAD` open, so they load instead of counting).
 
-Checked on NI's own Multisim 13 sample circuits: 179 of 200 solve their
-operating point in KiCad's ngspice as converted. 20 load but don't reach an
-operating point (most are built for transient analysis: oscillators,
-converters, motor drives; several have a source or logic net with no DC path
-and need `.options rshunt=1e9`). One (a precision rectifier) doesn't
-converge. None fail to parse.
+- The design's simulation settings come along as a text directive on the
+  root sheet: Multisim's SPICE options (its default `rshunt=1e12`, which
+  lets designs with floating nets simulate, and any tolerances the designer
+  set) and the analysis Multisim has results for (transient, else AC, else
+  operating point), so KiCad's Run does what Multisim did. Other analyses it
+  ran (Fourier, noise, sweeps, ...) are listed in a comment.
+
+Checked on NI's own Multisim 13 sample circuits: 190 of 200 solve their
+operating point in KiCad's ngspice as converted, and none fail to parse.
+149 carry an analysis Multisim ran; 135 of those run to completion as
+converted. The others are mostly switching converters and oscillators where
+ngspice's transient gives up ("timestep too small") or runs past 5
+minutes.
 
 The project's simulator compatibility is set to PSpice, because Multisim's
 vendor models use PSpice syntax (`IF()`, `R ... TC a b`).
 
-A board whose ICs have no model leaves those nets floating. Small and
-analog designs simulate as they are; a large digital board may need
-`.options rshunt=1e9` or models for its ICs before its operating point
-converges.
+A board whose ICs have no model leaves those nets floating; Multisim's
+`rshunt` option (carried over) usually lets it simulate anyway. A large
+digital board may still need models for its ICs.
 
 An EW component database becomes KiCad libraries named after it. That is
 a Multisim database project (`.prj` / `.usr`), or NI's master database

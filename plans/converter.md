@@ -1247,8 +1247,35 @@ hierarchy, connectors), since those are what make an output useless today.
       `atan2()` is missing even then (unused in NI's DB). NI's DB has no
       `sdt()`, LAPLACE or function-named parameters (`ISDT(` is a .FUNC
       name), so its 54,275 count is unchanged.
-- [ ] FWR (NI sample): ngspice doesn't converge (hangs) on its operating
-      point. Op-amp model or ngspice options; unexplored.
+- [x] (2026-11-14) **Simulation settings** (`f88a548`,
+      `src/parse/sim-settings.ts`). Each sheet's `CIITDiagram@SimState` is
+      Multisim's own serialization `KEY:type{value}` (types long, double,
+      string, flag, list, `double[]`; lists nest): `SIMULATION_INFO >
+      ANALYSES` (and `DEFAULT_INST_SETTINGS`, the interactive run: TRAN
+      TSTOP 1e30) > OP / AC / PHASOR / TRAN / FOUR / NOISE / DISTO / PSWEEP /
+      TSWEEP / PZ / TF / DC_SWEEP / SENS / WORST / MONTE / USER / RUN /
+      TRACEWIDTH / NOISE_FIGURE, each with `ANALYSIS` settings,
+      `ANALYSIS_ID` (non-zero = has results; a counter, not "last run";
+      `USE` is always -1, so nothing says which one the user meant) and
+      `ASYS_OPT` (42 options, each `{IsEnabled, name:type{v}}`). **Multisim
+      enables `rshunt=1e12` (+ `trtol=7 itl4=100 convlimit`) by default**:
+      all 200 NI samples and all 184 corpus designs; corpus also
+      `dynamicdc inertialdelay suposc rawfileformat` (Multisim-only,
+      dropped). That is why Multisim simulates the floating-net designs.
+      ngspice accepts unknown `.options` silently, so a whitelist decides.
+      Emitted on the root sheet: `.options ...` + one analysis (TRAN > AC >
+      OP among those with results; TSTEP "calculate" = span/1000; IC `uic`
+      / `zero_ic` -> `uic`) + `* Multisim also has results for: ...`.
+      **NI sweep (OP): 190 ok / 10 op-failed / 0 / 0** (12 improved incl.
+      FWR, which no longer hangs; Push_CM regressed: rshunt makes its
+      center-tapped transformer DC point singular at `lm2#branch`, solved
+      without it only by gmin stepping; kept, as Multisim uses rshunt too).
+      **Own analysis (`run`, scratchpad `spice/runown.sh`): 149 designs
+      carry one; 135 complete** (AC 24/24, OP 33/37, TRAN 78/88, 2 of
+      those >5 min). TRAN failures are switching converters ("timestep too
+      small" at a diode / MOSFET gate) and IsolatedCircuits (designer
+      turned rshunt off; outputs float). Not translation gaps; ngspice
+      convergence on hard switching.
 - [ ] B3 cleanup (typed EW models in ewd; multisim2kicad's parsers shrink
       to mappers). Drive-corpus leftovers (11 nets: ground-symbol pin
       naming) are optional.
