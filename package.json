@@ -1,6 +1,6 @@
 {
   "name": "multisim2kicad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Convert NI Multisim schematics, Ultiboard boards and component databases (Electronics Workbench) to KiCad",
   "author": "Cameron Tacklind <cameron@tacklind.com>",
   "license": "ISC",
