@@ -324,6 +324,67 @@ the path `C:\Users\camer\Documents\National Instruments\...`). The plans
 name corpus projects (Althea, Nook, ...) and the `\\uberfall.tsl` share
 but contain no design data. `corpus/` and `out/` stay gitignored.
 
+#### G2 - Early-tester launch (2026-11-15)
+
+Goal: get other people's designs through the tool. So far it has been tested
+almost only on the user's own files, so those designs will turn up the next
+failures. The user agreed to the readiness list below.
+
+- [x] CLI polish (`e9690b1`): `-h/--help`, `-V/--version`, unknown options
+      rejected (they used to be read as file names), one-line errors with
+      stack traces behind `--debug`, and one bad design no longer stops a
+      folder (exit 1 at the end).
+- [x] README (`fb01623`): "testers wanted" banner, **KiCad 10 required for
+      schematics**, a "Not supported (yet)" list, and "Reporting a bad
+      conversion". Plus a GitHub issue form
+      (`.github/ISSUE_TEMPLATE/bad-conversion.yml`, label `bug`).
+- [ ] Fresh corpus scorecard (the one on disk was from 2026-11-11), for
+      the headline numbers in the posts.
+- [ ] Release 0.2.1 so `npx` has the CLI fixes (user's go-ahead: the tag
+      push publishes to npm).
+- [ ] Draft the posts for the user to review: a new KiCad forum topic, a new
+      EEVblog EDA topic linking the unanswered 2018 question, and a reply in
+      the KIUB thread. Nothing gets posted without the user's per-post yes.
+
+Where to post (researched 2026-11-14):
+- KiCad forum: start a **new topic**. Don't revive old threads: moderator jmk
+  objected on 2026-05-29 when the user replied in
+  https://forum.kicad.info/t/is-it-possible-import-into-kicad-from-multisim/1775.
+  Link https://forum.kicad.info/t/convert-multisim-14/38339 (closed,
+  unanswered) as evidence of demand.
+- KIUB thread (Aug 2026, about Ultiboard .ddf):
+  https://forum.kicad.info/t/ulticap-sch-and-ultiboard-ddf-to-kicad-converter/71177
+- EEVblog: https://www.eevblog.com/forum/eda/20-years-with-ultiboard-what-next/
+  ends with an unanswered Feb 2018 ask for a Multisim/Ultiboard -> KiCad converter.
+- Later: r/KiCad and r/AskElectronics (the r/ECE 2022 ask is archived). NI's
+  Multisim and Ultiboard forum, if its moderators allow it.
+
+**KiCad 9 compatibility gap** (logged in ISSUES.md): the schematic and
+symbol-library format `20250610` is from the KiCad 10 development cycle.
+KiCad 9 stops at `20250114` (sch) / `20241209` (sym), per
+`eeschema/sch_file_versions.h` on the 9.0 branch, and refuses newer files.
+Boards (`20240108`) open in 8/9/10. The old code comment said it would load
+in 8/9/10, which was wrong.
+
+**Ultiboard `.ddf` (researched 2026-11-15): not now, point to KIUB.**
+- DDF is a different, Ultimate-era format: line-oriented text with
+  positional headers and `*T` tech code tables, `*S` shapes, `*N` nets,
+  `*C` components, `*L` copper and `*V` vias. Units are 1/1200 in (V2-V4)
+  or nm (V5). It shares nothing with the EW XML. Ultiboard 4/5 (DOS/Win)
+  wrote it. NI Ultiboard opens V4/V5 .ddf, with bugs. There is no evidence
+  that Ultiboard 14 exports it. "Binary DDF" is probably Pulsonix's name for
+  the 2001+ native format.
+- KIUB (https://github.com/Snieffy/KIUB, **GPLv3**) already converts V2-V5
+  to KiCad. Its only samples are 7 synthetic boards in that repo.
+- Effort for us: about 1-2 weeks for ASCII V4/V5 into the existing PCB IR,
+  plus 3-5 days for V2/V3. The bottleneck is validation: we have no real
+  DDF corpus and no Ultiboard 4/5.
+- Clean-room: don't read `kiub.py`. Treat its `FILEFORMAT-DDF.md` errata as
+  GPL'd solutions. The clean source is the 1997 *Ultiboard Reference
+  Manual*, Appendix A.
+- Worth revisiting if real users bring .ddf files, or for the private
+  Altium path (old Phase 5), since KIUB only outputs KiCad.
+
 ### Proposed order
 
 A4-A5 -> B1 -> C1-C2 -> D1-D3 -> B2 -> C3-C6 -> D4-D5 -> E -> B3 cleanup -> C7/D6 -> G.
