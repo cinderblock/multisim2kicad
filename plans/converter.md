@@ -344,8 +344,10 @@ failures. The user agreed to the readiness list below.
       PCB net pins on a pad 12400/12478 (99.4%); 0 dialogs.** The default
       selection now includes the NI sample circuits that scored 71% on
       2026-11-11.
-- [ ] Release 0.2.1 so `npx` has the CLI fixes (user's go-ahead: the tag
-      push publishes to npm).
+- [x] **Released 0.2.1** 2026-11-15 11:27 PM PST (07:27Z on the 16th), tag
+      `v0.2.1` (`2d66808`), via CI with provenance. npm took a few minutes
+      to list it ("Your package is being processed"). Verified
+      `npx multisim2kicad@0.2.1 --version` and the one-line missing-file error.
 - [x] Drafts in `plans/launch-posts.md`, awaiting the user's per-post yes.
 
 Where to post (researched 2026-11-14):
