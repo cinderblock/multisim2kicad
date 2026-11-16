@@ -1,0 +1,64 @@
+name: Bad conversion
+description: A design converted, or failed to convert, in a way that doesn't match the original
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying multisim2kicad! Reports on real designs are the most useful thing right now.
+        **Don't attach a design you aren't allowed to share.** A stripped-down copy that still shows the problem is just as useful.
+  - type: input
+    id: ew-version
+    attributes:
+      label: Multisim / Ultiboard version and file type
+      placeholder: Multisim 14.2, .ms14 (+ Ultiboard 14.2 .ewprj)
+    validations:
+      required: true
+  - type: input
+    id: kicad-version
+    attributes:
+      label: KiCad version
+      placeholder: "10.0.1"
+    validations:
+      required: true
+  - type: input
+    id: tool-version
+    attributes:
+      label: multisim2kicad version
+      description: Output of `npx multisim2kicad --version`
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: What's wrong
+      multiple: true
+      options:
+        - The command failed or crashed
+        - Schematic (missing/wrong parts, wires, nets, labels)
+        - PCB (missing/wrong pads, tracks, vias, zones, outline)
+        - Schematic and PCB don't link up
+        - Libraries (symbols / footprints)
+        - Simulation (SPICE)
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What you expected and what you got. Screenshots of the EW original next to the KiCad result help a lot, as do the relevant ERC/DRC lines.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Command output
+      description: If the command failed, run it again with `--debug` and paste the output here.
+      render: text
+  - type: textarea
+    id: files
+    attributes:
+      label: Design files (optional)
+      description: Drag in the design if you can share it (zip it first). Or attach XML decoded with `ewd`, with the sensitive parts deleted.

@@ -8,12 +8,19 @@ Reading the proprietary containers is done by
 [`electronics-workbench-decoder`](https://www.npmjs.com/package/electronics-workbench-decoder)
 (`ewd`); this tool turns what's in them into KiCad.
 
-> Work in progress. See [`plans/converter.md`](plans/converter.md) for the
-> roadmap, what is and isn't translated yet, and every format finding so far.
+> **Early release: testers wanted.** It converts real multi-sheet, multi-layer
+> projects well, but so far it has been tested mostly on one designer's files.
+> If a design of yours converts badly, please
+> [report it](#reporting-a-bad-conversion). See
+> [`plans/converter.md`](plans/converter.md) for the roadmap and every format
+> finding so far.
 
 ## Usage
 
-Needs Node 20+ (or [Bun](https://bun.sh)).
+Needs Node 20+ (or [Bun](https://bun.sh)) to run, and **KiCad 10** to open the
+results. Schematics and symbol libraries are written in KiCad 10's format,
+which KiCad 9 and older refuse to open. Boards and footprints use KiCad 8's
+format, so they also open in KiCad 8 and 9.
 
 ```bash
 npx multisim2kicad path/to/Design.ms14 path/to/Design.ewprj        # writes ./out/
@@ -201,7 +208,42 @@ redistribute the output.
 
 The symbol and footprint libraries are registered in the project's lib
 tables.
-`plans/converter.md` tracks these.
+
+### Not supported (yet)
+
+- **Designs older than Multisim 10**: Multisim 2001–9 (`.msm`, `.ms7`–`.ms9`)
+  and Electronics Workbench 5 (`.ewb`). Multisim 10 or later can open these
+  and save them in a supported format.
+- **Ultimate-era Ultiboard boards (`.ddf`, Ultiboard 4/5)**: a different
+  format from `.ewprj`. [KIUB](https://github.com/Snieffy/KIUB) converts
+  those to KiCad.
+- **Ulticap schematics (`.sch`)**: see KIUB's companion, KIUC.
+- **3D models**: the 3D layers come across, but no STEP/VRML models are
+  linked to footprints.
+- **KiCad 9 or older** for schematics (see [Usage](#usage)).
+
+When you open a converted schematic, KiCad's ERC reports many
+`endpoint_off_grid` warnings. They are expected: Multisim's grid is finer
+than KiCad's, and the connectivity is still correct.
+
+`plans/converter.md` tracks all of these.
+
+## Reporting a bad conversion
+
+Please [open an issue](https://github.com/cinderblock/multisim2kicad/issues/new?template=bad-conversion.yml).
+These help the most:
+
+- the Multisim/Ultiboard version and file type (`.ms14`, `.ewprj`, ...),
+  the KiCad version, and `npx multisim2kicad --version`
+- what's wrong: a screenshot of the EW original next to the KiCad result,
+  or the relevant ERC/DRC lines
+- the design file itself, if you can share it. If you can't, a stripped-down
+  copy that still shows the problem is just as good. You can also send XML
+  decoded with [`ewd`](https://www.npmjs.com/package/electronics-workbench-decoder)
+  with the sensitive parts deleted.
+
+If the command itself failed, run it again with `--debug` and include the
+output.
 
 ## Checking results
 

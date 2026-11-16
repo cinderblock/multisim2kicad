@@ -15,7 +15,9 @@ import type {
   SymbolText,
 } from "../ir/types.ts";
 
-// KiCad 9/10 schematic format (KiCad 10 reads it natively).
+// A KiCad 10 development-cycle format ("DNP flags for rule areas"). KiCad 9
+// stops at 20250114 and refuses newer files, so schematics need KiCad 10.
+// See ISSUES.md for KiCad 9 support.
 const KICAD_SCH_VERSION = 20250610;
 const KICAD_SYM_VERSION = 20250610;
 
