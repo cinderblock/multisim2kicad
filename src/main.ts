@@ -190,7 +190,7 @@ const DESIGN_FILE = /\.(ewprj|ms1\d)(\.xml)?$/i;
  * folder with the same base name (Main.ms14 + Main.ewprj) are one project.
  * Directories contribute every design file directly inside them.
  */
-export async function groupProjects(paths: string[]): Promise<ProjectInput[]> {
+export async function groupProjects(paths: string[], onError?: (file: string, err: unknown) => void): Promise<ProjectInput[]> {
   const files: string[] = [];
   for (const p of paths) {
     if ((await stat(p)).isDirectory()) {
@@ -199,7 +199,14 @@ export async function groupProjects(paths: string[]): Promise<ProjectInput[]> {
   }
   const projects = new Map<string, ProjectInput>();
   for (const file of files) {
-    const design = await loadDesign(file);
+    let design: Awaited<ReturnType<typeof loadDesign>>;
+    try {
+      design = await loadDesign(file);
+    } catch (err) {
+      if (!onError) throw err;
+      onError(file, err);
+      continue;
+    }
     const base = designBaseName(file);
     const key = join(resolve(dirname(file)), base).toLowerCase();
     const proj = projects.get(key) ?? { base };
@@ -219,25 +226,101 @@ export async function convertFile(input: string, outDir = "out"): Promise<string
     : convertPcb(input, design.xml, outDir);
 }
 
+export const USAGE = `usage: multisim2kicad [options] <design.ms14 | design.ewprj | folder | database.prj> [...]
+
+Converts NI Electronics Workbench files to KiCad: Multisim schematics
+(.ms10-.ms14), Ultiboard boards (.ewprj) and component databases
+(.prj/.usr/.prd). A schematic and a board with the same name in the same
+folder become one linked KiCad project. A folder converts every design
+directly inside it.
+
+options:
+  -o, --out <dir>   output folder (default: ./out)
+  -h, --help        show this help
+  -V, --version     print the version
+      --debug       show full error details (stack traces)
+
+Problems or a bad conversion: https://github.com/cinderblock/multisim2kicad/issues`;
+
+/** An error worth showing the user as a single line (no stack trace). */
+export class UsageError extends Error {
+  constructor(
+    message: string,
+    readonly exitCode = 2,
+  ) {
+    super(message);
+  }
+}
+
+/** One-line description of an error, for the CLI. */
+export function errorMessage(err: unknown): string {
+  const e = err as NodeJS.ErrnoException;
+  if (e?.code === "ENOENT" && e.path) return `${e.path}: no such file or directory`;
+  return e instanceof Error ? e.message : String(err);
+}
+
+/** This package's version, from its package.json. */
+export async function packageVersion(): Promise<string> {
+  // src/main.ts and dist/*.js both sit one folder below package.json.
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  return pkg.version;
+}
+
 /** The command line: `multisim2kicad [-o <outDir>] <inputs...>`. */
 export async function main(args: string[] = process.argv.slice(2)): Promise<void> {
   let outDir = "out";
   const inputs: string[] = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "-o" || args[i] === "--out") outDir = args[++i] ?? outDir;
-    else inputs.push(args[i]!);
+    const a = args[i]!;
+    if (a === "-o" || a === "--out") {
+      const dir = args[++i];
+      if (!dir) throw new UsageError(`${a} needs a folder\n\n${USAGE}`);
+      outDir = dir;
+    } else if (a === "-h" || a === "--help") {
+      console.log(USAGE);
+      return;
+    } else if (a === "-V" || a === "--version") {
+      console.log(await packageVersion());
+      return;
+    } else if (a === "--debug") continue;
+    else if (a === "--") inputs.push(...args.splice(i + 1));
+    else if (a.startsWith("-") && a !== "-") throw new UsageError(`unknown option ${a}\n\n${USAGE}`);
+    else inputs.push(a);
   }
-  if (inputs.length === 0) {
-    console.error("usage: multisim2kicad [-o <outDir>] <design.ms14 | design.ewprj | folder | database.prj> [...]");
-    console.error("  A schematic and board with the same name in the same folder become one linked KiCad project.");
-    process.exit(2);
+  if (inputs.length === 0) throw new UsageError(USAGE);
+  for (const i of inputs) {
+    try {
+      await stat(i);
+    } catch (err) {
+      throw new UsageError(errorMessage(err), 1);
+    }
   }
+
+  // Keep going past a bad design, so one file doesn't stop a folder.
+  const failed: string[] = [];
+  const fail = (what: string, err: unknown) => {
+    failed.push(what);
+    const msg = errorMessage(err);
+    console.error(`multisim2kicad: ${msg.startsWith(what) ? msg : `${what}: ${msg}`}`);
+    if (args.includes("--debug")) console.error(err);
+  };
   const designs: string[] = [];
   for (const i of inputs) {
-    if (DATABASE_FILE.test(i)) await convertDatabase(i, outDir);
-    else designs.push(i);
+    if (!DATABASE_FILE.test(i)) designs.push(i);
+    else
+      try {
+        await convertDatabase(i, outDir);
+      } catch (err) {
+        fail(i, err);
+      }
   }
-  for (const p of await groupProjects(designs)) await convertProject(p, outDir);
+  for (const p of await groupProjects(designs, fail))
+    try {
+      await convertProject(p, outDir);
+    } catch (err) {
+      fail(p.sch?.input ?? p.pcb?.input ?? p.base, err);
+    }
+  if (failed.length) throw new UsageError(`${failed.length} input${failed.length > 1 ? "s" : ""} failed to convert (see above)`, 1);
 }
 
 const DATABASE_FILE = /\.(prj|usr|prd)$/i;
