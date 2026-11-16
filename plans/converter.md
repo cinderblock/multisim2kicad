@@ -58,6 +58,8 @@ Schematic" is a no-op.
 - One-way conversion only. No round-trip / no KiCad -> EW.
 - Bun + TypeScript. KiCad 10 is the verification target; emitter keeps
   writing the older `20240108`-era PCB format that KiCad 10 reads.
+- **KiCad 10 only** (user, 2026-11-15): no KiCad 9 output. Migrators install
+  KiCad fresh. Revisit only if testers ask (ISSUES.md).
 - Show the roadmap before starting large new phases (user, 2026-11-11).
 - **Roadmap + order approved** (user, 2026-11-11): A4-A5 -> B1 -> C1-C2 ->
   D1-D3, then the rest.

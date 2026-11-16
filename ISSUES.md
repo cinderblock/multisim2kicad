@@ -4,6 +4,8 @@ Side issues found while working on something else. Each is a seed for a separate
 
 ## Schematics don't open in KiCad 9
 
+**Deferred** (user, 2026-11-15): KiCad 10 only for now. Pick this up only if testers ask for KiCad 9.
+
 `src/emit/kicad-sch.ts` writes `.kicad_sch` / `.kicad_sym` with `(version 20250610)`, a KiCad 10
 development-cycle format. KiCad 9's newest is `20250114` (sch) / `20241209` (sym), per
 `eeschema/sch_file_versions.h` on the `9.0` branch, so KiCad 9 refuses our schematics.
