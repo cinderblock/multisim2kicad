@@ -338,13 +338,15 @@ failures. The user agreed to the readiness list below.
       schematics**, a "Not supported (yet)" list, and "Reporting a bad
       conversion". Plus a GitHub issue form
       (`.github/ISSUE_TEMPLATE/bad-conversion.yml`, label `bug`).
-- [ ] Fresh corpus scorecard (the one on disk was from 2026-11-11), for
-      the headline numbers in the posts.
+- [x] Fresh corpus scorecard (2026-11-15, `out/corpus-2026-11-15/`, run
+      at low priority through srmctl): **299 designs (249 schematics, 50
+      PCBs), all load in KiCad 10; schematic nets exact 4232/4244 (99.7%);
+      PCB net pins on a pad 12400/12478 (99.4%); 0 dialogs.** The default
+      selection now includes the NI sample circuits that scored 71% on
+      2026-11-11.
 - [ ] Release 0.2.1 so `npx` has the CLI fixes (user's go-ahead: the tag
       push publishes to npm).
-- [ ] Draft the posts for the user to review: a new KiCad forum topic, a new
-      EEVblog EDA topic linking the unanswered 2018 question, and a reply in
-      the KIUB thread. Nothing gets posted without the user's per-post yes.
+- [x] Drafts in `plans/launch-posts.md`, awaiting the user's per-post yes.
 
 Where to post (researched 2026-11-14):
 - KiCad forum: start a **new topic**. Don't revive old threads: moderator jmk
