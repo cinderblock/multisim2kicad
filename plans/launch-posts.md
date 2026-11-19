@@ -50,6 +50,8 @@ https://forum.kicad.info/t/ulticap-sch-and-ultiboard-ddf-to-kicad-converter/7117
 
 ## 2. KiCad forum: reply in the KIUB thread
 
+**Dropped** (user, 2026-11-18): the thread is closed, so replies aren't possible.
+
 https://forum.kicad.info/t/ulticap-sch-and-ultiboard-ddf-to-kicad-converter/71177
 
 Nice work. This fills the gap for the old Ultimate-era files. For anyone who
