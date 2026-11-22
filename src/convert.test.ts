@@ -95,6 +95,18 @@ describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
     expect(missing.map((p) => `${p.refdes}.${p.pin}`).sort()).toEqual(["U1.POEA", "U1.POEC"]);
   });
 
+  test("a part placed without a library footprint (UB-Unknown-Component) is a component", () => {
+    // Ultiboard writes these with an empty Name; SHAPE still names the footprint.
+    const xml = sample("Design1.ewprj.xml")
+      .replaceAll(/<(\/?)UBComponent\b/g, "<$1UB-Unknown-Component")
+      .replaceAll('Class="CLayoutComponent"', 'Class="CLayoutComponentUnknown"')
+      .replaceAll('Name="&amp;ASCHDR1X3"', 'Name=""');
+    const unknown = parsePcbXml(xml);
+    expect(unknown.components.map((c) => [c.reference, c.name, c.pads.length])).toEqual(
+      board.components.map((c) => [c.reference, c.name, c.pads.length]),
+    );
+  });
+
   test("emits balanced S-expressions with netted tracks", () => {
     const out = emitKicadPcb(board);
     expect(checkSexp(out).ok).toBe(true);

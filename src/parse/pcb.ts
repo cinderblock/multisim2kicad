@@ -229,7 +229,9 @@ function componentTexts(comp: EwElement): ComponentText[] {
 
 function parseComponent(comp: EwElement): Component {
   const attrs = ownAttributes(comp);
-  const name = displayText(comp.str("Name"));
+  // Parts placed without a library footprint (`UB-Unknown-Component`) have
+  // an empty Name; their SHAPE attribute still names the footprint.
+  const name = displayText(comp.str("Name")) || attrs.get("SHAPE") || "";
   const bottom = Number(comp.get("Bottom") ?? 0) !== 0;
   const pads: Pad[] = [];
   for (const [tag, tht] of PIN_TAGS) {
@@ -391,6 +393,13 @@ function parseVia(item: EwElement): Via | undefined {
   };
 }
 
+/**
+ * Placed parts. `UB-Unknown-Component` (class `CLayoutComponentUnknown`) is a
+ * part Ultiboard placed without a library footprint; its pins, drawings and
+ * attributes have the same layout as a `UBComponent`'s.
+ */
+const COMPONENT_TAGS = new Set(["UBComponent", "UB-Unknown-Component"]);
+
 function walkGeometry(node: EwElement, out: Collected, inComponent = false): void {
   for (const item of node.children) {
     const key = item.name;
@@ -417,7 +426,7 @@ function walkGeometry(node: EwElement, out: Collected, inComponent = false): voi
     } else if (key === "UBTrack") {
       const t = toTrack(item);
       if (t) out.tracks.push(t);
-    } else if (key === "UBComponent") {
+    } else if (COMPONENT_TAGS.has(key)) {
       // The part's own drawings belong to its footprint; anything else found
       // inside (tracks, vias, drills, planes) stays board-level.
       const comp = parseComponent(item);
