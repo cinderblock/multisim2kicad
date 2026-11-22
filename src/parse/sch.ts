@@ -328,6 +328,27 @@ function parseSymbolLike(comp: EwElement, raw = false): Placed {
       }
     }
   }
+  // Hidden pins (a crystal's case, a logic part's supplies) join the global
+  // net their NI_EWB_NET_HIDDEN modifier names. Each net gets its own
+  // quarter-unit point: nothing else lands there (geometry is on whole units,
+  // contact nudges on half units), so they touch nothing.
+  const hiddenNets: string[] = [];
+  for (const item of comp.child("HiddenPins")?.childrenNamed("Item") ?? []) {
+    const n = item.child("CIITPinSymbolComp");
+    const net = n && pinMods(n).find((m) => m.mod === "NI_EWB_NET_HIDDEN")?.value;
+    if (!net) continue;
+    if (!hiddenNets.includes(net)) hiddenNets.push(net);
+    const at = { x: 0.25, y: 0.25 + hiddenNets.indexOf(net) };
+    const numbers = portPins(n.get("PortID"));
+    if (numbers.length === 0) numbers.push(...drawnPinNumbers(n.str("PinNumber")));
+    if (numbers.length === 0) numbers.push(displayText(n.str("PinName")) || net);
+    for (const number of numbers) {
+      parsed.push({
+        pin: { name: net, number, at, dir: { x: 1, y: 0 }, length: 0, electrical: "power_in", hiddenNet: net, connected: true },
+        attachIds: [],
+      });
+    }
+  }
   const attach = new Map<SymbolPin, string[]>();
   for (const p of parsed) attach.set(p.pin, p.attachIds);
   return {
@@ -550,6 +571,7 @@ function parseSheet(designSheet: EwElement, ci: CiNetlist, spice: SpiceDesign, p
     }
     if (!placed.symbol.reference && ciComp) placed.symbol.reference = ciComp.refdes;
     for (const pin of placed.symbol.pins) {
+      if (pin.hiddenNet) continue;
       pin.connected = !nets.isolated(pin.netId);
       pin.netId = nets.netOf(pin.netId);
     }

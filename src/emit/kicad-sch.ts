@@ -138,7 +138,10 @@ function libParts(s: SchematicSymbol, refs: InstanceRef[], dropped: ReadonlySet<
     const type = power ? "power_in" : (p.electrical ?? "passive");
     // Power ports: KiCad hides their pin, so the stem is drawn as graphics.
     const length = power ? 0 : p.length;
-    return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(length)})${power ? " (hide yes)" : ""} (name ${q(p.name || "~")} ${FONT}) (number ${q(number)} ${FONT}))`;
+    // A hidden pin is an invisible power input named after its net, which
+    // KiCad joins to that global net (as Multisim does).
+    const hide = power || p.hiddenNet !== undefined;
+    return `\t\t\t\t(pin ${type} line (at ${lib(p.at)} ${pinAngle(p.dir)}) (length ${u(length)})${hide ? " (hide yes)" : ""} (name ${q(p.hiddenNet ?? (p.name || "~"))} ${FONT}) (number ${q(number)} ${FONT}))`;
   };
   const stems = (keep: (p: SymbolPin) => boolean) => libLines(s.pins.filter((p) => p.length > 0 && keep(p)).map(pinStem));
   const head = [

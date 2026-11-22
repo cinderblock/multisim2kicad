@@ -28,7 +28,7 @@
  * Known gaps: bus ports across hierarchy (CIITBusHierConnector), external
  * hierarchical-block files (Subcircuit="0"), NI_EWB_NET_HIDDEN pins.
  */
-import { ciCollStrings, collValues, drawnPinNumbers } from "../ref/ci-netlist.ts";
+import { ciCollStrings, collValues, drawnPinNumbers, isPowerRecord } from "../ref/ci-netlist.ts";
 import { displayText, docOf, type EwElement, type XmlInput } from "./doc.ts";
 
 export interface NetPin {
@@ -319,6 +319,7 @@ export function flattenNetlist(
     if (ra !== rb) parent.set(ra, rb);
   };
 
+  const localNames: [string, string][] = [];
   const pinsAt = new Map<string, NetPin[]>();
   const supplyAt = new Map<string, NetPin[]>();
   const expand = (inst: SheetInstance, ports: Map<string, string>, depth: number) => {
@@ -328,6 +329,7 @@ export function flattenNetlist(
       for (const l of pg.links) {
         for (const m of l.mods) {
           if (m.mod === "NI_EWB_NET_NAME" && m.value) union(K(l.id), `${inst.path}|${pg.page}|NAME:${m.value}`);
+          if (m.mod === "NI_EWB_NET_NAME" && m.value) localNames.push([K(l.id), m.value.toUpperCase()]);
           if (m.mod === "NI_EWB_NET_BUS_ENTRY") union(K(l.id), `${inst.path}|BUSLINE:${m.value}`);
         }
       }
@@ -336,7 +338,12 @@ export function flattenNetlist(
         find(pk);
         for (const m of p.mods) {
           if (m.mod === "NI_EWB_NET_GLOBAL" || m.mod === "NI_EWB_NET_GLOBAL_GROUND") union(pk, `G:${m.value.toUpperCase()}`);
-          else if (m.mod === "NI_EWB_NET_VIRTUAL") union(pk, `${inst.path}|${pg.page}|ONPAGE:${m.value}`);
+          // A hidden pin (HiddenPins) joins the global net it names.
+          else if (m.mod === "NI_EWB_NET_HIDDEN") union(pk, `G:${m.value.toUpperCase()}`);
+          else if (m.mod === "NI_EWB_NET_VIRTUAL") {
+            union(pk, `${inst.path}|${pg.page}|ONPAGE:${m.value}`);
+            localNames.push([pk, m.value.toUpperCase()]);
+          }
           else if (m.mod === "NI_EWB_NET_OFFPAGE") union(pk, `${inst.path}|OFFPAGE:${m.value}`);
           else if (m.mod === "NI_EWB_NET_HIERARCHY") {
             const pkey = ports.get(m.value);
@@ -355,10 +362,11 @@ export function flattenNetlist(
         const drawn = comp.body.str("LocalName");
         const key = drawn + owner.obj.str("DBComponentSectionName");
         const final = design.finalRefdes(inst, pg.page, key) ?? (depth === 0 ? drawn : `${inst.path}/${drawn}`);
-        if (s[0]?.[0] === "POWER_SOURCES" || s[1]?.[0] === "91") {
+        const power = isPowerRecord(s[0] ?? []);
+        if (power || s[1]?.[0] === "91") {
           // Power / connector: joined by modifier, not part of the netlist;
           // a source still has a pin a named net can be read from.
-          if (named && s[0]?.[0] === "POWER_SOURCES") supplyAt.set(pk, [...(supplyAt.get(pk) ?? []), { refdes: final, pin: displayText(p.pinName) || p.pinNumber }]);
+          if (named && power) supplyAt.set(pk, [...(supplyAt.get(pk) ?? []), { refdes: final, pin: displayText(p.pinName) || p.pinNumber }]);
           continue;
         }
         const remap = design.pinRemap(inst, pg.page, key);
@@ -383,6 +391,11 @@ export function flattenNetlist(
     }
   };
   expand(design.root, new Map(), 0);
+  // A net name or on-page connector named like a global net (a ground, a
+  // supply, a hidden pin's net) is that net: Multisim's Ci netlist and
+  // Ultiboard both join them (Bandpass's lone on-page connector "0").
+  // Names with no global namesake stay local to their page instance.
+  for (const [k, name] of localNames) if (parent.has(`G:${name}`)) union(k, `G:${name}`);
 
   // One physical pin is one node: a pin number drawn on several sections of
   // a part (an op-amp's V+/V- on every section) joins all their nets, as in

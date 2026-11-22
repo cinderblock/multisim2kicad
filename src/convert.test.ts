@@ -10,8 +10,9 @@ import { boardCustomRules, boardProjectSettings, netClassName } from "./emit/kic
 import { emitKicadSch, emitKicadSchProject } from "./emit/kicad-sch.ts";
 import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
+import { flattenNetlist, parseMultisimDesign } from "./parse/ms-hierarchy.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
-import { collectCiItems, drawnPinNumbers, parseCiNetlist } from "./ref/ci-netlist.ts";
+import { collectCiItems, drawnPinNumbers, isPowerRecord, parseCiNetlist } from "./ref/ci-netlist.ts";
 import { parseSimState, simSettings } from "./parse/sim-settings.ts";
 import { capacitorIcNodesets, circuitParams, dacOutputResistance, enablePinModel, expandTemplate, inlineResistorModels, laplaceToXspice, modelDef, ngspiceDialect, parseLaplace, parseSpice, pinModelDef, renameReservedParams, schmittBridges, sdtToIntegrator, simSpec, SpiceLibrary, staticPot, unsupportedModelType } from "./parse/spice.ts";
 import { dchipSubckt, parseChip, rewriteDChipInstances, translateDChips } from "./parse/dchip.ts";
@@ -433,6 +434,13 @@ describe("Design1 schematic (samples/Design1.ms14.xml)", () => {
     expect(c.kinds.get("0")).toBe("power");
   });
 
+  test("the older database's ground (GROUND, GROUND, VIRTUAL_DEVICES) is a power symbol", () => {
+    // NI's RF samples place this ground instead of POWER_SOURCES' GROUND.
+    expect(isPowerRecord(["GROUND", "GROUND", "VIRTUAL_DEVICES", "GND", "0"])).toBe(true);
+    expect(isPowerRecord(["POWER_SOURCES", "GROUND", "POWER_SOURCES"])).toBe(true);
+    expect(isPowerRecord(["POWER_MOS_N", "BUK7Y18-75B", "POWER_MOS_N"])).toBe(false);
+  });
+
   test("emits balanced S-expressions", () => {
     const out = emitKicadSch(parseSchematicXml(xml));
     expect(checkSexp(out).ok).toBe(true);
@@ -455,6 +463,37 @@ describe("Design1 schematic (samples/Design1.ms14.xml)", () => {
     const has = (x0: number, y0: number, x1: number, y1: number) =>
       sheet.wires.some((w) => w.points.length === 2 && w.points[0]!.x === x0 && w.points[0]!.y === y0 && w.points[1]!.x === x1 && w.points[1]!.y === y1);
     expect(has(837, 81, 837, 72)).toBe(true);
+  });
+
+  test("hidden pins join the global net they name, in KiCad and in the reference", () => {
+    // U2 (the first symbol with a HiddenPins list) gets a hidden pin 99 on ground ("0").
+    const hidden = xml.replace(
+      "<HiddenPins/>",
+      `<HiddenPins>\n<Item ID="999000001" Class="CIITPinSymbolComp">\n<CIITPinSymbolComp Class="CIITPinSymbolComp" PinName="&amp;ASCGND" PinNumber="&amp;ASC99">\n<Objects/>\n` +
+        `<ElectricalObject HiddenName="0">\n<ModifierInfo>\n<Element NetModifier="&amp;ASCNI_EWB_NET_HIDDEN">\n<Item Value="&amp;ASC0"/>\n</Element>\n</ModifierInfo>\n</ElectricalObject>\n` +
+        `</CIITPinSymbolComp>\n</Item>\n</HiddenPins>`,
+    );
+    const out = emitKicadSch(parseSchematicXml(hidden));
+    expect(out).toMatch(/\(pin power_in line \(at [^)]*\) \(length 0\) \(hide yes\) \(name "0" [^\n]*\(number "99"/);
+    const nets = [...flattenNetlist(parseMultisimDesign(hidden)).values()];
+    const ground = parseCiNetlist(xml).circuits[0]!.nets.get("0")![0]!;
+    const net = nets.find((ps) => ps.some((p) => p.refdes === "U2" && p.pin === "99"))!;
+    expect(net.some((p) => p.refdes === ground.refdes && p.pin === ground.pin)).toBe(true);
+  });
+
+  test("an on-page connector named like a global net is that net (reference)", () => {
+    // Turn the global "Reset" connections into on-page connectors.
+    const local = (name: string) =>
+      xml.replaceAll(
+        /<Element NetModifier="&amp;ASCNI_EWB_NET_GLOBAL">(\r?\n)<Item Value="&amp;ASCReset"/g,
+        `<Element NetModifier="&amp;ASCNI_EWB_NET_VIRTUAL">$1<Item Value="&amp;ASC${name}"`,
+      );
+    const ground = parseCiNetlist(xml).circuits[0]!.nets.get("0")![0]!;
+    const netOf = (x: string) =>
+      [...flattenNetlist(parseMultisimDesign(x)).values()].find((ps) => ps.some((p) => p.refdes === "U2" && p.pin === "26"))!;
+    const onGround = (ps: { refdes: string; pin: string }[]) => ps.some((p) => p.refdes === ground.refdes && p.pin === ground.pin);
+    expect(onGround(netOf(local("0")))).toBe(true);
+    expect(onGround(netOf(local("Rst")))).toBe(false); // no global namesake: stays local
   });
 
   test("pins land on their wiring attachment points", () => {

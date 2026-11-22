@@ -238,6 +238,11 @@ export interface SymbolPin {
   connected?: boolean;
   /** Electrical type, when the source says (EW database parts); else passive. */
   electrical?: PinElectrical;
+  /**
+   * A hidden pin (not drawn, not wired): joined to the global net of this
+   * name, like a ground or supply symbol. `at` is then only a placeholder.
+   */
+  hiddenNet?: string;
 }
 
 export type PinElectrical =

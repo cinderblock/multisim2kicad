@@ -65,3 +65,15 @@ for (const [n, ps] of got) {
   }
   if (groups.size > 1) console.log(`${n}:`, [...groups].map(([g, pins]) => `${g}{${pins.join(" ")}}`).join("  "));
 }
+console.log("== reference nets not reproduced exactly");
+const gotNets = new Map<string, string>();
+const refParts = new Set([...ref.values()].flat().map((p) => p.refdes));
+const pinSet = (ps: { refdes: string; pin: string }[]) => [...new Set(ps.map(k))].sort().join(" ");
+for (const [n, ps] of got) gotNets.set(pinSet(ps.filter((p) => refParts.has(p.refdes))), n);
+for (const [n, ps] of ref) {
+  const key = pinSet(ps);
+  if (new Set(ps.map(k)).size < 2 || gotNets.has(key)) continue;
+  const near = new Set(ps.map((p) => gotOf.get(k(p)) ?? "(missing)"));
+  const nearPins = [...near].map((g) => `${g}{${(got.get(g) ?? []).filter((p) => refParts.has(p.refdes)).map(k).join(" ")}}`);
+  console.log(`${refName.get(n)} ${n}: {${key}}  ->  ${nearPins.join("  ")}`);
+}

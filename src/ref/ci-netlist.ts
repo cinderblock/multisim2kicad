@@ -77,10 +77,18 @@ export const collValues = (coll: EwElement | undefined): string[] =>
 /** All `CiaCollString` string values under an object's `Attributes`, in order. */
 const attrStrings = (body: EwElement): string[] => ciCollStrings(body).flatMap(collValues);
 
+/**
+ * Ground / supply symbols: the `POWER_SOURCES` family, or the older
+ * database's ground (`GROUND, GROUND, VIRTUAL_DEVICES`, seen in NI's RF
+ * samples). `record` is the component's attribute strings, in order.
+ */
+export const isPowerRecord = (record: readonly string[]): boolean =>
+  record[0] === "POWER_SOURCES" || (record[0] === "GROUND" && record[2] === "VIRTUAL_DEVICES");
+
 function componentKind(body: EwElement): CiComponentKind {
   const s = attrStrings(body).filter(Boolean);
   if (s.length <= 1) return "connector";
-  if (s[0] === "POWER_SOURCES") return "power";
+  if (isPowerRecord(s)) return "power";
   return "part";
 }
 
