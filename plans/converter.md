@@ -51,6 +51,11 @@ Schematic" is a no-op.
   Rule of thumb: *what the file says* (containers, string escapes, units,
   class layouts, the `.ewnet` grammar) belongs in ewd; *what it means in
   KiCad* belongs here.
+- **Output backends stay pluggable.** Keep the IR (`src/ir/types.ts`)
+  format-neutral, with no KiCad-specific concepts, and keep each output
+  format as its own emitter under `src/emit/` consuming that IR. A
+  closed-source backend may be added later as a separate package over the
+  same IR (see "Old Phase 5" below).
 - **multisim2kicad consumes ewd as a real dependency and takes binaries directly**
   (user, 2026-11-11). Done in `ed01de0`.
 - **Verify headlessly only**, through `scripts/run-hidden.ps1`.
