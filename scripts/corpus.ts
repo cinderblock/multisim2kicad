@@ -10,7 +10,9 @@
  *   rebuilt from the drawing's ID graph (src/parse/ms-hierarchy.ts; verified
  *   against .ewnet / .ewprj exports). Scored by exact nets + pin-pair
  *   precision/recall (net names ignored).
- * - PCBs: share of EW net pins that landed on a pad, plus DRC counts.
+ * - PCBs: share of EW net pins that landed on a pad, plus DRC counts. Pins
+ *   of parts that are only in the net list (never placed on the board, so
+ *   there is no footprint to convert) are counted apart, as `unplacedPins`.
  *
  * kicad-cli always runs through scripts/run-hidden.ps1 (private desktop).
  *
@@ -106,6 +108,7 @@ interface Row {
   // PCB
   netPins?: number;
   padPins?: number;
+  unplacedPins?: number;
   unconnected?: number;
   // Schematic
   refSource?: string;
@@ -204,7 +207,10 @@ for (const input of inputs) {
       row.output = await quiet(() => convertPcb(input, design.xml, outDir));
       const b = parsePcbXml(design.xml);
       const pads = new Set(b.components.flatMap((c) => c.pads.map((p) => `${c.reference}.${p.number}`)));
-      const pins = b.nets.flatMap((n) => n.pins);
+      const placed = new Set(b.components.map((c) => c.reference));
+      const all = b.nets.flatMap((n) => n.pins);
+      const pins = all.filter((p) => placed.has(p.refdes));
+      row.unplacedPins = all.length - pins.length;
       row.netPins = pins.length;
       row.padPins = pins.filter((p) => pads.has(`${p.refdes}.${p.pin}`)).length;
       await drc(row, row.output);
@@ -227,7 +233,7 @@ for (const input of inputs) {
   const s = row.score;
   const status = row.convertError ? `CONVERT FAIL: ${row.convertError}`
     : !row.loaded ? `KICAD LOAD FAIL (exit ${row.kicadExit})`
-    : row.kind === "pcb" ? `pins on pads ${row.padPins}/${row.netPins}  unconnected=${row.unconnected}  violations=${row.violations}`
+    : row.kind === "pcb" ? `pins on pads ${row.padPins}/${row.netPins} (+${row.unplacedPins} unplaced)  unconnected=${row.unconnected}  violations=${row.violations}`
     : s ? `nets ${s.exactNets}/${s.refNets} exact (ref=${row.refSource})  pairs P=${pct(s.pairPrecision)} R=${pct(s.pairRecall)}  violations=${row.violations}`
     : `no reference netlist  violations=${row.violations}`;
   console.log(`${rel}\n    ${status}${row.dialogs.length ? `  DIALOGS=${row.dialogs.length}` : ""}`);
@@ -246,7 +252,8 @@ const md = [
   ``,
   `- Designs: ${rows.length} (${sch.length} schematics, ${pcb.length} PCBs); load in KiCad: ${rows.filter((r) => r.loaded).length}`,
   `- Schematic nets reproduced exactly: ${sum(scored.map((r) => r.score!.exactNets))}/${sum(scored.map((r) => r.score!.refNets))}`,
-  `- PCB net pins on a pad: ${sum(pcb.map((r) => r.padPins ?? 0))}/${sum(pcb.map((r) => r.netPins ?? 0))}`,
+  `- PCB net pins on a pad: ${sum(pcb.map((r) => r.padPins ?? 0))}/${sum(pcb.map((r) => r.netPins ?? 0))}` +
+    ` (plus ${sum(pcb.map((r) => r.unplacedPins ?? 0))} pins of parts that are in the net list but not on the board)`,
   `- Dialogs captured: ${sum(rows.map((r) => r.dialogs.length))}`,
   ``,
   `## Schematics`,
@@ -258,10 +265,10 @@ const md = [
   ``,
   `## PCBs`,
   ``,
-  `| input | pins on pads | unconnected | violations | top types |`,
-  `| --- | --- | --- | --- | --- |`,
-  ...pcb.map((r) => r.convertError ? `| ${r.input} | convert fail: ${r.convertError} | | | |`
-    : `| ${r.input} | ${r.padPins}/${r.netPins} | ${r.unconnected ?? ""} | ${r.loaded ? r.violations : "load fail"} | ${top(r)} |`),
+  `| input | pins on pads | unplaced pins | unconnected | violations | top types |`,
+  `| --- | --- | --- | --- | --- | --- |`,
+  ...pcb.map((r) => r.convertError ? `| ${r.input} | convert fail: ${r.convertError} | | | | |`
+    : `| ${r.input} | ${r.padPins}/${r.netPins} | ${r.unplacedPins ?? ""} | ${r.unconnected ?? ""} | ${r.loaded ? r.violations : "load fail"} | ${top(r)} |`),
 ].join("\n");
 await writeFile(join(outRoot, "report.md"), md + "\n");
 console.log(`\n${md.split("\n").slice(2, 7).join("\n")}\nReport: ${join(outRoot, "report.md")}`);
