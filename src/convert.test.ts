@@ -8,7 +8,7 @@ import { harmonizeFootprints } from "./emit/footprint-lib.ts";
 import { emitKicadPcb } from "./emit/kicad-pcb.ts";
 import { boardCustomRules, boardProjectSettings, netClassName } from "./emit/kicad-pro.ts";
 import { emitKicadSch, emitKicadSchProject } from "./emit/kicad-sch.ts";
-import { parsePcbXml, parseUbLibraryXml } from "./parse/pcb.ts";
+import { parsePcbXml, parseUbLibraryXml, unconnectablePins, unconnectableWarnings } from "./parse/pcb.ts";
 import { applyD, flipToDihedral, parseSchematicXml, placementStats } from "./parse/sch.ts";
 import { flattenNetlist, parseMultisimDesign } from "./parse/ms-hierarchy.ts";
 import { ccwSweep, roundedPolygon, ubPrimitive } from "./parse/ub-geom.ts";
@@ -106,6 +106,22 @@ describe("Design1 PCB (samples/Design1.ewprj.xml)", () => {
     expect(unknown.components.map((c) => [c.reference, c.name, c.pads.length])).toEqual(
       board.components.map((c) => [c.reference, c.name, c.pads.length]),
     );
+  });
+
+  test("reports net-list pins the board cannot carry", () => {
+    // Design1's net list names U1.POEA and U1.POEC; the HAT footprint has POEA-/POEA+/POEB-/POEB+.
+    expect(unconnectableWarnings(board)).toEqual([
+      "2 net-list pins have no pad on their footprint and cannot be connected: U1 (POEA, POEC)",
+    ]);
+    const b = parsePcbXml(sample("Design1.ewprj.xml"));
+    b.nets[0]!.pins.push({ refdes: "J1", pin: "S5" }, { refdes: "J1", pin: "S4" }, { refdes: "U9", pin: "1" }, { refdes: "U9", pin: "2" });
+    const { missingPads, unplaced } = unconnectablePins(b);
+    expect([...missingPads]).toEqual([["U1", ["POEA", "POEC"]], ["J1", ["S5", "S4"]]]);
+    expect([...unplaced]).toEqual([["U9", ["1", "2"]]]);
+    expect(unconnectableWarnings(b)).toEqual([
+      "4 net-list pins have no pad on their footprints and cannot be connected: J1 (S4, S5), U1 (POEA, POEC)",
+      "2 net-list pins belong to 1 unplaced part and cannot be connected: U9",
+    ]);
   });
 
   test("emits balanced S-expressions with netted tracks", () => {

@@ -69,6 +69,16 @@ footprints carry their symbol's sheet path, symbols name their footprint,
 footprint values follow the schematic, and parts that exist only on the
 board (mounting hardware, fiducials) are marked board-only.
 
+Some Ultiboard boards list connections the board can't carry: a net-list
+pin the placed footprint has no pad for, or a part that was never placed.
+They dangle in Ultiboard too. The converter adds no pads; it prints a
+warning naming them:
+
+```
+  warning:    3 net-list pins have no pad on their footprint and cannot be connected: U7 (S4, S5, S6)
+  warning:    12 net-list pins belong to 4 unplaced parts and cannot be connected: U3, U4, U5, U6
+```
+
 ## What gets translated
 
 PCB: board outline, the full copper stack (inner layers from the

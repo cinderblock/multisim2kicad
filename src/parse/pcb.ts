@@ -538,3 +538,54 @@ export function parsePcbXml(input: XmlInput): Board {
     nets: parseNets(root),
   };
 }
+
+/** Net-list pins the board cannot carry, by refdes (pins in net-list order). */
+export interface UnconnectablePins {
+  /** The part is placed, but its footprint has no pad with that number. */
+  missingPads: Map<string, string[]>;
+  /** The part is in the net list but was never placed on the board. */
+  unplaced: Map<string, string[]>;
+}
+
+/**
+ * Ultiboard keeps such pins in the net list (the source board has the same
+ * dangling connection); the converter copies the board and invents no pads.
+ */
+export function unconnectablePins(board: Board): UnconnectablePins {
+  const pads = new Map(board.components.map((c) => [c.reference, new Set(c.pads.map((p) => p.number))]));
+  const out: UnconnectablePins = { missingPads: new Map(), unplaced: new Map() };
+  for (const { refdes, pin } of board.nets.flatMap((n) => n.pins)) {
+    const own = pads.get(refdes);
+    if (own?.has(pin)) continue;
+    const into = own ? out.missingPads : out.unplaced;
+    const list = into.get(refdes) ?? [];
+    if (!list.includes(pin)) list.push(pin);
+    into.set(refdes, list);
+  }
+  return out;
+}
+
+const naturally = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const capped = (refs: string[], show: (r: string) => string, max = 8) =>
+  refs.slice(0, max).map(show).join(", ") + (refs.length > max ? `, … (+${refs.length - max} more)` : "");
+
+/** One-line warnings for the CLI summary; empty when every net-list pin has a pad. */
+export function unconnectableWarnings(board: Board): string[] {
+  const { missingPads, unplaced } = unconnectablePins(board);
+  const count = (m: Map<string, string[]>) => [...m.values()].reduce((n, pins) => n + pins.length, 0);
+  const out: string[] = [];
+  if (missingPads.size) {
+    const n = count(missingPads);
+    const refs = [...missingPads.keys()].sort(naturally);
+    out.push(`${plural(n, "net-list pin has", "net-list pins have")} no pad on ${n === 1 ? "its footprint" : missingPads.size === 1 ? "their footprint" : "their footprints"} and cannot be connected: ` +
+      capped(refs, (r) => `${r} (${missingPads.get(r)!.sort(naturally).join(", ")})`));
+  }
+  if (unplaced.size) {
+    const n = count(unplaced);
+    const refs = [...unplaced.keys()].sort(naturally);
+    out.push(`${plural(n, "net-list pin belongs", "net-list pins belong")} to ${plural(unplaced.size, "unplaced part", "unplaced parts")} and cannot be connected: ` +
+      capped(refs, (r) => r));
+  }
+  return out;
+}

@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Board, Schematic } from "./ir/types.ts";
 import { designBaseName, loadDesign } from "./load.ts";
-import { parsePcbXml } from "./parse/pcb.ts";
+import { parsePcbXml, unconnectableWarnings } from "./parse/pcb.ts";
 import { parseSchematicXml } from "./parse/sch.ts";
 import { emitKicadPcb, footprintName } from "./emit/kicad-pcb.ts";
 import { emitKicadSchProject, kicadProSchematicSettings, librarySymbolsFile } from "./emit/kicad-sch.ts";
@@ -121,6 +121,7 @@ function reportPcb(input: string, board: Board, links?: ReadonlyMap<string, unkn
     const linked = board.components.filter((c) => links.has(c.reference)).length;
     console.log(`  linked:     ${linked}/${board.components.length} footprints to schematic symbols`);
   }
+  for (const w of unconnectableWarnings(board)) console.log(`  warning:    ${w}`);
 }
 
 function reportSch(input: string, sch: Schematic, fileCount: number): void {

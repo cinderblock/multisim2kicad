@@ -604,8 +604,11 @@ hierarchy, connectors), since those are what make an output useless today.
     5 U3-U6 (12 pins), FileBot Driver B U16 (1), Pressure Servo J1 (2, both
     copies), Buttons J4 (3). The scorecard now counts these as "unplaced
     pins", not misses. 3-Phase Driver@2019-11-27 U7.S4-S6: the net list
-    names shield pins the placed footprint lacks (it has S1-S3), still
-    counted as misses.
+    names shield pins the placed footprint lacks (it has S1-S3). Design1
+    (sample) U1.POEA / U1.POEC are the same kind (pads are POEA-/POEA+).
+    Since 2026-11-22 the CLI warns about both kinds (`unconnectablePins` /
+    `unconnectableWarnings` in `src/parse/pcb.ts`, wording from Neon's
+    review) and the scorecard lists "no pad on footprint" per board.
   - **`UB-Unknown-Component`** (`CLayoutComponentUnknown`): a part placed
     without a library footprint. Same layout as `UBComponent` but `Name`
     is empty; `SHAPE` still names the footprint and there is no RefPoint
