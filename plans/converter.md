@@ -598,7 +598,18 @@ hierarchy, connectors), since those are what make an output useless today.
   - Remaining unresolved net pins (10/6765) are source quirks: shield pins
     not in the footprint (3-Phase Driver U7.S4-S6), unplaced connectors
     (Pressure Servo J1, Althea-old Buttons J4), Design1's `POEA` vs pad
-    `POEA+` naming.
+    `POEA+` naming. **Unfixable, rechecked 2026-11-22** with
+    `scripts/pindiff.ts`: parts that appear only in `UbNetList`, with no
+    refdes anywhere else in the file (no footprint to convert): Power board
+    5 U3-U6 (12 pins), FileBot Driver B U16 (1), Pressure Servo J1 (2, both
+    copies), Buttons J4 (3). The scorecard now counts these as "unplaced
+    pins", not misses. 3-Phase Driver@2019-11-27 U7.S4-S6: the net list
+    names shield pins the placed footprint lacks (it has S1-S3), still
+    counted as misses.
+  - **`UB-Unknown-Component`** (`CLayoutComponentUnknown`): a part placed
+    without a library footprint. Same layout as `UBComponent` but `Name`
+    is empty; `SHAPE` still names the footprint and there is no RefPoint
+    (origin falls back to the first pad). 27 in 6 corpus boards.
 - **(2026-11-11) Multisim drawing model — the old Phase 3 "wires" were wrong.**
   Sheet-level `CODLineComp`s are page-border / title-block lines and lines
   inside connectors, not wiring. Real wires are **`CIITLinkComp`** polylines
@@ -832,8 +843,49 @@ hierarchy, connectors), since those are what make an output useless today.
     all along (matches the Ultiboard netlist); the reference flattener was
     reading the never-wired pin copies interactive parts
     (`CIITAnimationSymbolComp`) keep under `AnimationLayers`. Skipped now.
-  - `NI_EWB_NET_HIDDEN` pins (CAN Main, 1 net) ignored.
-  - Twillbot Distribution: 164/165, not investigated.
+  - ~~`NI_EWB_NET_HIDDEN` pins~~ and ~~Twillbot Distribution 164/165~~:
+    done 2026-11-22, see "Scorecard residuals (2026-11-22)" below.
+- [x] **Scorecard residuals (2026-11-22)**, from `out/corpus-2026-11-15/`
+      (sch 4232/4244, PCB 12400/12478). Thread brief: find every miss,
+      fix converter bugs, fix scorer bugs, record the unfixable.
+  - [x] PCB: `UB-Unknown-Component` (`CLayoutComponentUnknown`, a part
+        placed without a library footprint, empty `Name`) was dropped
+        (`72efee7`). 6 boards: 2ph Driver rev A 0/33 -> 33/33, the three
+        Power board 3 variants and Power board 5 partly, FileBot Driver B.
+  - [x] Scorer: pins of parts that are only in Ultiboard's net list (never
+        placed) are counted apart as "unplaced" (`ff38d0c`), plus
+        `scripts/pindiff.ts`. All PCB misses left are source quirks, below.
+  - [x] Schematic: the older database's ground record
+        (`GROUND, GROUND, VIRTUAL_DEVICES`) wasn't a power symbol, so each
+        ground became a part named `0`, `0_1`, ... (both Striplines,
+        Differential, RFAmplifier4). `isPowerRecord` in ci-netlist.ts,
+        shared by emitter and reference.
+  - [x] Schematic: hidden pins (`CIITSymbolComp > HiddenPins`, modifier
+        `NI_EWB_NET_HIDDEN`, value = net) were dropped by the emitter and
+        left isolated by the reference. Multisim (Ci netlist) and Ultiboard
+        put them on the global net they name (Distribution Y1.2/Y1.4 on
+        `GND`). Emitted as invisible `power_in` pins named after the net,
+        each net on its own quarter-unit point (KiCad 10 still joins those
+        to the global net: verified with a hand-edited Distribution).
+  - [x] Reference flattener namespaces (`d4a4911`): a net name or on-page
+        connector equal to a global net's name (ground, supply, hidden-pin
+        net) is that net. Bandpass's lone on-page connector `0` is on
+        ground in Multisim's Ci netlist; Controller's net name `Shield`
+        joins the hidden `Shield` pins in Ultiboard. Measured against
+        Ultiboard over every .ms + .ewprj pair: 7048 -> 7053 exact nets,
+        no design worse. Careful: joining *every* local name globally is
+        wrong (Althea Heater's per-instance `SW` connectors merged across
+        3 sub-sheet instances, 82 -> 76); only names with a global
+        namesake join.
+  - [x] Corpus scorecard re-run 2026-11-22 (`out/corpus-2026-11-22/`,
+        srmctl low priority): **schematic nets exact 4263/4263 (100%;
+        the reference grew 4244 -> 4263 as hidden pins joined nets); PCB
+        net pins on a pad 12455/12458, plus 20 pins of unplaced parts;
+        0 dialogs.** The 3 PCB misses are Driver@2019's U7.S4-S6
+        (unfixable, see Findings). FileBot Driver B reported "load fail"
+        (DRC timeout, 180 s) only because the machine was at 99% CPU: run
+        alone it loads, DRC in 10 s (35 violations, 100 unconnected; a
+        recycle-bin board mid-routing).
 - [x] (2026-11-11) Drive corpus scorecard (`--corpus corpus/drives`, 238
       designs, report in `out/corpus-drives/`): 233 load in KiCad;
       **schematic nets exact 1642/2300 (71%)**; PCB pins on pads 6437/6505.
