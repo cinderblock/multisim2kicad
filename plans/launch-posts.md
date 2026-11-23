@@ -11,42 +11,40 @@ yes for that specific post.** Numbers are from the 2026-11-22 corpus run
 
 **Category:** (pick on posting: the projects/show-and-tell or "Software" category)
 
-**Title:** multisim2kicad: convert NI Multisim / Ultiboard projects to KiCad (testers wanted)
+**Title:** multisim2kicad: NI Multisim / Ultiboard to KiCad converter (testers wanted)
 
 **Body:**
 
-I've written an open-source converter that turns NI Electronics Workbench
-designs into KiCad projects:
+I've seen Multisim conversion come up here before without a working answer
+(e.g. https://forum.kicad.info/t/convert-multisim-14/38339), so I wrote an
+open-source converter for NI Electronics Workbench projects:
 
-- Multisim schematics (`.ms10`–`.ms14`) → `.kicad_sch`, with the full sheet hierarchy
-- Ultiboard boards (`.ewprj`) → `.kicad_pcb` (pads, tracks, vias, zones, inner layers, design rules)
-- A schematic and board with the same name become one linked project ("Update PCB from Schematic" works)
-- Project symbol / footprint libraries, and SPICE models for simulation
+https://github.com/cinderblock/multisim2kicad
 
-Usage (Node 20+):
+It turns Multisim schematics (`.ms10` to `.ms14`) into `.kicad_sch` with full
+sheet hierarchy, and Ultiboard `.ewprj` boards into `.kicad_pcb` with pads,
+tracks, vias, zones, inner layers, and design rules. A matching schematic and
+board become one linked project so "Update PCB from Schematic" works, alongside
+project symbol/footprint libraries and SPICE models for simulation. Output
+schematics are KiCad 10 only.
+
+Run it with Node 20+:
 
 ```
 npx multisim2kicad -o converted/ path/to/project-folder/
 ```
 
-You need **KiCad 10** to open the schematics.
+Across my 299 test designs (mostly mine, plus NI's sample circuits), every
+output loads in KiCad. All 4263 schematic nets match Multisim's netlist
+exactly, and 12455 of 12458 PCB net pins land on a pad. The other 3 don't have
+a pad in the original Ultiboard board either. The converter doesn't invent
+copper; it warns about those pins and about parts that were never placed.
 
-On my test set (299 designs, including NI's own sample circuits), every output
-loads in KiCad, all 4263 schematic nets match Multisim's netlist exactly, and
-12455 of 12458 PCB net pins land on a pad. The other 3 are pins the original
-board's footprint has no pad for. The converter doesn't invent copper, so it
-names pins like that in a warning, along with parts the net list includes but
-that were never placed.
+Because most of those files are my own, I'm looking for other people's projects
+to break it on. If you hit a snag with a private design, the repo's issue form
+explains how to report it without sharing your files.
 
-Most of those designs are my own, though, so I'm looking for people with
-Multisim / Ultiboard files to try it and tell me what breaks. There's an issue
-form that explains how to report a problem without sharing a private design.
-
-Repo: https://github.com/cinderblock/multisim2kicad
-
-This has come up here before without a good answer, e.g.
-https://forum.kicad.info/t/convert-multisim-14/38339. For older Ultiboard
-4/5 `.ddf` boards, see KIUB:
+For older Ultiboard 4/5 `.ddf` boards, see KIUB instead:
 https://forum.kicad.info/t/ulticap-sch-and-ultiboard-ddf-to-kicad-converter/71177
 
 ---
@@ -68,29 +66,36 @@ README points `.ddf` users to KIUB.
 
 ## 3. EEVblog: new topic in EDA
 
-**Title:** Converting Multisim / Ultiboard designs to KiCad: open-source converter, testers wanted
+**Title:** Open-source Multisim / Ultiboard to KiCad converter (looking for test designs)
 
 **Body:**
 
-A while back someone asked in
-https://www.eevblog.com/forum/eda/20-years-with-ultiboard-what-next/ (last
-post, 2018) whether any converter from Ultiboard/Multisim to KiCad existed.
-Nobody answered, and as far as I can tell there still wasn't one, so I wrote one:
+Back in 2018 someone asked here whether a Multisim/Ultiboard-to-KiCad converter
+existed (https://www.eevblog.com/forum/eda/20-years-with-ultiboard-what-next/).
+Nobody had an answer then, and as far as I could tell nobody built one since,
+so I wrote one:
+
 https://github.com/cinderblock/multisim2kicad
 
-`npx multisim2kicad -o out/ MyDesign.ms14 MyDesign.ewprj` produces a linked
-KiCad 10 project: the schematic with its hierarchy, the board with pads,
-tracks, vias, pours, inner layers and design rules, project libraries, and
-SPICE models.
+With Node 20+, run:
 
-On 299 test designs, everything loads, every schematic net (4263) matches
-Multisim's netlist exactly, and all but 3 of 12458 PCB net pins land on a pad
-(those 3 have no pad in the original board either, and the converter warns
-about them). Most of
-those designs are my own, though, so I'd love reports from anyone with a
-stack of old Multisim/Ultiboard projects. The README explains how to report
-a bad conversion without sharing the design.
+```
+npx multisim2kicad -o out/ MyDesign.ms14 MyDesign.ewprj
+```
 
-Limitations: schematics need KiCad 10. Pre-Multisim-10 files and Ultiboard
-4/5 `.ddf` aren't supported (KIUB handles `.ddf`:
-https://github.com/Snieffy/KIUB).
+That gives you a linked KiCad 10 project: hierarchical schematic, board (pads,
+tracks, vias, pours, inner layers, design rules), project libraries, and SPICE
+models.
+
+On 299 test designs, every output loads in KiCad, all 4263 schematic nets match
+Multisim's netlist exactly, and 12455 of 12458 PCB net pins land on a pad.
+Those 3 have no pad in the original Ultiboard board either. Rather than
+inventing copper, it warns about those pins and about parts that were never
+placed.
+
+Most of those 299 designs are mine, so I'm looking for other people's archives
+to shake out edge cases. There's an issue form in the repo for reporting a bad
+conversion without sharing a private design.
+
+Limits: schematics need KiCad 10, and no pre-Multisim-10 or Ultiboard 4/5 `.ddf` support
+(see KIUB for `.ddf`: https://github.com/Snieffy/KIUB).
