@@ -1,9 +1,9 @@
 # Launch post drafts (early testers)
 
 Drafts for the user to review. **Nothing here is posted without the user's
-yes for that specific post.** Numbers are from the 2026-11-15 corpus run
-(`out/corpus-2026-11-15/report.md`). Post only after 0.2.1 is on npm, so
-`npx` gets the CLI fixes.
+yes for that specific post.** Numbers are from the 2026-11-22 corpus run
+(`out/corpus-2026-11-22/report.md`). Post only after 0.2.2 is on npm, so
+`npx` gets the scorecard fixes.
 
 ---
 
@@ -32,8 +32,11 @@ npx multisim2kicad -o converted/ path/to/project-folder/
 You need **KiCad 10** to open the schematics.
 
 On my test set (299 designs, including NI's own sample circuits), every output
-loads in KiCad. 4232 of 4244 schematic nets match Multisim's netlist exactly,
-and 99.4% of PCB net pins land on a pad.
+loads in KiCad, all 4263 schematic nets match Multisim's netlist exactly, and
+12455 of 12458 PCB net pins land on a pad. The other 3 are pins the original
+board's footprint has no pad for. The converter doesn't invent copper, so it
+names pins like that in a warning, along with parts the net list includes but
+that were never placed.
 
 Most of those designs are my own, though, so I'm looking for people with
 Multisim / Ultiboard files to try it and tell me what breaks. There's an issue
@@ -80,8 +83,10 @@ KiCad 10 project: the schematic with its hierarchy, the board with pads,
 tracks, vias, pours, inner layers and design rules, project libraries, and
 SPICE models.
 
-On 299 test designs, everything loads, 99.7% of schematic nets match
-Multisim's netlist exactly, and 99.4% of PCB net pins land on a pad. Most of
+On 299 test designs, everything loads, every schematic net (4263) matches
+Multisim's netlist exactly, and all but 3 of 12458 PCB net pins land on a pad
+(those 3 have no pad in the original board either, and the converter warns
+about them). Most of
 those designs are my own, though, so I'd love reports from anyone with a
 stack of old Multisim/Ultiboard projects. The README explains how to report
 a bad conversion without sharing the design.

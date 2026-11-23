@@ -355,7 +355,12 @@ failures. The user agreed to the readiness list below.
       `v0.2.1` (`2d66808`), via CI with provenance. npm took a few minutes
       to list it ("Your package is being processed"). Verified
       `npx multisim2kicad@0.2.1 --version` and the one-line missing-file error.
-- [x] Drafts in `plans/launch-posts.md`, awaiting the user's per-post yes.
+- [x] **Released 0.2.2** 2026-11-22 7:24 PM PST (03:24Z on the 23rd), tag
+      `v0.2.2`, via CI with provenance: the 2026-11-22 scorecard fixes and
+      the no-pad / unplaced-part warnings. Verified
+      `npx multisim2kicad@0.2.2 --version`.
+- [x] Drafts in `plans/launch-posts.md` (numbers updated to the 2026-11-22
+      scorecard), awaiting the user's per-post yes.
 
 Where to post (researched 2026-11-14):
 - KiCad forum: start a **new topic**. Don't revive old threads: moderator jmk
