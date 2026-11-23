@@ -30,7 +30,7 @@ body:
     attributes:
       label: multisim2kicad version
       description: Output of `npx multisim2kicad --version`
-      placeholder: "0.2.2"
+      placeholder: "0.2.3"
     validations:
       required: true
   - type: dropdown
