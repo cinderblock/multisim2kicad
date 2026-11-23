@@ -2,7 +2,7 @@
 
 Drafts for the user to review. **Nothing here is posted without the user's
 yes for that specific post.** Numbers are from the 2026-11-22 corpus run
-(`out/corpus-2026-11-22/report.md`). Post only after 0.2.2 is on npm, so
+(`out/corpus-2026-11-22/report.md`). Post only after 0.2.3 is on npm, so
 `npx` gets the scorecard fixes.
 
 ---

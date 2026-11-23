@@ -359,6 +359,11 @@ failures. The user agreed to the readiness list below.
       `v0.2.2`, via CI with provenance: the 2026-11-22 scorecard fixes and
       the no-pad / unplaced-part warnings. Verified
       `npx multisim2kicad@0.2.2 --version`.
+- [x] **Released 0.2.3** 2026-11-22 7:45 PM PST (03:45Z on the 23rd), tag
+      `v0.2.3`, via CI with provenance: the README, `--help`, and issue
+      form rewritten for early testers (`7745fc6`). npm listed it about
+      2 minutes after the publish job finished. Verified
+      `npx multisim2kicad@0.2.3 --help`.
 - [x] Drafts in `plans/launch-posts.md` (numbers updated to the 2026-11-22
       scorecard), awaiting the user's per-post yes.
 
