@@ -229,11 +229,12 @@ export async function convertFile(input: string, outDir = "out"): Promise<string
 
 export const USAGE = `usage: multisim2kicad [options] <design.ms14 | design.ewprj | folder | database.prj> [...]
 
-Converts NI Electronics Workbench files to KiCad: Multisim schematics
-(.ms10-.ms14), Ultiboard boards (.ewprj) and component databases
-(.prj/.usr/.prd). A schematic and a board with the same name in the same
-folder become one linked KiCad project. A folder converts every design
-directly inside it.
+Convert NI Multisim schematics (.ms10-.ms14), Ultiboard boards (.ewprj),
+and component databases (.prj/.usr/.prd) to KiCad.
+
+A matching schematic and board in the same folder become one linked KiCad
+project. Passing a folder converts every design directly inside it.
+Output schematics require KiCad 10 (boards also open in KiCad 8 and 9).
 
 options:
   -o, --out <dir>   output folder (default: ./out)
@@ -241,7 +242,7 @@ options:
   -V, --version     print the version
       --debug       show full error details (stack traces)
 
-Problems or a bad conversion: https://github.com/cinderblock/multisim2kicad/issues`;
+Report a bad conversion: https://github.com/cinderblock/multisim2kicad/issues`;
 
 /** An error worth showing the user as a single line (no stack trace). */
 export class UsageError extends Error {

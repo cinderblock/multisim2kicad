@@ -1,17 +1,21 @@
 name: Bad conversion
-description: A design converted, or failed to convert, in a way that doesn't match the original
+description: Report a design that failed to convert or doesn't match the original
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for trying multisim2kicad! Reports on real designs are the most useful thing right now.
-        **Don't attach a design you aren't allowed to share.** A stripped-down copy that still shows the problem is just as useful.
+        Reports on real designs are the best way to shake out edge cases.
+
+        **Don't attach a private design you aren't allowed to share.** You can still file a useful report without sharing your original files:
+        - Copy the design, delete everything except the part that broke, and attach the stripped-down copy.
+        - Or decode the file to XML with `ewd` (`electronics-workbench-decoder`), delete the sensitive parts, and attach the trimmed XML.
+        - Or just describe the problem with side-by-side screenshots and any ERC/DRC lines or `--debug` output.
   - type: input
     id: ew-version
     attributes:
       label: Multisim / Ultiboard version and file type
-      placeholder: Multisim 14.2, .ms14 (+ Ultiboard 14.2 .ewprj)
+      placeholder: Multisim 14.2 (.ms14), Ultiboard 14.2 (.ewprj)
     validations:
       required: true
   - type: input
@@ -26,13 +30,13 @@ body:
     attributes:
       label: multisim2kicad version
       description: Output of `npx multisim2kicad --version`
-      placeholder: "0.2.0"
+      placeholder: "0.2.2"
     validations:
       required: true
   - type: dropdown
     id: area
     attributes:
-      label: What's wrong
+      label: What went wrong
       multiple: true
       options:
         - The command failed or crashed
@@ -47,8 +51,8 @@ body:
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: What you expected and what you got. Screenshots of the EW original next to the KiCad result help a lot, as do the relevant ERC/DRC lines.
+      label: What happened
+      description: What you expected vs. what KiCad shows. Side-by-side screenshots of the EW original and the KiCad result help, as do the relevant ERC/DRC lines.
     validations:
       required: true
   - type: textarea
@@ -61,4 +65,4 @@ body:
     id: files
     attributes:
       label: Design files (optional)
-      description: Drag in the design if you can share it (zip it first). Or attach XML decoded with `ewd`, with the sensitive parts deleted.
+      description: Drag in a zipped design if you can share it, a stripped-down copy, or trimmed XML decoded with `ewd`.
